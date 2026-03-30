@@ -192,6 +192,49 @@ class MedicalAIApplication:
                 "error": str(e)
             }
     
+    def custom_query(self, patient_id: str, query: str) -> Dict[str, Any]:
+        """
+        Test SelectorGroupChat with custom queries.
+        Shows which agents are selected based on the query.
+        
+        Args:
+            patient_id: Patient ID
+            query: Custom query to send to agents
+            
+        Returns:
+            Agent responses showing which agents were selected
+        """
+        try:
+            logger.info(f"Processing custom query for patient {patient_id}: {query}")
+            
+            # Gather patient data
+            patient_history = self.kg.get_patient_history(patient_id)
+            similar_patients = self.kg.find_similar_patients(patient_id)
+            medications = self.kg.get_patient_medications(patient_id)
+            risk_profile = self.kg.get_patient_risk_profile(patient_id)
+            
+            patient_data = {
+                "patient_id": patient_id,
+                "medical_history": patient_history,
+                "medications": medications,
+                "risk_profile": risk_profile,
+                "similar_patients": similar_patients
+            }
+            
+            # Run custom query through agent system
+            results = self.agent_system.custom_query(patient_data, query)
+            
+            logger.info(f"Completed custom query for patient {patient_id}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error during custom query: {str(e)}")
+            return {
+                "patient_id": patient_id,
+                "status": "error",
+                "error": str(e)
+            }
+    
     def export_analysis(self, patient_id: str, filepath: str) -> bool:
         """
         Export patient analysis to JSON file

@@ -44,6 +44,10 @@ class PredictRequest(BaseModel):
     timeframe_months: Optional[int] = 12
 
 
+class CustomQueryRequest(BaseModel):
+    query: str
+
+
 # API Router
 router = APIRouter(prefix="/api/v1")
 
@@ -137,6 +141,17 @@ def get_care_plan(patient_id: str):
         return app_instance.generate_care_plan(patient_id)
     except Exception as e:
         logger.error(f"Error generating care plan: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/patients/{patient_id}/custom-query")
+def custom_query(patient_id: str, data: CustomQueryRequest):
+    """Test SelectorGroupChat with custom queries"""
+    try:
+        app_instance = get_medical_app()
+        return app_instance.custom_query(patient_id, data.query)
+    except Exception as e:
+        logger.error(f"Error processing custom query: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

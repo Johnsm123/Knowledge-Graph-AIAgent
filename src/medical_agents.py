@@ -310,6 +310,30 @@ medication optimization, monitoring schedule, patient education, specialist refe
             logger.error(f"Error generating care plan: {str(e)}")
             return {"patient_id": patient_id, "status": "error", "error": str(e)}
 
+    def custom_query(self, patient_data: Dict[str, Any], query: str) -> Dict[str, Any]:
+        """Process custom query with SelectorGroupChat"""
+        patient_id = patient_data.get("patient_id")
+        try:
+            task = f"""Patient {patient_id} Query:
+
+PATIENT DATA: {patient_data}
+
+User Query: {query}
+
+Respond to this query using your expertise. Provide detailed, actionable information."""
+
+            responses = self._run_async(self._run_team(task))
+            return {
+                "patient_id": patient_id,
+                "query": query,
+                "status": "completed",
+                "agents_selected": list(responses.keys()),
+                "responses": responses,
+            }
+        except Exception as e:
+            logger.error(f"Error processing custom query: {str(e)}")
+            return {"patient_id": patient_id, "status": "error", "error": str(e)}
+
 
 def create_medical_agent_system() -> MedicalAgentSystem:
     return MedicalAgentSystem()
