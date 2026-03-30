@@ -21,10 +21,9 @@ class MedicalKnowledgeGraph:
         try:
             self.driver = GraphDatabase.driver(
                 settings.neo4j_uri,
-                auth=(settings.neo4j_username, settings.neo4j_password),
-                encrypted=True
+                auth=(settings.neo4j_username, settings.neo4j_password)
             )
-            self.verify_connection()
+            self.driver.verify_connectivity()
             logger.info("Successfully connected to Neo4j Aura")
         except Exception as e:
             logger.error(f"Failed to connect to Neo4j: {str(e)}")

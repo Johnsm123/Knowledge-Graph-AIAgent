@@ -3,16 +3,16 @@ Medical AI Agents using AutoGen
 Defines specialized agents for medical diagnosis, history analysis, 
 consequence prediction, and prevention advising
 """
-import autogen
+from autogen_agentchat.agents import AssistantAgent, UserProxyAgent
+from autogen_agentchat.teams import GroupChat
+from autogen_agentchat.conditions import MaxMessageTermination
+from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 from typing import Any, Dict, List, Optional
 import logging
 from src.neo4j_connection import get_knowledge_graph
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
-
-# Configure OpenAI for AutoGen
-autogen.config_list_from_json("OAI_CONFIG_LIST", file_location=".")
 
 
 class MedicalAgentSystem:
@@ -24,34 +24,25 @@ class MedicalAgentSystem:
     def __init__(self):
         """Initialize the medical agent system"""
         self.kg = get_knowledge_graph()
-        self.llm_config = {
-            "config_list": autogen.config_list_from_json(
-                "OAI_CONFIG_LIST",
-                file_location=".",
-                filter_dict={"model": settings.openai_model}
-            ),
-            "temperature": 0.7,
-            "timeout": 120,
-        }
+        self.model_client = AzureOpenAIChatCompletionClient(
+            azure_deployment=settings.openai_model,
+            azure_endpoint=settings.endpoint,
+            api_key=settings.openai_api_key,
+            api_version=settings.azure_openai_api_version,
+            model=settings.openai_model,
+        )
         self._initialize_agents()
     
     def _initialize_agents(self):
         """Initialize all medical specialist agents"""
         
         # User proxy agent for interaction
-        self.user_proxy = autogen.UserProxyAgent(
+        self.user_proxy = UserProxyAgent(
             name="user_proxy",
-            system_message="A medical professional seeking analysis and recommendations.",
-            human_input_mode="NEVER",
-            max_consecutive_auto_reply=10,
-            code_execution_config={
-                "work_dir": "work",
-                "use_docker": False,
-            },
         )
-        
-        # Medical Diagnostician Agent - Predicts patient issues
-        self.diagnostician = autogen.AssistantAgent(
+
+        # Medical Diagnostician Agent
+        self.diagnostician = AssistantAgent(
             name="diagnostician",
             system_message="""You are an expert Medical Diagnostician Agent. Your role is to:
 1. Analyze patient symptoms and medical history
@@ -66,11 +57,11 @@ Use the following format for diagnosis:
 - Contributing Factors: [list]
 - Recommended Tests: [list]
 - Risk Assessment: [high/medium/low]""",
-            llm_config=self.llm_config,
+            model_client=self.model_client,
         )
-        
-        # Medical History Analyzer Agent - Analyzes patient history
-        self.history_analyzer = autogen.AssistantAgent(
+
+        # Medical History Analyzer Agent
+        self.history_analyzer = AssistantAgent(
             name="history_analyzer",
             system_message="""You are an expert Medical History Analyzer. Your role is to:
 1. Review complete patient medical history
@@ -85,11 +76,11 @@ Use structured analysis format:
 - Lab Result Trends: [analysis]
 - Previous Treatments: [list with outcomes]
 - Historical Risk Indicators: [list]""",
-            llm_config=self.llm_config,
+            model_client=self.model_client,
         )
-        
-        # Consequence Predictor Agent - Predicts future outcomes
-        self.consequence_predictor = autogen.AssistantAgent(
+
+        # Consequence Predictor Agent
+        self.consequence_predictor = AssistantAgent(
             name="consequence_predictor",
             system_message="""You are an expert Medical Consequence Predictor. Your role is to:
 1. Predict potential complications of current conditions
@@ -105,11 +96,11 @@ Prediction format:
 - Quality of Life Impact: [mild/moderate/severe]
 - Critical Intervention Points: [timeline with actions]
 - 5-10 Year Prognosis: [detailed scenario analysis]""",
-            llm_config=self.llm_config,
+            model_client=self.model_client,
         )
-        
+
         # Prevention & Treatment Advisor Agent
-        self.prevention_advisor = autogen.AssistantAgent(
+        self.prevention_advisor = AssistantAgent(
             name="prevention_advisor",
             system_message="""You are an expert Prevention and Treatment Advisor. Your role is to:
 1. Recommend preventive measures for identified risks
@@ -125,11 +116,11 @@ Recommendations format:
 - Medication Optimizations: [adjustments/alternatives]
 - Monitoring Plan: [frequency and metrics]
 - Patient Education: [key points to communicate]""",
-            llm_config=self.llm_config,
+            model_client=self.model_client,
         )
-        
+
         # Hospital Operations Coordinator Agent
-        self.hospital_coordinator = autogen.AssistantAgent(
+        self.hospital_coordinator = AssistantAgent(
             name="hospital_coordinator",
             system_message="""You are a Hospital Operations Coordinator. Your role is to:
 1. Coordinate patient care pathways
@@ -144,7 +135,7 @@ Response format:
 - Referral Recommendations: [specialists needed]
 - Scheduling: [appointment priorities]
 - Follow-up Plan: [timeline and responsibilities]""",
-            llm_config=self.llm_config,
+            model_client=self.model_client,
         )
     
     def analyze_patient(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -185,37 +176,26 @@ Response format:
         """
         
         try:
-            # Initiate group chat between agents
-            group_chat = autogen.GroupChat(
-                agents=[
+            team = GroupChat(
+                participants=[
                     self.diagnostician,
                     self.history_analyzer,
                     self.consequence_predictor,
                     self.prevention_advisor,
-                    self.hospital_coordinator
+                    self.hospital_coordinator,
                 ],
-                messages=[],
-                max_round=8,
+                termination_condition=MaxMessageTermination(max_messages=8),
             )
-            
-            manager = autogen.GroupChatManager(
-                groupchat=group_chat,
-                llm_config=self.llm_config
-            )
-            
-            # Start group chat
-            self.user_proxy.initiate_chat(
-                manager,
-                message=analysis_prompt,
-                summary_method="reflection_with_llm",
-            )
-            
+
+            import asyncio
+            result = asyncio.run(team.run(task=analysis_prompt))
+
             logger.info(f"Completed analysis for patient {patient_id}")
-            
+
             return {
                 "patient_id": patient_id,
                 "status": "completed",
-                "analysis": manager.groupchat.messages[-1] if manager.groupchat.messages else {},
+                "analysis": result.messages[-1].content if result.messages else {},
             }
             
         except Exception as e:
@@ -253,17 +233,16 @@ Response format:
         """
         
         try:
-            self.user_proxy.initiate_chat(
-                self.consequence_predictor,
-                message=prediction_prompt,
-            )
-            
+            import asyncio
+            result = asyncio.run(self.consequence_predictor.run(task=prediction_prompt))
+
             logger.info(f"Completed outcome prediction for patient {patient_id}")
-            
+
             return {
                 "patient_id": patient_id,
                 "timeframe_months": timeframe_months,
-                "status": "completed"
+                "status": "completed",
+                "prediction": result.messages[-1].content if result.messages else {},
             }
             
         except Exception as e:
@@ -307,16 +286,15 @@ Response format:
         """
         
         try:
-            self.user_proxy.initiate_chat(
-                self.prevention_advisor,
-                message=prevention_prompt,
-            )
-            
+            import asyncio
+            result = asyncio.run(self.prevention_advisor.run(task=prevention_prompt))
+
             logger.info(f"Generated prevention plan for patient {patient_id}")
-            
+
             return {
                 "patient_id": patient_id,
-                "status": "completed"
+                "status": "completed",
+                "plan": result.messages[-1].content if result.messages else {},
             }
             
         except Exception as e:

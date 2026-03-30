@@ -1,0 +1,22 @@
+# Environment variables - NEVER commit this
+.env
+
+# Virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Output files
+output/
+work/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

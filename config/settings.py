@@ -14,10 +14,12 @@ class Settings(BaseSettings):
     neo4j_password: str
     neo4j_database: str = "neo4j"
     
-    # OpenAI Configuration
+    # Azure OpenAI Configuration
     openai_api_key: str
-    openai_model: str = "gpt-4"
-    
+    openai_model: str
+    endpoint: str
+    azure_openai_api_version: str = "2024-02-01"
+
     # Application Configuration
     debug: bool = False
     log_level: str = "INFO"
