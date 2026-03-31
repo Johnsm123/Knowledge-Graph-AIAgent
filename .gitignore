@@ -20,3 +20,15 @@ work/
 
 # Logs
 *.log
+
+# Node modules
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+frontend/dist/
+frontend/build/
+
+# Package lock files (optional - keep if you want consistent installs)
+# package-lock.json
+# frontend/package-lock.json
