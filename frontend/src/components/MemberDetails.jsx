@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader } from 'lucide-react';
 import axios from 'axios';
 import './MemberDetails.css';
 
@@ -14,6 +14,9 @@ function MemberDetails({ member, onBack }) {
   const [messageInput, setMessageInput] = useState('');
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [selectedGap, setSelectedGap] = useState(null);
+  const [aiSuggestions, setAiSuggestions] = useState(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
     if (member) {
@@ -44,26 +47,120 @@ function MemberDetails({ member, onBack }) {
     };
 
     setChatMessages([...chatMessages, newMessage]);
+    const userMessage = messageInput;
     setMessageInput('');
+    setSendingMessage(true);
 
     try {
       await axios.post(`${API_BASE}/chat/send`, {
         member_id: member.member_id,
-        message: messageInput,
+        message: userMessage,
         sender: 'care_manager'
       });
+
+      // Get AI agent response
+      const aiResponse = await axios.post(`${API_BASE}/care-gaps/validate/${member.member_id}`);
+      
+      // Extract relevant response from agents
+      let agentReply = '';
+      if (aiResponse.data.agent_responses) {
+        const responses = aiResponse.data.agent_responses;
+        agentReply = `AI Care Manager:\n\n`;
+        
+        if (responses.care_gap_validator) {
+          agentReply += `📋 Gap Analysis:\n${responses.care_gap_validator}\n\n`;
+        }
+        
+        if (responses.outreach_advisor) {
+          agentReply += `📞 Outreach Plan:\n${responses.outreach_advisor}\n\n`;
+        }
+        
+        if (responses.benefit_checker) {
+          agentReply += `💰 Coverage Info:\n${responses.benefit_checker}`;
+        }
+      } else {
+        agentReply = 'I\'ve reviewed the member\'s care gaps. Let me help you with the outreach plan.';
+      }
 
       setTimeout(() => {
         const autoReply = {
           id: Date.now() + 1,
-          sender: 'member',
-          text: 'Thank you for reaching out. I will review this information.',
+          sender: 'ai_agent',
+          text: agentReply,
           timestamp: new Date().toISOString()
         };
         setChatMessages(prev => [...prev, autoReply]);
-      }, 2000);
+        setSendingMessage(false);
+      }, 1500);
     } catch (error) {
       console.error('Error sending message:', error);
+      const errorReply = {
+        id: Date.now() + 1,
+        sender: 'ai_agent',
+        text: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date().toISOString()
+      };
+      setChatMessages(prev => [...prev, errorReply]);
+      setSendingMessage(false);
+    }
+  };
+
+  const formatAgentResponse = (text) => {
+    if (!text) return null;
+
+    // Split by lines
+    const lines = text.split('\n').filter(line => line.trim());
+    
+    return (
+      <div className="formatted-response">
+        {lines.map((line, idx) => {
+          // Check if line is a bullet point
+          if (line.trim().match(/^[-•*]\s/)) {
+            return (
+              <div key={idx} className="bullet-point">
+                <span className="bullet">•</span>
+                <span>{line.replace(/^[-•*]\s/, '')}</span>
+              </div>
+            );
+          }
+          // Check if line is a numbered list
+          else if (line.trim().match(/^\d+[\.\)]\s/)) {
+            return (
+              <div key={idx} className="numbered-point">
+                <span className="number">{line.match(/^\d+/)[0]}</span>
+                <span>{line.replace(/^\d+[\.\)]\s/, '')}</span>
+              </div>
+            );
+          }
+          // Check if line contains a colon (key-value pair)
+          else if (line.includes(':') && line.split(':')[0].length < 50) {
+            const [key, ...valueParts] = line.split(':');
+            const value = valueParts.join(':').trim();
+            return (
+              <div key={idx} className="key-value">
+                <strong>{key}:</strong> {value}
+              </div>
+            );
+          }
+          // Regular paragraph
+          else {
+            return <p key={idx} className="response-paragraph">{line}</p>;
+          }
+        })}
+      </div>
+    );
+  };
+
+  const getAISuggestions = async () => {
+    setLoadingAI(true);
+    try {
+      const response = await axios.post(`${API_BASE}/care-gaps/validate/${member.member_id}`);
+      setAiSuggestions(response.data);
+    } catch (error) {
+      console.error('Error getting AI suggestions:', error);
+      alert('Failed to get AI suggestions. Please try again.');
+    } finally {
+      setLoadingAI(false);
     }
   };
 
@@ -219,7 +316,132 @@ function MemberDetails({ member, onBack }) {
 
             {details?.open_gaps && details.open_gaps.length > 0 && (
               <div className="quick-gaps">
-                <h3>Open Care Gaps - Action Required</h3>
+                <div className="quick-gaps-header">
+                  <h3>Open Care Gaps - Action Required</h3>
+                  <button 
+                    className="btn-ai-suggestions"
+                    onClick={getAISuggestions}
+                    disabled={loadingAI}
+                  >
+                    {loadingAI ? (
+                      <>
+                        <Loader size={16} className="spinning" />
+                        Getting AI Suggestions...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={16} />
+                        Get AI Suggestions
+                      </>
+                    )}
+                  </button>
+                </div>
+                
+                {aiSuggestions && (
+                  <div className="ai-suggestions-panel">
+                    <div className="ai-panel-header">
+                      <Sparkles size={24} />
+                      <h4>AI-Powered Care Gap Analysis</h4>
+                    </div>
+                    
+                    <div className="ai-summary">
+                      <div className="summary-stat">
+                        <span className="stat-label">Applicable Measures</span>
+                        <span className="stat-value">{aiSuggestions.applicable_measures?.length || 0}</span>
+                      </div>
+                      <div className="summary-stat">
+                        <span className="stat-label">Open Gaps</span>
+                        <span className="stat-value red">{aiSuggestions.open_gaps_detected?.length || 0}</span>
+                      </div>
+                      <div className="summary-stat">
+                        <span className="stat-label">Compliant</span>
+                        <span className="stat-value green">{aiSuggestions.compliant_measures?.length || 0}</span>
+                      </div>
+                    </div>
+
+                    {aiSuggestions.agent_responses?.care_gap_validator && (
+                      <div className="ai-section validator">
+                        <div className="section-header">
+                          <div className="section-icon">📋</div>
+                          <h5>Gap Validation Analysis</h5>
+                        </div>
+                        <div className="section-content">
+                          {formatAgentResponse(aiSuggestions.agent_responses.care_gap_validator)}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {aiSuggestions.agent_responses?.outreach_advisor && (
+                      <div className="ai-section outreach">
+                        <div className="section-header">
+                          <div className="section-icon">📞</div>
+                          <h5>Outreach Strategy & Action Plan</h5>
+                        </div>
+                        <div className="section-content">
+                          {formatAgentResponse(aiSuggestions.agent_responses.outreach_advisor)}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {aiSuggestions.agent_responses?.benefit_checker && (
+                      <div className="ai-section benefits">
+                        <div className="section-header">
+                          <div className="section-icon">💰</div>
+                          <h5>Benefit Coverage Information</h5>
+                        </div>
+                        <div className="section-content">
+                          {formatAgentResponse(aiSuggestions.agent_responses.benefit_checker)}
+                        </div>
+                      </div>
+                    )}
+
+                    {aiSuggestions.open_gaps_detected && aiSuggestions.open_gaps_detected.length > 0 && (
+                      <div className="gaps-table-section">
+                        <h5>📊 Open Gaps Summary</h5>
+                        <table className="gaps-summary-table">
+                          <thead>
+                            <tr>
+                              <th>Measure</th>
+                              <th>Status</th>
+                              <th>Priority</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {aiSuggestions.open_gaps_detected.map((gap, idx) => (
+                              <tr key={idx}>
+                                <td><strong>{gap}</strong></td>
+                                <td><span className="status-badge-table open">Open</span></td>
+                                <td><span className="priority-badge high">High</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {aiSuggestions.compliant_measures && aiSuggestions.compliant_measures.length > 0 && (
+                      <div className="gaps-table-section">
+                        <h5>✅ Compliant Measures</h5>
+                        <table className="gaps-summary-table">
+                          <thead>
+                            <tr>
+                              <th>Measure</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {aiSuggestions.compliant_measures.map((measure, idx) => (
+                              <tr key={idx}>
+                                <td><strong>{measure}</strong></td>
+                                <td><span className="status-badge-table compliant">Compliant</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {details.open_gaps.map(gap => (
                   <div key={gap.care_gap_id} className="quick-gap-card">
                     <div className="gap-header">
@@ -402,19 +624,36 @@ function MemberDetails({ member, onBack }) {
             <div className="chat-messages">
               {chatMessages.length === 0 && (
                 <div className="chat-empty">
-                  <p>Start a conversation with the member</p>
+                  <p>Start a conversation with AI Care Manager</p>
+                  <p className="chat-hint">Ask about care gaps, outreach plans, or coverage</p>
                 </div>
               )}
               {chatMessages.map(msg => (
                 <div key={msg.id} className={`chat-message ${msg.sender}`}>
                   <div className="message-bubble">
-                    <p>{msg.text}</p>
+                    {msg.sender === 'ai_agent' && (
+                      <div className="ai-badge">
+                        <Sparkles size={12} />
+                        AI Care Manager
+                      </div>
+                    )}
+                    <div className="message-content">
+                      {formatAgentResponse(msg.text)}
+                    </div>
                     <span className="message-time">
                       {new Date(msg.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
                 </div>
               ))}
+              {sendingMessage && (
+                <div className="chat-message ai_agent">
+                  <div className="message-bubble typing">
+                    <Loader size={16} className="spinning" />
+                    AI is analyzing...
+                  </div>
+                </div>
+              )}
             </div>
             <div className="chat-input">
               <input

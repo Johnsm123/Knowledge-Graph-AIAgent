@@ -12,34 +12,74 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: #f8fafc;
   color: #1e293b;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
 }
 
 .app {
   min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0033A1 0%, #005EB8 100%);
   color: white;
-  padding: 2rem 3rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  padding: 1rem 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.cognizant-logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
+.header-divider {
+  width: 1px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.header-title-section {
+  flex: 1;
 }
 
 .header-content h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  letter-spacing: -0.5px;
 }
 
 .header-subtitle {
-  font-size: 1rem;
+  font-size: 0.875rem;
   opacity: 0.9;
+  font-weight: 400;
 }
 
 .app-main {
   max-width: 1400px;
   margin: 0 auto;
   padding: 2rem;
+  width: 100%;
 }
 
 .loading-container {
@@ -55,7 +95,7 @@ body {
   width: 48px;
   height: 48px;
   border: 4px solid #e2e8f0;
-  border-top-color: #667eea;
+  border-top-color: #0033A1;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

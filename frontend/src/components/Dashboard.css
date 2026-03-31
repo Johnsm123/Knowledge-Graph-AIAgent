@@ -129,7 +129,7 @@
 
 .measure-fill {
   height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(90deg, #0033A1 0%, #005EB8 100%);
   transition: width 0.3s ease;
 }
 
@@ -166,14 +166,14 @@
 }
 
 .filter-buttons button:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: #0033A1;
+  color: #0033A1;
 }
 
 .filter-buttons button.active {
-  background: #667eea;
+  background: #0033A1;
   color: white;
-  border-color: #667eea;
+  border-color: #0033A1;
 }
 
 .members-grid {
@@ -215,7 +215,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0033A1 0%, #005EB8 100%);
   color: white;
   display: flex;
   align-items: center;
@@ -292,7 +292,7 @@
 .view-details-btn {
   width: 100%;
   padding: 0.75rem;
-  background: #667eea;
+  background: #0033A1;
   color: white;
   border: none;
   border-radius: 8px;
@@ -302,7 +302,7 @@
 }
 
 .view-details-btn:hover {
-  background: #5568d3;
+  background: #002875;
 }
 
 .no-results {

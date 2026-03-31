@@ -21,8 +21,18 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-content">
-          <h1>🏥 Care Gap Management System</h1>
-          <p className="header-subtitle">HEDIS Quality Measure Compliance & Member Outreach</p>
+          <div className="header-left">
+            <img 
+              src="/ct-logo.png" 
+              alt="Cognizant Logo" 
+              className="cognizant-logo"
+            />
+            <div className="header-divider"></div>
+            <div className="header-title-section">
+              <h1>Care Gap Management System</h1>
+              <p className="header-subtitle">HEDIS Quality Measure Compliance & Member Outreach</p>
+            </div>
+          </div>
         </div>
       </header>
 
