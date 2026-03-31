@@ -8,17 +8,18 @@ from typing import Optional
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
     
-    # Neo4j Configuration
-    neo4j_uri: str = "neo4j+s://your-instance.neo4j.io"
+    # Neo4j Aura Configuration
+    neo4j_uri: str
     neo4j_username: str = "neo4j"
     neo4j_password: str
     neo4j_database: str = "neo4j"
+    aura_instanceid: str = ""
     
     # Azure OpenAI Configuration
     openai_api_key: str
     openai_model: str
     endpoint: str
-    azure_openai_api_version: str = "2024-02-01"
+    azure_openai_api_version: str = "2025-01-01-preview"
 
     # Application Configuration
     debug: bool = False
