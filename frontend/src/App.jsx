@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard';
 import MemberDetails from './components/MemberDetails';
+import Analytics from './components/Analytics';
 import './App.css';
 
 function App() {
   const [selectedMember, setSelectedMember] = useState(null);
-  const [view, setView] = useState('dashboard'); // 'dashboard' or 'details'
+  const [view, setView] = useState('dashboard'); // 'dashboard', 'analytics', or 'details'
 
   const handleMemberSelect = (member) => {
     setSelectedMember(member);
@@ -33,12 +34,28 @@ function App() {
               <p className="header-subtitle">HEDIS Quality Measure Compliance & Member Outreach</p>
             </div>
           </div>
+          <nav className="header-nav">
+            <button 
+              className={view === 'dashboard' ? 'active' : ''}
+              onClick={() => { setView('dashboard'); setSelectedMember(null); }}
+            >
+              Dashboard
+            </button>
+            <button 
+              className={view === 'analytics' ? 'active' : ''}
+              onClick={() => { setView('analytics'); setSelectedMember(null); }}
+            >
+              Analytics
+            </button>
+          </nav>
         </div>
       </header>
 
       <main className="app-main">
         {view === 'dashboard' ? (
           <Dashboard onMemberSelect={handleMemberSelect} />
+        ) : view === 'analytics' ? (
+          <Analytics />
         ) : (
           <MemberDetails 
             member={selectedMember} 
