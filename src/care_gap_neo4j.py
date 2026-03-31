@@ -16,6 +16,9 @@ def setup_constraints():
         "CREATE CONSTRAINT IF NOT EXISTS FOR (c:Claim) REQUIRE c.claim_id IS UNIQUE",
         "CREATE CONSTRAINT IF NOT EXISTS FOR (g:CareGap) REQUIRE g.care_gap_id IS UNIQUE",
         "CREATE CONSTRAINT IF NOT EXISTS FOR (o:Outreach) REQUIRE o.outreach_id IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (e:ExclusionCriteria) REQUIRE e.exclusion_id IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (cs:CodeSet) REQUIRE cs.code_set_id IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (cg:ClinicalGuideline) REQUIRE cg.guideline_id IS UNIQUE",
     ]
     for c in constraints:
         kg.execute_write(c)
@@ -23,8 +26,170 @@ def setup_constraints():
 
 # ── Static / Golden Reference Nodes ──────────────────────────────────────────
 
+def merge_quality_measure_comprehensive(measure_data: dict):
+    """
+    Load comprehensive HEDIS measure with all attributes.
+    measure_data should come from hedis_golden_reference.py
+    """
+    kg = get_knowledge_graph()
+    
+    # Create main QualityMeasure node with comprehensive attributes
+    kg.execute_write("""
+        MERGE (q:QualityMeasure {measure_id: $measure_id})
+        SET q.name = $name,
+            q.description = $description,
+            q.age_range = $age_range,
+            q.min_age = $min_age,
+            q.max_age = $max_age,
+            q.gender_requirement = $gender_requirement,
+            q.lookback_months = $lookback_months,
+            q.lookback_description = $lookback_description,
+            q.numerator_criteria = $numerator_criteria,
+            q.denominator_criteria = $denominator_criteria,
+            q.continuous_enrollment = $continuous_enrollment,
+            q.product_lines = $product_lines,
+            q.diagnosis_requirement = $diagnosis_requirement
+    """, {
+        "measure_id": measure_data["measure_id"],
+        "name": measure_data["name"],
+        "description": measure_data["description"],
+        "age_range": measure_data["age_range"],
+        "min_age": measure_data["min_age"],
+        "max_age": measure_data["max_age"],
+        "gender_requirement": measure_data.get("gender_requirement", "Any"),
+        "lookback_months": measure_data.get("lookback_months"),
+        "lookback_description": measure_data.get("lookback_description", ""),
+        "numerator_criteria": measure_data.get("numerator_criteria", ""),
+        "denominator_criteria": measure_data.get("denominator_criteria", ""),
+        "continuous_enrollment": measure_data.get("continuous_enrollment", ""),
+        "product_lines": measure_data.get("product_lines", []),
+        "diagnosis_requirement": measure_data.get("diagnosis_requirement", "")
+    })
+    
+    # Load screening options if present (for COL, CCS)
+    if "screening_options" in measure_data:
+        for option in measure_data["screening_options"]:
+            option_id = f"{measure_data['measure_id']}_{option['type']}"
+            kg.execute_write("""
+                MERGE (so:ScreeningOption {option_id: $option_id})
+                SET so.type = $type,
+                    so.lookback_months = $lookback_months,
+                    so.description = $description,
+                    so.age_range = $age_range
+                WITH so
+                MATCH (q:QualityMeasure {measure_id: $measure_id})
+                MERGE (q)-[:HAS_SCREENING_OPTION]->(so)
+            """, {
+                "option_id": option_id,
+                "type": option["type"],
+                "lookback_months": option["lookback_months"],
+                "description": option["description"],
+                "age_range": option.get("age_range", ""),
+                "measure_id": measure_data["measure_id"]
+            })
+    
+    # Load code sets
+    if "codes" in measure_data:
+        for code_type, codes in measure_data["codes"].items():
+            if isinstance(codes, list):
+                code_set_id = f"{measure_data['measure_id']}_{code_type}"
+                kg.execute_write("""
+                    MERGE (cs:CodeSet {code_set_id: $code_set_id})
+                    SET cs.code_type = $code_type,
+                        cs.codes = $codes,
+                        cs.measure_id = $measure_id
+                    WITH cs
+                    MATCH (q:QualityMeasure {measure_id: $measure_id})
+                    MERGE (q)-[:REQUIRES_CODES]->(cs)
+                """, {
+                    "code_set_id": code_set_id,
+                    "code_type": code_type,
+                    "codes": codes,
+                    "measure_id": measure_data["measure_id"]
+                })
+    
+    # Load exclusions
+    if "exclusions" in measure_data:
+        for exclusion_category, exclusions in measure_data["exclusions"].items():
+            for idx, exclusion in enumerate(exclusions):
+                exclusion_id = f"{measure_data['measure_id']}_{exclusion['type']}_{exclusion_category}"
+                
+                # Extract codes from exclusion
+                cpt_codes = exclusion.get("cpt", [])
+                hcpcs_codes = exclusion.get("hcpcs", [])
+                icd10_codes = exclusion.get("icd10", [])
+                icd10pcs_codes = exclusion.get("icd10pcs", [])
+                modifiers = exclusion.get("modifiers", [])
+                
+                kg.execute_write("""
+                    MERGE (e:ExclusionCriteria {exclusion_id: $exclusion_id})
+                    SET e.type = $type,
+                        e.description = $description,
+                        e.category = $category,
+                        e.cpt_codes = $cpt_codes,
+                        e.hcpcs_codes = $hcpcs_codes,
+                        e.icd10_codes = $icd10_codes,
+                        e.icd10pcs_codes = $icd10pcs_codes,
+                        e.modifiers = $modifiers,
+                        e.criteria = $criteria,
+                        e.measure_id = $measure_id
+                    WITH e
+                    MATCH (q:QualityMeasure {measure_id: $measure_id})
+                    MERGE (q)-[:HAS_EXCLUSION {category: $category}]->(e)
+                """, {
+                    "exclusion_id": exclusion_id,
+                    "type": exclusion["type"],
+                    "description": exclusion["description"],
+                    "category": exclusion_category,
+                    "cpt_codes": cpt_codes,
+                    "hcpcs_codes": hcpcs_codes,
+                    "icd10_codes": icd10_codes,
+                    "icd10pcs_codes": icd10pcs_codes,
+                    "modifiers": modifiers,
+                    "criteria": exclusion.get("criteria", ""),
+                    "measure_id": measure_data["measure_id"]
+                })
+    
+    # Load clinical guidelines
+    if "clinical_guidelines" in measure_data:
+        guidelines = measure_data["clinical_guidelines"]
+        guideline_id = f"{measure_data['measure_id']}_clinical_guidelines"
+        
+        kg.execute_write("""
+            MERGE (cg:ClinicalGuideline {guideline_id: $guideline_id})
+            SET cg.acceptable = $acceptable,
+                cg.not_acceptable = $not_acceptable,
+                cg.measure_id = $measure_id
+            WITH cg
+            MATCH (q:QualityMeasure {measure_id: $measure_id})
+            MERGE (q)-[:FOLLOWS_GUIDELINE]->(cg)
+        """, {
+            "guideline_id": guideline_id,
+            "acceptable": guidelines.get("acceptable", []),
+            "not_acceptable": guidelines.get("not_acceptable", []),
+            "measure_id": measure_data["measure_id"]
+        })
+    
+    # Load best practices
+    if "best_practices" in measure_data:
+        best_practices_id = f"{measure_data['measure_id']}_best_practices"
+        kg.execute_write("""
+            MERGE (bp:BestPractices {best_practices_id: $best_practices_id})
+            SET bp.practices = $practices,
+                bp.measure_id = $measure_id
+            WITH bp
+            MATCH (q:QualityMeasure {measure_id: $measure_id})
+            MERGE (q)-[:HAS_BEST_PRACTICES]->(bp)
+        """, {
+            "best_practices_id": best_practices_id,
+            "practices": measure_data["best_practices"],
+            "measure_id": measure_data["measure_id"]
+        })
+
+
 def merge_quality_measure(measure_id, name, age_range, lookback_months,
                            proactive_lookback_months, cpt_codes, description):
+    """Legacy function - kept for backward compatibility"""
     kg = get_knowledge_graph()
     kg.execute_write("""
         MERGE (q:QualityMeasure {measure_id: $measure_id})
@@ -244,3 +409,125 @@ def get_member_profile(member_id: str):
                p.network_status AS pcp_network_status
     """, {"member_id": member_id})
     return results[0] if results else {}
+
+
+def get_measure_comprehensive(measure_id: str):
+    """
+    Get comprehensive measure definition with all related nodes.
+    Returns: measure details, code sets, exclusions, guidelines, best practices
+    """
+    kg = get_knowledge_graph()
+    
+    # Get main measure
+    measure = kg.run_query("""
+        MATCH (q:QualityMeasure {measure_id: $measure_id})
+        RETURN q.measure_id AS measure_id,
+               q.name AS name,
+               q.description AS description,
+               q.age_range AS age_range,
+               q.min_age AS min_age,
+               q.max_age AS max_age,
+               q.gender_requirement AS gender_requirement,
+               q.lookback_months AS lookback_months,
+               q.lookback_description AS lookback_description,
+               q.numerator_criteria AS numerator_criteria,
+               q.denominator_criteria AS denominator_criteria,
+               q.diagnosis_requirement AS diagnosis_requirement
+    """, {"measure_id": measure_id})
+    
+    if not measure:
+        return None
+    
+    result = measure[0]
+    
+    # Get code sets
+    code_sets = kg.run_query("""
+        MATCH (q:QualityMeasure {measure_id: $measure_id})-[:REQUIRES_CODES]->(cs:CodeSet)
+        RETURN cs.code_type AS code_type, cs.codes AS codes
+    """, {"measure_id": measure_id})
+    result["code_sets"] = {cs["code_type"]: cs["codes"] for cs in code_sets}
+    
+    # Get exclusions
+    exclusions = kg.run_query("""
+        MATCH (q:QualityMeasure {measure_id: $measure_id})-[r:HAS_EXCLUSION]->(e:ExclusionCriteria)
+        RETURN e.type AS type,
+               e.description AS description,
+               e.category AS category,
+               e.cpt_codes AS cpt_codes,
+               e.hcpcs_codes AS hcpcs_codes,
+               e.icd10_codes AS icd10_codes,
+               e.icd10pcs_codes AS icd10pcs_codes,
+               e.modifiers AS modifiers,
+               e.criteria AS criteria
+    """, {"measure_id": measure_id})
+    result["exclusions"] = exclusions
+    
+    # Get clinical guidelines
+    guidelines = kg.run_query("""
+        MATCH (q:QualityMeasure {measure_id: $measure_id})-[:FOLLOWS_GUIDELINE]->(cg:ClinicalGuideline)
+        RETURN cg.acceptable AS acceptable, cg.not_acceptable AS not_acceptable
+    """, {"measure_id": measure_id})
+    result["clinical_guidelines"] = guidelines[0] if guidelines else {}
+    
+    # Get best practices
+    best_practices = kg.run_query("""
+        MATCH (q:QualityMeasure {measure_id: $measure_id})-[:HAS_BEST_PRACTICES]->(bp:BestPractices)
+        RETURN bp.practices AS practices
+    """, {"measure_id": measure_id})
+    result["best_practices"] = best_practices[0]["practices"] if best_practices else []
+    
+    # Get screening options if present
+    screening_options = kg.run_query("""
+        MATCH (q:QualityMeasure {measure_id: $measure_id})-[:HAS_SCREENING_OPTION]->(so:ScreeningOption)
+        RETURN so.type AS type,
+               so.lookback_months AS lookback_months,
+               so.description AS description,
+               so.age_range AS age_range
+    """, {"measure_id": measure_id})
+    result["screening_options"] = screening_options
+    
+    return result
+
+
+def check_member_exclusions(member_id: str, measure_id: str):
+    """
+    Check if member meets any exclusion criteria for a measure.
+    Returns list of exclusions that apply to this member.
+    """
+    kg = get_knowledge_graph()
+    
+    # Get member's claims with codes
+    member_claims = kg.run_query("""
+        MATCH (m:Member {member_id: $member_id})-[:HAS_CLAIM]->(c:Claim)
+        RETURN c.cpt_code AS cpt_code,
+               c.icd_code AS icd_code,
+               c.service_date AS service_date
+    """, {"member_id": member_id})
+    
+    # Get exclusion criteria for measure
+    exclusions = kg.run_query("""
+        MATCH (q:QualityMeasure {measure_id: $measure_id})-[:HAS_EXCLUSION]->(e:ExclusionCriteria)
+        RETURN e.type AS type,
+               e.description AS description,
+               e.category AS category,
+               e.cpt_codes AS cpt_codes,
+               e.icd10_codes AS icd10_codes
+    """, {"measure_id": measure_id})
+    
+    matched_exclusions = []
+    
+    for exclusion in exclusions:
+        # Check if member has any matching codes
+        member_cpt_codes = [c["cpt_code"] for c in member_claims if c["cpt_code"]]
+        member_icd_codes = [c["icd_code"] for c in member_claims if c["icd_code"]]
+        
+        exclusion_cpt = exclusion.get("cpt_codes", [])
+        exclusion_icd = exclusion.get("icd10_codes", [])
+        
+        # Check for matches
+        if exclusion_cpt and any(code in exclusion_cpt for code in member_cpt_codes):
+            matched_exclusions.append(exclusion)
+        elif exclusion_icd and any(code in exclusion_icd for code in member_icd_codes):
+            matched_exclusions.append(exclusion)
+    
+    return matched_exclusions

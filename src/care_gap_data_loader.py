@@ -12,10 +12,11 @@ from datetime import datetime
 import logging
 from src.care_gap_neo4j import (
     setup_constraints,
-    merge_quality_measure, merge_benefit_plan, merge_provider,
+    merge_quality_measure, merge_quality_measure_comprehensive, merge_benefit_plan, merge_provider,
     merge_member, merge_enrollment, merge_claim,
     merge_care_gap, merge_outreach,
 )
+from src.hedis_golden_reference import get_all_measures
 
 logger = logging.getLogger(__name__)
 EXCEL_PATH = "src/Scenario 2_care_gap_multi_measure_dataset.xlsx"
@@ -131,18 +132,11 @@ def _parse_date(val) -> str:
 
 
 def load_quality_measures():
-    """Load golden reference from GOLDEN_REFERENCE — not from Excel cells (messy merged cells)."""
-    for m in GOLDEN_REFERENCE:
-        merge_quality_measure(
-            measure_id=m["measure_id"],
-            name=m["name"],
-            age_range=m["age_range"],
-            lookback_months=m["lookback_months"],
-            proactive_lookback_months=m["proactive_lookback_months"],
-            cpt_codes=m["cpt_codes"],
-            description=m["description"],
-        )
-    logger.info(f"Loaded {len(GOLDEN_REFERENCE)} QualityMeasure golden reference nodes (BCS, COL, CCS, CDC-HbA1c)")
+    """Load comprehensive HEDIS golden reference from hedis_golden_reference.py"""
+    measures = get_all_measures()
+    for measure_id, measure_data in measures.items():
+        merge_quality_measure_comprehensive(measure_data)
+    logger.info(f"Loaded {len(measures)} comprehensive QualityMeasure nodes with exclusions, code sets, and guidelines")
 
 
 def load_benefit_plans():
