@@ -1,0 +1,122 @@
+DISEASES = [
+    {
+        "name": "Type 2 Diabetes",
+        "category": "Metabolic",
+        "symptoms": ["frequent urination", "excessive thirst", "blurred vision", "fatigue", "slow healing wounds", "numbness in hands/feet"],
+        "risk_factors": ["obesity", "sedentary lifestyle", "family history", "age > 45", "high blood pressure"],
+        "prevention": ["regular exercise", "healthy diet", "weight management", "avoid sugary drinks", "routine blood sugar screening"],
+        "diagnosis": ["fasting blood glucose test", "HbA1c test", "oral glucose tolerance test"],
+        "treatments": ["metformin", "insulin therapy", "GLP-1 receptor agonists", "SGLT2 inhibitors"],
+        "cures": ["bariatric surgery (remission possible)", "lifestyle reversal program"],
+        "complications": ["neuropathy", "retinopathy", "kidney disease", "cardiovascular disease"],
+        "care_gaps": ["missed HbA1c screening", "no foot exam", "uncontrolled blood sugar", "no ophthalmology referral"]
+    },
+    {
+        "name": "Hypertension",
+        "category": "Cardiovascular",
+        "symptoms": ["headache", "dizziness", "chest pain", "shortness of breath", "nosebleeds", "often asymptomatic"],
+        "risk_factors": ["high salt diet", "obesity", "stress", "smoking", "family history", "age"],
+        "prevention": ["low sodium diet", "regular exercise", "limit alcohol", "stress management", "no smoking"],
+        "diagnosis": ["blood pressure measurement", "ambulatory BP monitoring", "echocardiogram"],
+        "treatments": ["ACE inhibitors", "beta blockers", "calcium channel blockers", "diuretics", "ARBs"],
+        "cures": ["lifestyle modification can normalize BP"],
+        "complications": ["stroke", "heart attack", "kidney failure", "aneurysm"],
+        "care_gaps": ["no BP monitoring at home", "medication non-adherence", "no dietary counseling"]
+    },
+    {
+        "name": "Asthma",
+        "category": "Respiratory",
+        "symptoms": ["wheezing", "shortness of breath", "chest tightness", "chronic cough", "nocturnal symptoms"],
+        "risk_factors": ["allergies", "air pollution", "smoking", "family history", "respiratory infections"],
+        "prevention": ["avoid allergens", "air purifiers", "no smoking", "flu vaccination", "asthma action plan"],
+        "diagnosis": ["spirometry", "peak flow test", "allergy testing", "chest X-ray"],
+        "treatments": ["short-acting beta agonists (SABA)", "inhaled corticosteroids", "long-acting beta agonists", "leukotriene modifiers"],
+        "cures": ["no permanent cure; managed with medication"],
+        "complications": ["status asthmaticus", "respiratory failure", "sleep disturbances"],
+        "care_gaps": ["no inhaler technique check", "missing follow-up spirometry", "no written asthma action plan"]
+    },
+    {
+        "name": "Coronary Artery Disease",
+        "category": "Cardiovascular",
+        "symptoms": ["chest pain (angina)", "shortness of breath", "heart attack", "fatigue", "palpitations"],
+        "risk_factors": ["high cholesterol", "hypertension", "diabetes", "smoking", "obesity", "family history"],
+        "prevention": ["heart-healthy diet", "exercise", "no smoking", "cholesterol management", "stress reduction"],
+        "diagnosis": ["ECG", "stress test", "coronary angiography", "CT angiography", "echocardiogram"],
+        "treatments": ["statins", "aspirin", "beta blockers", "nitrates", "angioplasty", "bypass surgery (CABG)"],
+        "cures": ["no cure; managed with lifestyle and medication"],
+        "complications": ["myocardial infarction", "heart failure", "arrhythmia", "sudden cardiac death"],
+        "care_gaps": ["no statin prescribed post-MI", "no cardiac rehab referral", "missed lipid panel"]
+    },
+    {
+        "name": "Chronic Kidney Disease",
+        "category": "Renal",
+        "symptoms": ["fatigue", "swelling in legs", "decreased urine output", "nausea", "shortness of breath", "confusion"],
+        "risk_factors": ["diabetes", "hypertension", "family history", "age > 60", "NSAIDs overuse"],
+        "prevention": ["control blood sugar", "manage blood pressure", "avoid nephrotoxic drugs", "stay hydrated", "regular kidney function tests"],
+        "diagnosis": ["serum creatinine", "eGFR", "urine albumin-to-creatinine ratio", "kidney ultrasound"],
+        "treatments": ["ACE inhibitors", "ARBs", "dialysis", "erythropoiesis-stimulating agents", "phosphate binders"],
+        "cures": ["kidney transplant"],
+        "complications": ["end-stage renal disease", "cardiovascular disease", "anemia", "bone disease"],
+        "care_gaps": ["no eGFR monitoring", "no nephrology referral", "uncontrolled proteinuria"]
+    },
+    {
+        "name": "Depression",
+        "category": "Mental Health",
+        "symptoms": ["persistent sadness", "loss of interest", "fatigue", "sleep disturbances", "appetite changes", "suicidal thoughts"],
+        "risk_factors": ["trauma", "family history", "chronic illness", "substance abuse", "social isolation"],
+        "prevention": ["social support", "regular exercise", "stress management", "therapy", "healthy sleep habits"],
+        "diagnosis": ["PHQ-9 screening", "clinical interview", "DSM-5 criteria"],
+        "treatments": ["SSRIs", "SNRIs", "cognitive behavioral therapy (CBT)", "electroconvulsive therapy (ECT)", "TMS"],
+        "cures": ["remission achievable with treatment"],
+        "complications": ["suicide risk", "substance abuse", "social dysfunction", "worsening physical health"],
+        "care_gaps": ["no PHQ-9 screening", "no therapy referral", "medication not initiated", "no follow-up after diagnosis"]
+    },
+    {
+        "name": "Osteoporosis",
+        "category": "Musculoskeletal",
+        "symptoms": ["back pain", "loss of height", "stooped posture", "bone fractures", "often asymptomatic until fracture"],
+        "risk_factors": ["age", "female gender", "low calcium intake", "vitamin D deficiency", "smoking", "corticosteroid use"],
+        "prevention": ["calcium-rich diet", "vitamin D supplementation", "weight-bearing exercise", "no smoking", "fall prevention"],
+        "diagnosis": ["DEXA scan", "bone density test", "FRAX score", "blood calcium levels"],
+        "treatments": ["bisphosphonates", "denosumab", "teriparatide", "calcium + vitamin D supplements", "hormone therapy"],
+        "cures": ["no cure; progression can be slowed"],
+        "complications": ["hip fracture", "vertebral fracture", "disability", "chronic pain"],
+        "care_gaps": ["no DEXA scan ordered", "no calcium/vitamin D counseling", "no fall risk assessment"]
+    },
+    {
+        "name": "COPD",
+        "category": "Respiratory",
+        "symptoms": ["chronic cough", "sputum production", "dyspnea", "wheezing", "frequent respiratory infections"],
+        "risk_factors": ["smoking", "air pollution", "occupational dust", "alpha-1 antitrypsin deficiency", "age"],
+        "prevention": ["smoking cessation", "avoid pollutants", "vaccinations (flu, pneumococcal)", "pulmonary rehab"],
+        "diagnosis": ["spirometry (FEV1/FVC < 0.7)", "chest X-ray", "CT scan", "arterial blood gas"],
+        "treatments": ["bronchodilators (LABA, LAMA)", "inhaled corticosteroids", "oxygen therapy", "pulmonary rehabilitation", "lung volume reduction"],
+        "cures": ["no cure; lung transplant in severe cases"],
+        "complications": ["respiratory failure", "pulmonary hypertension", "cor pulmonale", "depression"],
+        "care_gaps": ["no spirometry done", "no smoking cessation counseling", "no pulmonary rehab referral", "missed vaccinations"]
+    },
+    {
+        "name": "Breast Cancer",
+        "category": "Oncology",
+        "symptoms": ["breast lump", "nipple discharge", "skin dimpling", "breast pain", "swollen lymph nodes", "nipple inversion"],
+        "risk_factors": ["BRCA1/BRCA2 mutation", "family history", "age", "hormone therapy", "obesity", "alcohol use"],
+        "prevention": ["regular mammograms", "BRCA genetic testing", "prophylactic mastectomy (high risk)", "healthy weight", "limit alcohol"],
+        "diagnosis": ["mammography", "ultrasound", "MRI", "biopsy", "hormone receptor testing"],
+        "treatments": ["surgery (lumpectomy/mastectomy)", "chemotherapy", "radiation therapy", "hormone therapy", "targeted therapy (Herceptin)", "immunotherapy"],
+        "cures": ["early-stage breast cancer has high cure rates"],
+        "complications": ["metastasis", "lymphedema", "chemo side effects", "recurrence"],
+        "care_gaps": ["missed mammogram screening", "no genetic counseling", "delayed biopsy", "no survivorship care plan"]
+    },
+    {
+        "name": "Stroke",
+        "category": "Neurological",
+        "symptoms": ["sudden numbness", "confusion", "trouble speaking", "vision problems", "severe headache", "loss of balance"],
+        "risk_factors": ["hypertension", "atrial fibrillation", "diabetes", "smoking", "high cholesterol", "obesity"],
+        "prevention": ["control BP", "anticoagulants for AFib", "no smoking", "healthy diet", "regular exercise", "manage diabetes"],
+        "diagnosis": ["CT scan", "MRI", "carotid ultrasound", "echocardiogram", "blood tests"],
+        "treatments": ["tPA (clot buster)", "mechanical thrombectomy", "antiplatelet therapy", "anticoagulants", "rehabilitation"],
+        "cures": ["no cure; recovery depends on speed of treatment"],
+        "complications": ["paralysis", "speech impairment", "cognitive decline", "depression", "recurrent stroke"],
+        "care_gaps": ["no anticoagulation for AFib", "no BP control post-stroke", "no stroke rehab referral", "missed carotid screening"]
+    }
+]
