@@ -142,10 +142,38 @@
   margin-bottom: 1.5rem;
 }
 
+.filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
 .filter-section h2 {
   font-size: 1.5rem;
-  margin-bottom: 1rem;
+  margin: 0;
   color: #1e293b;
+}
+
+.add-member-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: #0033A1;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-member-btn:hover {
+  background: #002875;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 51, 161, 0.3);
 }
 
 .filter-buttons {

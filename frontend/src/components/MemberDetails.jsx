@@ -213,7 +213,7 @@ function MemberDetails({ member, onBack }) {
           <div className="profile-meta">
             <span>{details?.profile.age_str}</span>
             <span>•</span>
-            <span>{details?.profile.gender === 'M' ? 'Male' : 'Female'}</span>
+            <span>{details?.profile.gender}</span>
             <span>•</span>
             <span>DOB: {details?.profile.dob}</span>
           </div>

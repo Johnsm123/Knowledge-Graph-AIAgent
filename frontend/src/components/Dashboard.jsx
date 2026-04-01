@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Users, AlertCircle, CheckCircle, TrendingUp, Activity } from 'lucide-react';
+import { Users, AlertCircle, CheckCircle, TrendingUp, Activity, UserPlus } from 'lucide-react';
 import axios from 'axios';
+import AddMember from './AddMember';
 import './Dashboard.css';
 
 const API_BASE = 'http://localhost:5001/api/v1';
@@ -10,6 +11,7 @@ function Dashboard({ onMemberSelect }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [showAddMember, setShowAddMember] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -29,6 +31,10 @@ function Dashboard({ onMemberSelect }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMemberAdded = () => {
+    fetchDashboardData(); // Refresh data after adding member
   };
 
   const filteredMembers = members.filter(member => {
@@ -121,7 +127,13 @@ function Dashboard({ onMemberSelect }) {
       )}
 
       <div className="filter-section">
-        <h2>Members</h2>
+        <div className="filter-header">
+          <h2>Members</h2>
+          <button className="add-member-btn" onClick={() => setShowAddMember(true)}>
+            <UserPlus size={20} />
+            Add Member
+          </button>
+        </div>
         <div className="filter-buttons">
           <button 
             className={filter === 'all' ? 'active' : ''}
@@ -207,6 +219,13 @@ function Dashboard({ onMemberSelect }) {
         <div className="no-results">
           <p>No members found matching the selected filter.</p>
         </div>
+      )}
+
+      {showAddMember && (
+        <AddMember 
+          onClose={() => setShowAddMember(false)}
+          onSuccess={handleMemberAdded}
+        />
       )}
     </div>
   );

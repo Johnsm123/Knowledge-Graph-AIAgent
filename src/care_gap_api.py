@@ -256,5 +256,85 @@ def get_measure_details(measure_id):
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+@app.route("/api/v1/members/add", methods=["POST"])
+def add_member():
+    """Add new member with complete details to Neo4j."""
+    try:
+        from src.care_gap_neo4j import merge_member, merge_enrollment
+        data = request.json
+        
+        # Validate required fields
+        required = ["member_id", "name", "dob", "gender", "pcp_id", "plan_id"]
+        for field in required:
+            if not data.get(field):
+                return jsonify({"status": "error", "error": f"Missing required field: {field}"}), 400
+        
+        # Create member node
+        merge_member(
+            member_id=data["member_id"],
+            name=data["name"],
+            dob=data["dob"],
+            gender=data["gender"],
+            pcp_id=data["pcp_id"],
+            zip_code=data.get("zip_code", ""),
+            enrollment_start=data.get("enrollment_start", data["dob"]),
+            enrollment_end=data.get("enrollment_end", "2025-12-31"),
+            age_str=data.get("age_str", "")
+        )
+        
+        # Create enrollment relationships
+        merge_enrollment(
+            member_id=data["member_id"],
+            plan_id=data["plan_id"],
+            pcp_id=data["pcp_id"],
+            effective_from=data.get("enrollment_start", data["dob"]),
+            effective_to=data.get("enrollment_end", "2025-12-31")
+        )
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Member {data['member_id']} added successfully",
+            "member_id": data["member_id"]
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/providers/list", methods=["GET"])
+def get_providers():
+    """Get all providers for dropdown selection."""
+    try:
+        kg = get_knowledge_graph()
+        providers = kg.run_query("""
+            MATCH (p:Provider)
+            RETURN p.provider_id as provider_id,
+                   p.name as name,
+                   p.specialty as specialty,
+                   p.network_status as network_status
+            ORDER BY p.name
+        """, {})
+        return jsonify({"providers": providers})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/plans/list", methods=["GET"])
+def get_plans():
+    """Get all benefit plans for dropdown selection."""
+    try:
+        kg = get_knowledge_graph()
+        plans = kg.run_query("""
+            MATCH (b:BenefitPlan)
+            RETURN b.plan_id as plan_id,
+                   b.copay as copay,
+                   b.deductible as deductible,
+                   b.preventive_covered as preventive_covered
+            ORDER BY b.plan_id
+        """, {})
+        return jsonify({"plans": plans})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5001, use_reloader=False)
