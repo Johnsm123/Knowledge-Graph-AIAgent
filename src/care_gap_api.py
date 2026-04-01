@@ -257,4 +257,4 @@ def get_measure_details(measure_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    app.run(debug=True, port=5001, use_reloader=False)
