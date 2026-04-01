@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader, GitCompare } from 'lucide-react';
 import axios from 'axios';
+import MemberComparison from './MemberComparison';
 import './MemberDetails.css';
 
 const API_BASE = 'http://localhost:5001/api/v1';
@@ -17,6 +18,7 @@ function MemberDetails({ member, onBack }) {
   const [aiSuggestions, setAiSuggestions] = useState(null);
   const [loadingAI, setLoadingAI] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
 
   useEffect(() => {
     if (member) {
@@ -219,6 +221,10 @@ function MemberDetails({ member, onBack }) {
           </div>
         </div>
         <div className="profile-actions">
+          <button className="action-btn" onClick={() => setShowComparison(true)}>
+            <GitCompare size={18} />
+            Compare
+          </button>
           <button className="action-btn" onClick={() => setChatOpen(true)}>
             <MessageCircle size={18} />
             Chat
@@ -687,6 +693,13 @@ function MemberDetails({ member, onBack }) {
             </div>
           </div>
         </div>
+      )}
+
+      {showComparison && (
+        <MemberComparison 
+          member={member}
+          onClose={() => setShowComparison(false)}
+        />
       )}
     </div>
   );

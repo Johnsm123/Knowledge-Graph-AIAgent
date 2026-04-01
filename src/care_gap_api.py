@@ -318,6 +318,164 @@ def get_providers():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+@app.route("/api/v1/members/<member_id>/compare", methods=["GET"])
+def compare_member(member_id):
+    """Compare member with similar members and provide improvement recommendations."""
+    try:
+        kg = get_knowledge_graph()
+        
+        # Get current member details
+        current_member = kg.run_query("""
+            MATCH (m:Member {member_id: $member_id})
+            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
+            WITH m, 
+                 count(CASE WHEN g.is_open = true THEN 1 END) as open_gaps,
+                 count(CASE WHEN g.is_open = false THEN 1 END) as closed_gaps
+            RETURN m.member_id as member_id,
+                   m.name as name,
+                   m.age_str as age,
+                   m.gender as gender,
+                   m.dob as dob,
+                   open_gaps,
+                   closed_gaps
+        """, {"member_id": member_id})
+        
+        if not current_member:
+            return jsonify({"status": "error", "error": "Member not found"}), 404
+        
+        current = current_member[0]
+        
+        # Parse age from "35 Years, 5 Months" format
+        age_str = current["age"]
+        try:
+            age = int(age_str.split()[0]) if age_str else 0
+        except (ValueError, AttributeError, IndexError):
+            age = 0
+        
+        # Find similar members (same gender, similar age range ±5 years)
+        similar_members = kg.run_query("""
+            MATCH (m:Member)
+            WHERE m.member_id <> $member_id
+              AND m.gender = $gender
+            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
+            WITH m,
+                 count(CASE WHEN g.is_open = true THEN 1 END) as open_gaps,
+                 count(CASE WHEN g.is_open = false THEN 1 END) as closed_gaps,
+                 count(g) as total_gaps
+            OPTIONAL MATCH (m)-[:HAS_CLAIM]->(c:Claim)
+            WITH m, open_gaps, closed_gaps, total_gaps, count(c) as total_claims
+            RETURN m.member_id as member_id,
+                   m.name as name,
+                   m.age_str as age,
+                   m.gender as gender,
+                   open_gaps,
+                   closed_gaps,
+                   total_gaps,
+                   total_claims
+            ORDER BY open_gaps ASC, closed_gaps DESC
+            LIMIT 10
+        """, {
+            "member_id": member_id,
+            "gender": current["gender"]
+        })
+        
+        # Filter similar members by age range in Python
+        filtered_similar = []
+        for member in similar_members:
+            try:
+                member_age = int(member["age"].split()[0]) if member["age"] else 0
+                if abs(member_age - age) <= 5:
+                    filtered_similar.append(member)
+            except (ValueError, AttributeError, IndexError):
+                continue
+        
+        # Get current member's open gaps with details
+        current_gaps = kg.run_query("""
+            MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
+            WHERE g.is_open = true
+            RETURN g.care_gap_id as care_gap_id,
+                   q.measure_id as measure_id,
+                   q.name as measure_name,
+                   q.description as description,
+                   q.lookback_months as lookback_months,
+                   g.created_on as created_on
+        """, {"member_id": member_id})
+        
+        # Get CPT codes from CodeSet nodes
+        for gap in current_gaps:
+            cpt_codes = kg.run_query("""
+                MATCH (q:QualityMeasure {measure_id: $measure_id})-[:REQUIRES_CODES]->(cs:CodeSet)
+                WHERE cs.code_type = 'CPT'
+                RETURN cs.codes as codes
+            """, {"measure_id": gap["measure_id"]})
+            gap["cpt_codes"] = ", ".join(cpt_codes[0]["codes"]) if cpt_codes and cpt_codes[0]["codes"] else "N/A"
+        
+        # Get best practices from quality measures
+        improvement_guidelines = kg.run_query("""
+            MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
+            WHERE g.is_open = true
+            OPTIONAL MATCH (q)-[:HAS_BEST_PRACTICES]->(bp:BestPractices)
+            OPTIONAL MATCH (q)-[:FOLLOWS_GUIDELINE]->(cg:ClinicalGuideline)
+            RETURN q.measure_id as measure_id,
+                   q.name as measure_name,
+                   bp.practices as best_practices,
+                   cg.acceptable as acceptable_documentation,
+                   q.numerator_criteria as numerator_criteria
+        """, {"member_id": member_id})
+        
+        # Calculate comparison metrics (only consider open gaps for performance)
+        better_performers = [m for m in filtered_similar if m["open_gaps"] < current["open_gaps"]]
+        avg_open_gaps = sum(m["open_gaps"] for m in filtered_similar) / len(filtered_similar) if filtered_similar else 0
+        avg_closed_gaps = sum(m["closed_gaps"] for m in filtered_similar) / len(filtered_similar) if filtered_similar else 0
+        
+        # Percentile rank: lower open gaps = better performance (higher percentile)
+        # If member has 0 open gaps, they're in top percentile
+        percentile = calculate_percentile(current["open_gaps"], [m["open_gaps"] for m in filtered_similar])
+        
+        return jsonify({
+            "current_member": current,
+            "similar_members": filtered_similar,
+            "better_performers": better_performers,
+            "current_gaps": current_gaps,
+            "improvement_guidelines": improvement_guidelines,
+            "comparison_metrics": {
+                "current_open_gaps": current["open_gaps"],
+                "current_closed_gaps": current["closed_gaps"],
+                "avg_open_gaps_similar": round(avg_open_gaps, 1),
+                "avg_closed_gaps_similar": round(avg_closed_gaps, 1),
+                "percentile_rank": percentile,
+                "total_similar_members": len(filtered_similar),
+                "better_performers_count": len(better_performers)
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+def calculate_percentile(value, values_list):
+    """Calculate percentile rank based on open gaps (lower gaps = higher percentile = better)."""
+    if not values_list:
+        return 100 if value == 0 else 50
+    
+    # Special case: if member has 0 open gaps, they're always top performer
+    if value == 0:
+        return 100
+    
+    # Count members with MORE open gaps (worse performance)
+    worse_count = sum(1 for v in values_list if v > value)
+    
+    # Count members with SAME number of gaps
+    same_count = sum(1 for v in values_list if v == value)
+    
+    # Percentile = (worse + 0.5*same) / total * 100
+    # This gives mid-point ranking for ties
+    percentile = ((worse_count + 0.5 * same_count) / len(values_list)) * 100
+    
+    return round(percentile)
+
+
 @app.route("/api/v1/plans/list", methods=["GET"])
 def get_plans():
     """Get all benefit plans for dropdown selection."""

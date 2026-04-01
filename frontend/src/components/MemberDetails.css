@@ -67,9 +67,15 @@
 
 .profile-meta {
   display: flex;
+  align-items: center;
   gap: 0.75rem;
   color: #64748b;
   font-size: 0.875rem;
+  flex-wrap: wrap;
+}
+
+.profile-meta > span {
+  white-space: nowrap;
 }
 
 .profile-actions {
