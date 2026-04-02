@@ -1,0 +1,40 @@
+{
+  "total_personas": 234,
+  "generated_at": "2026-04-02T21:42:09.903727",
+  "measures_covered": 4,
+  "compliance_breakdown": {
+    "compliant": 78,
+    "non_compliant": 78,
+    "excluded": 78
+  },
+  "measure_breakdown": {
+    "BCS": {
+      "measure_name": "Breast Cancer Screening",
+      "total_personas": 36,
+      "compliant": 12,
+      "non_compliant": 12,
+      "excluded": 12
+    },
+    "COL": {
+      "measure_name": "Colorectal Cancer Screening",
+      "total_personas": 72,
+      "compliant": 24,
+      "non_compliant": 24,
+      "excluded": 24
+    },
+    "CCS": {
+      "measure_name": "Cervical Cancer Screening",
+      "total_personas": 36,
+      "compliant": 12,
+      "non_compliant": 12,
+      "excluded": 12
+    },
+    "CDC-HbA1c": {
+      "measure_name": "Diabetes Care - HbA1c Testing",
+      "total_personas": 90,
+      "compliant": 30,
+      "non_compliant": 30,
+      "excluded": 30
+    }
+  }
+}
