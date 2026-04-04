@@ -606,5 +606,88 @@ Guidelines:
         return jsonify({"error": str(exc)}), 500
 
 
+@app.route("/api/v1/email/<member_id>", methods=["GET"])
+def get_member_emails_endpoint(member_id):
+    """Return all emails (sent + received) for a specific member."""
+    try:
+        from src.care_gap_neo4j import get_member_emails
+        emails = get_member_emails(member_id)
+        return jsonify({"member_id": member_id, "emails": emails, "total": len(emails)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v1/email/<member_id>/send", methods=["POST"])
+def send_member_email(member_id):
+    """Send email via Azure Communication Services and persist in Neo4j."""
+    try:
+        import uuid
+        from datetime import datetime
+        from azure.communication.email import EmailClient
+        from src.care_gap_neo4j import merge_email
+        from config.settings import settings as cfg
+
+        data = request.json or {}
+        to_email = str(data.get("to", "")).strip()
+        subject  = str(data.get("subject", "")).strip()
+        body     = str(data.get("body", "")).strip()
+
+        if not to_email or not subject or not body:
+            return jsonify({"error": "to, subject, and body are required"}), 400
+
+        sender     = cfg.azure_communication_sender
+        conn_str   = cfg.azure_communication_connection_string
+
+        # Send via Azure Communication Services
+        client  = EmailClient.from_connection_string(conn_str)
+        message = {
+            "senderAddress": sender,
+            "recipients": {"to": [{"address": to_email}]},
+            "content": {
+                "subject": subject,
+                "plainText": body,
+                "html": (
+                    "<html><body>"
+                    f"<div style='font-family:Calibri,sans-serif;font-size:14px;color:#333'>"
+                    f"<pre style='white-space:pre-wrap;font-family:inherit'>{body}</pre>"
+                    "</div></body></html>"
+                ),
+            },
+        }
+        poller = client.begin_send(message)
+        result = poller.result()
+
+        # Persist in Neo4j
+        email_id  = f"EMAIL-{member_id}-{uuid.uuid4().hex[:8]}"
+        timestamp = datetime.now().isoformat()
+        merge_email(
+            email_id=email_id, member_id=member_id,
+            subject=subject, body=body,
+            from_email=sender, to_email=to_email,
+            timestamp=timestamp, direction="sent", is_read=True,
+        )
+
+        return jsonify({
+            "status": "sent",
+            "email_id": email_id,
+            "message_id": result.get("id", "") if isinstance(result, dict) else str(result),
+        })
+
+    except Exception as e:
+        logger.exception("send_member_email error")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v1/email/mark-read/<email_id>", methods=["PATCH"])
+def mark_email_read_endpoint(email_id):
+    """Mark an email as read."""
+    try:
+        from src.care_gap_neo4j import mark_email_read
+        mark_email_read(email_id)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5001, use_reloader=False)

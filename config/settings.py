@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     endpoint: str
     azure_openai_api_version: str = "2025-01-01-preview"
 
+    # Azure Communication Services
+    azure_communication_connection_string: str = ""
+    azure_communication_sender: str = ""
+
     # Application Configuration
     debug: bool = False
     log_level: str = "INFO"

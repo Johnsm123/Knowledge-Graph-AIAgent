@@ -1,10 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader, GitCompare, Bot } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import axios from 'axios';
 import MemberComparison from './MemberComparison';
+import EmailPanel from './EmailPanel';
 import './MemberDetails.css';
 
 const API_BASE = 'http://localhost:5001/api/v1';
+
+// Defined outside MemberDetails to keep a stable reference across re-renders.
+// react-markdown v10 removed the `className` prop — use a wrapper div instead.
+function MarkdownContent({ text, className = '' }) {
+  if (!text) return null;
+  return (
+    <div className={`agent-markdown ${className}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        {text.trim()}
+      </ReactMarkdown>
+    </div>
+  );
+}
 
 // Agent panel configuration — order must match AGENT_ORDER in care_gap_agents.py
 const AGENT_CONFIG = {
@@ -36,6 +52,9 @@ function MemberDetails({ member, onBack }) {
   const [messageInput, setMessageInput]   = useState('');
   const [chatLoading, setChatLoading]     = useState(false);
   const chatBottomRef                     = useRef(null);
+
+  // Email panel state
+  const [emailPanelOpen, setEmailPanelOpen] = useState(false);
 
   // Other UI state
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
@@ -184,41 +203,6 @@ function MemberDetails({ member, onBack }) {
 
   // ── Rendering helpers ──────────────────────────────────────────────────────
 
-  const formatText = (text) => {
-    if (!text) return null;
-    const lines = text.split('\n').filter(l => l.trim());
-    return (
-      <div className="formatted-response">
-        {lines.map((line, idx) => {
-          if (line.trim().match(/^[-•*]\s/)) {
-            return (
-              <div key={idx} className="bullet-point">
-                <span className="bullet">•</span>
-                <span>{line.replace(/^[-•*]\s/, '')}</span>
-              </div>
-            );
-          } else if (line.trim().match(/^\d+[\.\)]\s/)) {
-            return (
-              <div key={idx} className="numbered-point">
-                <span className="number">{line.match(/^\d+/)[0]}</span>
-                <span>{line.replace(/^\d+[\.\)]\s/, '')}</span>
-              </div>
-            );
-          } else if (line.includes(':') && line.split(':')[0].length < 50) {
-            const [key, ...rest] = line.split(':');
-            return (
-              <div key={idx} className="key-value">
-                <strong>{key}:</strong> {rest.join(':').trim()}
-              </div>
-            );
-          } else {
-            return <p key={idx} className="response-paragraph">{line}</p>;
-          }
-        })}
-      </div>
-    );
-  };
-
   const renderAgentPanel = (agentName) => {
     const cfg = AGENT_CONFIG[agentName];
     const content = agentStreams[agentName];
@@ -258,7 +242,7 @@ function MemberDetails({ member, onBack }) {
           </div>
         ) : (
           <div className="agent-panel-content">
-            {formatText(content)}
+            <MarkdownContent text={content} />
           </div>
         )}
       </div>
@@ -332,7 +316,7 @@ function MemberDetails({ member, onBack }) {
             <Phone size={18} />
             Call
           </button>
-          <button className="action-btn">
+          <button className="action-btn" onClick={() => setEmailPanelOpen(true)}>
             <Mail size={18} />
             Email
           </button>
@@ -724,7 +708,7 @@ function MemberDetails({ member, onBack }) {
                       </div>
                     )}
                     <div className="message-content">
-                      {formatText(msg.text)}
+                      <MarkdownContent text={msg.text} className="chat-markdown" />
                     </div>
                     <span className="message-time">
                       {new Date(msg.timestamp).toLocaleTimeString()}
@@ -786,6 +770,11 @@ function MemberDetails({ member, onBack }) {
       {/* ── COMPARISON ────────────────────────────────────────────────────── */}
       {showComparison && (
         <MemberComparison member={member} onClose={() => setShowComparison(false)} />
+      )}
+
+      {/* ── EMAIL PANEL ────────────────────────────────────────────────────── */}
+      {emailPanelOpen && (
+        <EmailPanel member={member} onClose={() => setEmailPanelOpen(false)} />
       )}
     </div>
   );

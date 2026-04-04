@@ -642,3 +642,58 @@ def check_member_exclusions(member_id: str, measure_id: str):
             matched_exclusions.append(exclusion)
     
     return matched_exclusions
+
+
+# ── Email Functions ───────────────────────────────────────────────────────────
+
+def merge_email(email_id: str, member_id: str, subject: str, body: str,
+                from_email: str, to_email: str, timestamp: str,
+                direction: str, is_read: bool = False):
+    """Store an email node and link it to the member."""
+    kg = get_knowledge_graph()
+    kg.execute_write("""
+        MERGE (e:Email {email_id: $email_id})
+        SET e.member_id  = $member_id,
+            e.subject    = $subject,
+            e.body       = $body,
+            e.from_email = $from_email,
+            e.to_email   = $to_email,
+            e.timestamp  = $timestamp,
+            e.direction  = $direction,
+            e.is_read    = $is_read
+    """, {
+        "email_id": email_id, "member_id": member_id, "subject": subject,
+        "body": body, "from_email": from_email, "to_email": to_email,
+        "timestamp": timestamp, "direction": direction, "is_read": is_read,
+    })
+    kg.execute_write("""
+        MATCH (m:Member {member_id: $member_id})
+        MATCH (e:Email {email_id: $email_id})
+        MERGE (m)-[:HAS_EMAIL]->(e)
+    """, {"member_id": member_id, "email_id": email_id})
+
+
+def get_member_emails(member_id: str):
+    """Return all emails for a member, newest first."""
+    kg = get_knowledge_graph()
+    return kg.run_query("""
+        MATCH (m:Member {member_id: $member_id})-[:HAS_EMAIL]->(e:Email)
+        RETURN e.email_id  AS email_id,
+               e.subject   AS subject,
+               e.body      AS body,
+               e.from_email AS from_email,
+               e.to_email  AS to_email,
+               e.timestamp AS timestamp,
+               e.direction AS direction,
+               e.is_read   AS is_read
+        ORDER BY e.timestamp DESC
+    """, {"member_id": member_id})
+
+
+def mark_email_read(email_id: str):
+    """Mark a single email as read."""
+    kg = get_knowledge_graph()
+    kg.execute_write("""
+        MATCH (e:Email {email_id: $email_id})
+        SET e.is_read = true
+    """, {"email_id": email_id})

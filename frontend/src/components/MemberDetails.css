@@ -1326,3 +1326,202 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+
+/* ============================================================
+   ReactMarkdown — agent panels & chat messages
+   ============================================================ */
+
+.agent-markdown,
+.chat-markdown {
+  font-size: 0.88rem;
+  line-height: 1.75;
+  color: #1e293b;
+}
+
+/* Headings */
+.agent-markdown h1,
+.agent-markdown h2,
+.agent-markdown h3,
+.agent-markdown h4,
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4 {
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0.9em 0 0.4em;
+  line-height: 1.3;
+}
+
+.agent-markdown h1 { font-size: 1.1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
+.agent-markdown h2 { font-size: 1rem; }
+.agent-markdown h3 { font-size: 0.93rem; color: #334155; }
+.agent-markdown h4 { font-size: 0.88rem; color: #475569; }
+
+/* Paragraphs */
+.agent-markdown p,
+.chat-markdown p {
+  margin: 0.4em 0;
+}
+
+/* Bold / italic */
+.agent-markdown strong,
+.chat-markdown strong { color: #0f172a; font-weight: 700; }
+
+.agent-markdown em,
+.chat-markdown em { color: #475569; font-style: italic; }
+
+/* Unordered lists */
+.agent-markdown ul,
+.chat-markdown ul {
+  margin: 0.5em 0 0.5em 1.1em;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-markdown ul li,
+.chat-markdown ul li {
+  position: relative;
+  padding-left: 1.2em;
+  margin-bottom: 4px;
+}
+
+.agent-markdown ul li::before,
+.chat-markdown ul li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+/* Ordered lists */
+.agent-markdown ol,
+.chat-markdown ol {
+  margin: 0.5em 0 0.5em 1.4em;
+  padding: 0;
+}
+
+.agent-markdown ol li,
+.chat-markdown ol li {
+  margin-bottom: 4px;
+  padding-left: 0.3em;
+}
+
+/* Code inline */
+.agent-markdown code,
+.chat-markdown code {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.82rem;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  color: #7c3aed;
+}
+
+/* Code blocks */
+.agent-markdown pre,
+.chat-markdown pre {
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+
+.agent-markdown pre code,
+.chat-markdown pre code {
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  padding: 0;
+}
+
+/* Tables — key for HEDIS agent output */
+.agent-markdown table,
+.chat-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.8em 0;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.agent-markdown thead tr,
+.chat-markdown thead tr {
+  background: #1e3a5f;
+  color: #fff;
+}
+
+.agent-markdown th,
+.chat-markdown th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.agent-markdown td,
+.chat-markdown td {
+  padding: 7px 12px;
+  border-top: 1px solid #e2e8f0;
+  color: #334155;
+  vertical-align: top;
+}
+
+.agent-markdown tbody tr:nth-child(even),
+.chat-markdown tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.agent-markdown tbody tr:hover,
+.chat-markdown tbody tr:hover {
+  background: #eff6ff;
+}
+
+/* Blockquotes */
+.agent-markdown blockquote,
+.chat-markdown blockquote {
+  border-left: 3px solid #3b82f6;
+  margin: 0.6em 0;
+  padding: 4px 12px;
+  background: #eff6ff;
+  border-radius: 0 6px 6px 0;
+  color: #1e40af;
+  font-style: italic;
+}
+
+/* Horizontal rule */
+.agent-markdown hr,
+.chat-markdown hr {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 0.8em 0;
+}
+
+/* Links */
+.agent-markdown a,
+.chat-markdown a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+/* Chat-specific: smaller font, tighter spacing */
+.chat-markdown {
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3 {
+  font-size: 0.9rem;
+  margin: 0.5em 0 0.3em;
+}
