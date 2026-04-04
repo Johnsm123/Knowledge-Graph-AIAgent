@@ -144,11 +144,15 @@ def _measure_applies(measure: Dict, age: int, gender: str, icd_codes: List[str])
     except Exception:
         pass
 
-    # Diabetes measures require confirmed E11.x ICD code in claims
-    # Covers GSD, EED, KED, BPD (and legacy CDC-HbA1c)
+    # Diabetes measures require Type 1 (E10.x), Type 2 (E11.x) or Other (E13.x)
+    # Covers GSD, EED, KED, BPD — golden reference states "E10.x, E11.x, E13.x"
     diag_req = str(measure.get("diagnosis_requirement", "")).lower()
-    if "diabetes" in diag_req or "e11" in diag_req:
-        if not any(str(icd).startswith("E11") for icd in icd_codes):
+    if "diabetes" in diag_req or "e10" in diag_req or "e11" in diag_req or "e13" in diag_req:
+        has_diabetes_icd = any(
+            str(icd).upper().startswith(("E10", "E11", "E13"))
+            for icd in icd_codes
+        )
+        if not has_diabetes_icd:
             return False
 
     return True
@@ -247,6 +251,86 @@ def _format_gaps_for_prompt(gaps: List[Dict]) -> str:
             f"Required CPT: {g.get('required_cpt_codes', 'N/A')}"
         )
     return "\n".join(lines)
+
+
+# ── Standalone Python-only gap detection (no LLM) ────────────────────────────
+
+def detect_care_gaps(member_id: str) -> Dict[str, Any]:
+    """
+    Run pure-Python HEDIS gap detection for a member and write CareGap nodes
+    to Neo4j.  No LLM involved — safe to call on every member add/update.
+
+    Returns a summary dict:
+      {
+        "member_id": str,
+        "gaps_created": [measure_id, ...],   # newly written this call
+        "compliant":    [measure_id, ...],
+        "excluded":     [measure_id, ...],
+        "not_applicable": int,               # measures filtered by age/gender/dx
+      }
+    """
+    profile = get_member_profile(member_id)
+    if not profile:
+        return {"error": f"Member {member_id} not found"}
+
+    age    = _parse_age(profile.get("age_str", "0"))
+    gender = str(profile.get("gender", ""))
+
+    claims          = get_member_claims_cpt_codes(member_id)
+    claim_icd_codes = [c.get("icd_code", "") for c in claims if c.get("icd_code")]
+    condition_icd_codes = _icd_codes_from_conditions(
+        profile.get("chronic_conditions") or []
+    )
+    icd_codes = list(set(claim_icd_codes + condition_icd_codes))
+
+    all_measures = get_applicable_measures(age, gender)
+    applicable   = [m for m in all_measures if _measure_applies(m, age, gender, icd_codes)]
+
+    gaps_created: List[str] = []
+    compliant:    List[str] = []
+    excluded:     List[str] = []
+
+    for measure in applicable:
+        exclusions = check_member_exclusions(
+            member_id, measure["measure_id"],
+            extra_icd_codes=condition_icd_codes,
+        )
+        if exclusions:
+            excluded.append(measure["measure_id"])
+            continue
+
+        options   = measure.get("screening_options", [])
+        satisfied = (
+            _gap_satisfied_multi_option(claims, options) if options
+            else _gap_already_satisfied(
+                claims,
+                measure.get("cpt_codes", ""),
+                int(measure.get("lookback_months") or 12),
+            )
+        )
+
+        if not satisfied:
+            gap_id = f"AUTO-{member_id}-{measure['measure_id']}"
+            merge_care_gap(
+                care_gap_id=gap_id,
+                member_id=member_id,
+                measure_id=measure["measure_id"],
+                gap_status="Open",
+                is_open=True,
+                created_on=datetime.now().strftime("%Y-%m-%d"),
+                closed_on="",
+            )
+            gaps_created.append(measure["measure_id"])
+        else:
+            compliant.append(measure["measure_id"])
+
+    return {
+        "member_id":      member_id,
+        "gaps_created":   gaps_created,
+        "compliant":      compliant,
+        "excluded":       excluded,
+        "not_applicable": len(all_measures) - len(applicable),
+    }
 
 
 # ── Agent System ──────────────────────────────────────────────────────────────

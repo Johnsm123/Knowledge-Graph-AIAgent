@@ -281,12 +281,38 @@ def book_appointment():
         })
 
         # ── CPT / ICD codes from golden reference ────────────────────────
+        # code_sets uses descriptive keys (e.g. 'hba1c_cpt', 'retinal_eye_exam_cpt',
+        # 'diabetes_icd10') — collect all codes whose key contains 'cpt' for CPT
+        # and 'icd' for ICD-10, excluding category-II / result codes (Cat-II CPTs
+        # start with digits 0-9 but are 5-char ending in F — keep them too).
         measure_detail = get_measure_comprehensive(measure_id) or {}
-        cpt_codes_raw = measure_detail.get("code_sets", {}).get("CPT", "")
-        cpt_codes = cpt_codes_raw if isinstance(cpt_codes_raw, str) else ", ".join(cpt_codes_raw or [])
-        icd_codes = measure_detail.get("code_sets", {}).get("ICD-10", "") or ""
-        if not isinstance(icd_codes, str):
-            icd_codes = ", ".join(icd_codes)
+        code_sets = measure_detail.get("code_sets", {}) or {}
+
+        cpt_set, icd_set = [], []
+        for key, codes in code_sets.items():
+            key_lower = key.lower()
+            values = codes if isinstance(codes, list) else [codes]
+            if "icd" in key_lower:
+                icd_set.extend(str(c) for c in values if c)
+            elif "cpt" in key_lower or "hcpcs" in key_lower:
+                cpt_set.extend(str(c) for c in values if c)
+
+        # De-duplicate while preserving order
+        seen = set()
+        cpt_unique = []
+        for c in cpt_set:
+            if c not in seen:
+                seen.add(c)
+                cpt_unique.append(c)
+        seen = set()
+        icd_unique = []
+        for c in icd_set:
+            if c not in seen:
+                seen.add(c)
+                icd_unique.append(c)
+
+        cpt_codes = ", ".join(cpt_unique)
+        icd_codes = ", ".join(icd_unique)
 
         # ── Persist to Neo4j ─────────────────────────────────────────────
         appointment_id = f"APT-{member_id}-{measure_id}-{uuid.uuid4().hex[:6].upper()}"
@@ -562,10 +588,18 @@ def add_member():
             effective_to=data.get("enrollment_end", "2025-12-31")
         )
         
+        # Auto-detect care gaps immediately based on chronic conditions —
+        # no LLM, pure Python. Ensures the member shows correct gap count
+        # in the list without requiring a manual "AI Suggestions" click first.
+        from src.care_gap_agents import detect_care_gaps
+        gap_result = detect_care_gaps(data["member_id"])
+
         return jsonify({
             "status": "success",
             "message": f"Member {data['member_id']} added successfully",
-            "member_id": data["member_id"]
+            "member_id": data["member_id"],
+            "gaps_detected": gap_result.get("gaps_created", []),
+            "compliant_measures": gap_result.get("compliant", []),
         })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500

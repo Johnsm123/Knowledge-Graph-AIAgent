@@ -494,6 +494,7 @@ def get_applicable_measures(age: int, gender: str):
         RETURN q.measure_id AS measure_id,
                q.name AS name,
                q.age_range AS age_range,
+               q.gender_requirement AS gender_requirement,
                q.lookback_months AS lookback_months,
                q.description AS description,
                q.diagnosis_requirement AS diagnosis_requirement,
