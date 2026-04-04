@@ -1,30 +1,74 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader, GitCompare } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader, GitCompare, Bot } from 'lucide-react';
 import axios from 'axios';
 import MemberComparison from './MemberComparison';
 import './MemberDetails.css';
 
 const API_BASE = 'http://localhost:5001/api/v1';
 
+// Agent panel configuration — order must match AGENT_ORDER in care_gap_agents.py
+const AGENT_CONFIG = {
+  patient_analyst:     { icon: '👤', label: 'Patient Profile Analysis',     color: '#3b82f6' },
+  hedis_measure_agent: { icon: '📏', label: 'HEDIS Measures Review',         color: '#8b5cf6' },
+  exclusion_agent:     { icon: '🚫', label: 'Exclusion Check',               color: '#f59e0b' },
+  code_validator:      { icon: '✅', label: 'CPT Code Validation',           color: '#06b6d4' },
+  care_gap_agent:      { icon: '📋', label: 'Care Gap Report',               color: '#ef4444' },
+  recommendation_agent:{ icon: '💡', label: 'Recommendations & Outreach',    color: '#10b981' },
+};
+const AGENT_ORDER = Object.keys(AGENT_CONFIG);
+
 function MemberDetails({ member, onBack }) {
-  const [details, setDetails] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
-  const [messageInput, setMessageInput] = useState('');
+  const [details, setDetails]             = useState(null);
+  const [loading, setLoading]             = useState(true);
+  const [activeTab, setActiveTab]         = useState('overview');
+
+  // AI suggestions state
+  const [aiMetadata, setAiMetadata]       = useState(null);   // metadata event payload
+  const [agentStreams, setAgentStreams]    = useState({});     // { agentName: content }
+  const [streamingAgent, setStreamingAgent] = useState(null); // currently running agent name
+  const [loadingAI, setLoadingAI]         = useState(false);
+  const [aiDone, setAiDone]               = useState(false);
+  const eventSourceRef                    = useRef(null);
+
+  // Chat state
+  const [chatOpen, setChatOpen]           = useState(false);
+  const [chatMessages, setChatMessages]   = useState([]);
+  const [messageInput, setMessageInput]   = useState('');
+  const [chatLoading, setChatLoading]     = useState(false);
+  const chatBottomRef                     = useRef(null);
+
+  // Other UI state
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
-  const [selectedGap, setSelectedGap] = useState(null);
-  const [aiSuggestions, setAiSuggestions] = useState(null);
-  const [loadingAI, setLoadingAI] = useState(false);
-  const [sendingMessage, setSendingMessage] = useState(false);
+  const [selectedGap, setSelectedGap]     = useState(null);
   const [showComparison, setShowComparison] = useState(false);
 
   useEffect(() => {
-    if (member) {
-      fetchMemberDetails();
-    }
+    if (member) fetchMemberDetails();
+    return () => {
+      // Clean up any open SSE connection when unmounting
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
   }, [member]);
+
+  // Auto-scroll chat to bottom on new messages
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, chatLoading]);
+
+  // Inject greeting when chat first opens
+  useEffect(() => {
+    if (chatOpen && chatMessages.length === 0 && details) {
+      const openGapCount = details.open_gaps?.length || 0;
+      setChatMessages([{
+        id: Date.now(),
+        role: 'assistant',
+        text: `Hi! I'm your AI care manager assistant for **${member.name}**.\n\nI have full access to their profile, ${openGapCount} open care gap${openGapCount !== 1 ? 's' : ''}, and claims history. Ask me anything about this member — gaps, outreach strategy, clinical guidance, or coverage.`,
+        timestamp: new Date().toISOString(),
+      }]);
+    }
+  }, [chatOpen]);
 
   const fetchMemberDetails = async () => {
     try {
@@ -38,85 +82,114 @@ function MemberDetails({ member, onBack }) {
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!messageInput.trim()) return;
+  // ── AI Suggestions via SSE ─────────────────────────────────────────────────
 
-    const newMessage = {
-      id: Date.now(),
-      sender: 'care_manager',
-      text: messageInput,
-      timestamp: new Date().toISOString()
+  const getAISuggestions = () => {
+    // Close any existing stream
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    setLoadingAI(true);
+    setAiMetadata(null);
+    setAgentStreams({});
+    setStreamingAgent(null);
+    setAiDone(false);
+
+    const es = new EventSource(`${API_BASE}/care-gaps/validate/${member.member_id}/stream`);
+    eventSourceRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const { type, payload } = JSON.parse(event.data);
+
+        if (type === 'metadata') {
+          setAiMetadata(payload);
+          setLoadingAI(false);   // counts are visible — spinner off
+
+        } else if (type === 'agent_start') {
+          setStreamingAgent(payload.agent);
+
+        } else if (type === 'agent_done') {
+          setAgentStreams(prev => ({ ...prev, [payload.agent]: payload.content }));
+          setStreamingAgent(null);
+
+        } else if (type === 'complete') {
+          setAiDone(true);
+          setStreamingAgent(null);
+          es.close();
+
+        } else if (type === 'error') {
+          console.error('SSE error:', payload.message);
+          setLoadingAI(false);
+          es.close();
+        }
+      } catch (e) {
+        console.error('SSE parse error:', e);
+      }
     };
 
-    setChatMessages([...chatMessages, newMessage]);
-    const userMessage = messageInput;
+    es.onerror = () => {
+      setLoadingAI(false);
+      setStreamingAgent(null);
+      es.close();
+    };
+  };
+
+  // ── Conversational Chat ────────────────────────────────────────────────────
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || chatLoading) return;
+
+    const userText = messageInput.trim();
     setMessageInput('');
-    setSendingMessage(true);
+
+    const userMsg = {
+      id: Date.now(),
+      role: 'user',
+      text: userText,
+      timestamp: new Date().toISOString(),
+    };
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatLoading(true);
 
     try {
-      await axios.post(`${API_BASE}/chat/send`, {
-        member_id: member.member_id,
-        message: userMessage,
-        sender: 'care_manager'
+      // Build history from existing messages (exclude the greeting for brevity)
+      const history = chatMessages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.text }));
+
+      const response = await axios.post(`${API_BASE}/chat/member/${member.member_id}`, {
+        message: userText,
+        history,
       });
 
-      // Get AI agent response
-      const aiResponse = await axios.post(`${API_BASE}/care-gaps/validate/${member.member_id}`);
-      
-      // Extract relevant response from agents
-      let agentReply = '';
-      if (aiResponse.data.agent_responses) {
-        const responses = aiResponse.data.agent_responses;
-        agentReply = `AI Care Manager:\n\n`;
-        
-        if (responses.care_gap_validator) {
-          agentReply += `📋 Gap Analysis:\n${responses.care_gap_validator}\n\n`;
-        }
-        
-        if (responses.outreach_advisor) {
-          agentReply += `📞 Outreach Plan:\n${responses.outreach_advisor}\n\n`;
-        }
-        
-        if (responses.benefit_checker) {
-          agentReply += `💰 Coverage Info:\n${responses.benefit_checker}`;
-        }
-      } else {
-        agentReply = 'I\'ve reviewed the member\'s care gaps. Let me help you with the outreach plan.';
-      }
-
-      setTimeout(() => {
-        const autoReply = {
-          id: Date.now() + 1,
-          sender: 'ai_agent',
-          text: agentReply,
-          timestamp: new Date().toISOString()
-        };
-        setChatMessages(prev => [...prev, autoReply]);
-        setSendingMessage(false);
-      }, 1500);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      const errorReply = {
+      setChatMessages(prev => [...prev, {
         id: Date.now() + 1,
-        sender: 'ai_agent',
-        text: 'Sorry, I encountered an error. Please try again.',
-        timestamp: new Date().toISOString()
-      };
-      setChatMessages(prev => [...prev, errorReply]);
-      setSendingMessage(false);
+        role: 'assistant',
+        text: response.data.reply,
+        timestamp: new Date().toISOString(),
+      }]);
+    } catch (error) {
+      setChatMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        role: 'assistant',
+        text: 'Sorry, I encountered an error connecting to the AI. Please try again.',
+        timestamp: new Date().toISOString(),
+      }]);
+    } finally {
+      setChatLoading(false);
     }
   };
 
-  const formatAgentResponse = (text) => {
-    if (!text) return null;
+  // ── Rendering helpers ──────────────────────────────────────────────────────
 
-    // Split by lines
-    const lines = text.split('\n').filter(line => line.trim());
-    
+  const formatText = (text) => {
+    if (!text) return null;
+    const lines = text.split('\n').filter(l => l.trim());
     return (
       <div className="formatted-response">
         {lines.map((line, idx) => {
-          // Check if line is a bullet point
           if (line.trim().match(/^[-•*]\s/)) {
             return (
               <div key={idx} className="bullet-point">
@@ -124,28 +197,21 @@ function MemberDetails({ member, onBack }) {
                 <span>{line.replace(/^[-•*]\s/, '')}</span>
               </div>
             );
-          }
-          // Check if line is a numbered list
-          else if (line.trim().match(/^\d+[\.\)]\s/)) {
+          } else if (line.trim().match(/^\d+[\.\)]\s/)) {
             return (
               <div key={idx} className="numbered-point">
                 <span className="number">{line.match(/^\d+/)[0]}</span>
                 <span>{line.replace(/^\d+[\.\)]\s/, '')}</span>
               </div>
             );
-          }
-          // Check if line contains a colon (key-value pair)
-          else if (line.includes(':') && line.split(':')[0].length < 50) {
-            const [key, ...valueParts] = line.split(':');
-            const value = valueParts.join(':').trim();
+          } else if (line.includes(':') && line.split(':')[0].length < 50) {
+            const [key, ...rest] = line.split(':');
             return (
               <div key={idx} className="key-value">
-                <strong>{key}:</strong> {value}
+                <strong>{key}:</strong> {rest.join(':').trim()}
               </div>
             );
-          }
-          // Regular paragraph
-          else {
+          } else {
             return <p key={idx} className="response-paragraph">{line}</p>;
           }
         })}
@@ -153,20 +219,53 @@ function MemberDetails({ member, onBack }) {
     );
   };
 
-  const getAISuggestions = async () => {
-    setLoadingAI(true);
-    try {
-      const response = await axios.post(`${API_BASE}/care-gaps/validate/${member.member_id}`);
-      setAiSuggestions(response.data);
-    } catch (error) {
-      console.error('Error getting AI suggestions:', error);
-      alert('Failed to get AI suggestions. Please try again.');
-    } finally {
-      setLoadingAI(false);
-    }
+  const renderAgentPanel = (agentName) => {
+    const cfg = AGENT_CONFIG[agentName];
+    const content = agentStreams[agentName];
+    const isRunning = streamingAgent === agentName;
+    const isPending = !content && !isRunning;
+
+    if (isPending) return null;
+
+    return (
+      <div
+        key={agentName}
+        className={`agent-stream-panel ${isRunning ? 'running' : 'done'}`}
+        style={{ borderLeftColor: cfg.color }}
+      >
+        <div className="agent-panel-header">
+          <span className="agent-icon" style={{ background: cfg.color }}>
+            {cfg.icon}
+          </span>
+          <div className="agent-panel-title">
+            <span className="agent-label">{cfg.label}</span>
+            <span className="agent-name-badge">{agentName}</span>
+          </div>
+          {isRunning && (
+            <div className="agent-running-badge">
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+              <span style={{ marginLeft: 6, fontSize: '0.75rem', color: '#64748b' }}>Analyzing…</span>
+            </div>
+          )}
+        </div>
+        {isRunning ? (
+          <div className="agent-skeleton">
+            <div className="skeleton-line long" />
+            <div className="skeleton-line medium" />
+            <div className="skeleton-line short" />
+          </div>
+        ) : (
+          <div className="agent-panel-content">
+            {formatText(content)}
+          </div>
+        )}
+      </div>
+    );
   };
 
-  const handleBookAppointment = async (gap) => {
+  const handleBookAppointment = (gap) => {
     setSelectedGap(gap);
     setShowAppointmentModal(true);
   };
@@ -177,7 +276,7 @@ function MemberDetails({ member, onBack }) {
         member_id: member.member_id,
         measure_id: selectedGap.measure_id,
         appointment_date: appointmentDate,
-        provider_id: details.profile.pcp_id
+        provider_id: details.profile.pcp_id,
       });
       alert('Appointment booked successfully!');
       setShowAppointmentModal(false);
@@ -191,7 +290,7 @@ function MemberDetails({ member, onBack }) {
     return (
       <div className="loading-container">
         <div className="spinner"></div>
-        <p>Loading member details...</p>
+        <p>Loading member details…</p>
       </div>
     );
   }
@@ -226,8 +325,8 @@ function MemberDetails({ member, onBack }) {
             Compare
           </button>
           <button className="action-btn" onClick={() => setChatOpen(true)}>
-            <MessageCircle size={18} />
-            Chat
+            <Bot size={18} />
+            AI Chat
           </button>
           <button className="action-btn">
             <Phone size={18} />
@@ -241,33 +340,23 @@ function MemberDetails({ member, onBack }) {
       </div>
 
       <div className="details-tabs">
-        <button 
-          className={activeTab === 'overview' ? 'active' : ''}
-          onClick={() => setActiveTab('overview')}
-        >
+        <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>
           Overview
         </button>
-        <button 
-          className={activeTab === 'gaps' ? 'active' : ''}
-          onClick={() => setActiveTab('gaps')}
-        >
+        <button className={activeTab === 'gaps' ? 'active' : ''} onClick={() => setActiveTab('gaps')}>
           Care Gaps ({details?.open_gaps?.length || 0})
         </button>
-        <button 
-          className={activeTab === 'claims' ? 'active' : ''}
-          onClick={() => setActiveTab('claims')}
-        >
+        <button className={activeTab === 'claims' ? 'active' : ''} onClick={() => setActiveTab('claims')}>
           Claims ({details?.claims?.length || 0})
         </button>
-        <button 
-          className={activeTab === 'outreach' ? 'active' : ''}
-          onClick={() => setActiveTab('outreach')}
-        >
+        <button className={activeTab === 'outreach' ? 'active' : ''} onClick={() => setActiveTab('outreach')}>
           Outreach History
         </button>
       </div>
 
       <div className="details-content">
+
+        {/* ── OVERVIEW TAB ───────────────────────────────────────────────── */}
         {activeTab === 'overview' && (
           <div className="overview-tab">
             <div className="info-grid">
@@ -323,99 +412,98 @@ function MemberDetails({ member, onBack }) {
             {details?.open_gaps && details.open_gaps.length > 0 && (
               <div className="quick-gaps">
                 <div className="quick-gaps-header">
-                  <h3>Open Care Gaps - Action Required</h3>
-                  <button 
+                  <h3>Open Care Gaps — Action Required</h3>
+                  <button
                     className="btn-ai-suggestions"
                     onClick={getAISuggestions}
-                    disabled={loadingAI}
+                    disabled={loadingAI || (streamingAgent !== null)}
                   >
                     {loadingAI ? (
                       <>
                         <Loader size={16} className="spinning" />
-                        Getting AI Suggestions...
+                        Analyzing…
                       </>
                     ) : (
                       <>
                         <Sparkles size={16} />
-                        Get AI Suggestions
+                        {aiMetadata ? 'Re-run AI Analysis' : 'Get AI Suggestions'}
                       </>
                     )}
                   </button>
                 </div>
-                
-                {aiSuggestions && (
+
+                {/* ── AI Streaming Panel ───────────────────────────────── */}
+                {(aiMetadata || loadingAI) && (
                   <div className="ai-suggestions-panel">
                     <div className="ai-panel-header">
                       <Sparkles size={24} />
                       <h4>AI-Powered Care Gap Analysis</h4>
-                    </div>
-                    
-                    <div className="ai-summary">
-                      <div className="summary-stat">
-                        <span className="stat-label">Applicable Measures</span>
-                        <span className="stat-value">{aiSuggestions.applicable_measures?.length || 0}</span>
-                      </div>
-                      <div className="summary-stat">
-                        <span className="stat-label">Open Gaps</span>
-                        <span className="stat-value red">{aiSuggestions.open_gaps_detected?.length || 0}</span>
-                      </div>
-                      <div className="summary-stat">
-                        <span className="stat-label">Compliant</span>
-                        <span className="stat-value green">{aiSuggestions.compliant_measures?.length || 0}</span>
-                      </div>
+                      {!aiDone && streamingAgent && (
+                        <span className="ai-status-badge">
+                          <Loader size={12} className="spinning" style={{ marginRight: 4 }} />
+                          Agent {AGENT_ORDER.indexOf(streamingAgent) + 1} of 6 running…
+                        </span>
+                      )}
+                      {aiDone && (
+                        <span className="ai-done-badge">✓ Analysis complete</span>
+                      )}
                     </div>
 
-                    {aiSuggestions.agent_responses?.care_gap_validator && (
-                      <div className="ai-section validator">
-                        <div className="section-header">
-                          <div className="section-icon">📋</div>
-                          <h5>Gap Validation Analysis</h5>
+                    {/* Summary counts — show as soon as metadata arrives */}
+                    {aiMetadata && (
+                      <div className="ai-summary">
+                        <div className="summary-stat">
+                          <span className="stat-label">Applicable Measures</span>
+                          <span className="stat-value">{aiMetadata.applicable_measures?.length || 0}</span>
                         </div>
-                        <div className="section-content">
-                          {formatAgentResponse(aiSuggestions.agent_responses.care_gap_validator)}
+                        <div className="summary-stat">
+                          <span className="stat-label">Open Gaps</span>
+                          <span className="stat-value red">{aiMetadata.open_gaps_detected?.length || 0}</span>
                         </div>
-                      </div>
-                    )}
-                    
-                    {aiSuggestions.agent_responses?.outreach_advisor && (
-                      <div className="ai-section outreach">
-                        <div className="section-header">
-                          <div className="section-icon">📞</div>
-                          <h5>Outreach Strategy & Action Plan</h5>
-                        </div>
-                        <div className="section-content">
-                          {formatAgentResponse(aiSuggestions.agent_responses.outreach_advisor)}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {aiSuggestions.agent_responses?.benefit_checker && (
-                      <div className="ai-section benefits">
-                        <div className="section-header">
-                          <div className="section-icon">💰</div>
-                          <h5>Benefit Coverage Information</h5>
-                        </div>
-                        <div className="section-content">
-                          {formatAgentResponse(aiSuggestions.agent_responses.benefit_checker)}
+                        <div className="summary-stat">
+                          <span className="stat-label">Compliant</span>
+                          <span className="stat-value green">{aiMetadata.compliant_measures?.length || 0}</span>
                         </div>
                       </div>
                     )}
 
-                    {aiSuggestions.open_gaps_detected && aiSuggestions.open_gaps_detected.length > 0 && (
+                    {/* Progress bar */}
+                    {!aiDone && (
+                      <div className="agent-progress-bar">
+                        {AGENT_ORDER.map((name, idx) => {
+                          const done = !!agentStreams[name];
+                          const running = streamingAgent === name;
+                          return (
+                            <div
+                              key={name}
+                              className={`progress-step ${done ? 'done' : running ? 'running' : 'pending'}`}
+                              title={AGENT_CONFIG[name].label}
+                            >
+                              <span className="progress-step-icon">{AGENT_CONFIG[name].icon}</span>
+                              <span className="progress-step-num">{idx + 1}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Agent panels — appear as each agent finishes */}
+                    <div className="agent-streams-container">
+                      {AGENT_ORDER.map(name => renderAgentPanel(name))}
+                    </div>
+
+                    {/* Gap + compliant tables once we have metadata */}
+                    {aiMetadata?.open_gaps_detected?.length > 0 && (
                       <div className="gaps-table-section">
-                        <h5>📊 Open Gaps Summary</h5>
+                        <h5>📊 Open Gaps Detected</h5>
                         <table className="gaps-summary-table">
                           <thead>
-                            <tr>
-                              <th>Measure</th>
-                              <th>Status</th>
-                              <th>Priority</th>
-                            </tr>
+                            <tr><th>Measure</th><th>Status</th><th>Priority</th></tr>
                           </thead>
                           <tbody>
-                            {aiSuggestions.open_gaps_detected.map((gap, idx) => (
-                              <tr key={idx}>
-                                <td><strong>{gap}</strong></td>
+                            {aiMetadata.open_gaps_detected.map((g, i) => (
+                              <tr key={i}>
+                                <td><strong>{g}</strong></td>
                                 <td><span className="status-badge-table open">Open</span></td>
                                 <td><span className="priority-badge high">High</span></td>
                               </tr>
@@ -425,20 +513,17 @@ function MemberDetails({ member, onBack }) {
                       </div>
                     )}
 
-                    {aiSuggestions.compliant_measures && aiSuggestions.compliant_measures.length > 0 && (
+                    {aiMetadata?.compliant_measures?.length > 0 && (
                       <div className="gaps-table-section">
                         <h5>✅ Compliant Measures</h5>
                         <table className="gaps-summary-table">
                           <thead>
-                            <tr>
-                              <th>Measure</th>
-                              <th>Status</th>
-                            </tr>
+                            <tr><th>Measure</th><th>Status</th></tr>
                           </thead>
                           <tbody>
-                            {aiSuggestions.compliant_measures.map((measure, idx) => (
-                              <tr key={idx}>
-                                <td><strong>{measure}</strong></td>
+                            {aiMetadata.compliant_measures.map((m, i) => (
+                              <tr key={i}>
+                                <td><strong>{m}</strong></td>
                                 <td><span className="status-badge-table compliant">Compliant</span></td>
                               </tr>
                             ))}
@@ -448,6 +533,7 @@ function MemberDetails({ member, onBack }) {
                     )}
                   </div>
                 )}
+
                 {details.open_gaps.map(gap => (
                   <div key={gap.care_gap_id} className="quick-gap-card">
                     <div className="gap-header">
@@ -456,16 +542,11 @@ function MemberDetails({ member, onBack }) {
                     </div>
                     <p className="gap-description">{gap.resolution_guide}</p>
                     <div className="gap-actions">
-                      <button 
-                        className="btn-primary"
-                        onClick={() => handleBookAppointment(gap)}
-                      >
+                      <button className="btn-primary" onClick={() => handleBookAppointment(gap)}>
                         <Calendar size={16} />
                         Book Appointment
                       </button>
-                      <button className="btn-secondary">
-                        View Guidelines
-                      </button>
+                      <button className="btn-secondary">View Guidelines</button>
                     </div>
                   </div>
                 ))}
@@ -474,9 +555,10 @@ function MemberDetails({ member, onBack }) {
           </div>
         )}
 
+        {/* ── GAPS TAB ───────────────────────────────────────────────────── */}
         {activeTab === 'gaps' && (
           <div className="gaps-tab">
-            {details?.open_gaps && details.open_gaps.length > 0 ? (
+            {details?.open_gaps?.length > 0 ? (
               <div className="gaps-list">
                 {details.open_gaps.map(gap => (
                   <div key={gap.care_gap_id} className="gap-detail-card">
@@ -510,16 +592,13 @@ function MemberDetails({ member, onBack }) {
                       </div>
                     </div>
                     <div className="gap-detail-footer">
-                      <button 
-                        className="btn-primary"
-                        onClick={() => handleBookAppointment(gap)}
-                      >
+                      <button className="btn-primary" onClick={() => handleBookAppointment(gap)}>
                         <Calendar size={16} />
                         Schedule Service
                       </button>
                       <button className="btn-secondary" onClick={() => setChatOpen(true)}>
-                        <MessageCircle size={16} />
-                        Contact Member
+                        <Bot size={16} />
+                        Ask AI Assistant
                       </button>
                     </div>
                   </div>
@@ -527,13 +606,12 @@ function MemberDetails({ member, onBack }) {
               </div>
             ) : (
               <div className="no-data">
-                <CheckCircle size={48} color="#10b981" />
                 <h3>No Open Care Gaps</h3>
                 <p>This member is compliant with all quality measures.</p>
               </div>
             )}
 
-            {details?.closed_gaps && details.closed_gaps.length > 0 && (
+            {details?.closed_gaps?.length > 0 && (
               <div className="closed-gaps-section">
                 <h3>Closed Care Gaps</h3>
                 {details.closed_gaps.map(gap => (
@@ -550,9 +628,10 @@ function MemberDetails({ member, onBack }) {
           </div>
         )}
 
+        {/* ── CLAIMS TAB ─────────────────────────────────────────────────── */}
         {activeTab === 'claims' && (
           <div className="claims-tab">
-            {details?.claims && details.claims.length > 0 ? (
+            {details?.claims?.length > 0 ? (
               <div className="claims-table">
                 <table>
                   <thead>
@@ -564,8 +643,8 @@ function MemberDetails({ member, onBack }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {details.claims.map((claim, index) => (
-                      <tr key={index}>
+                    {details.claims.map((claim, i) => (
+                      <tr key={i}>
                         <td>{claim.service_date}</td>
                         <td><code>{claim.cpt_code}</code></td>
                         <td><code>{claim.icd_code}</code></td>
@@ -585,24 +664,23 @@ function MemberDetails({ member, onBack }) {
           </div>
         )}
 
+        {/* ── OUTREACH TAB ───────────────────────────────────────────────── */}
         {activeTab === 'outreach' && (
           <div className="outreach-tab">
-            {details?.outreach_history && details.outreach_history.length > 0 ? (
+            {details?.outreach_history?.length > 0 ? (
               <div className="outreach-timeline">
-                {details.outreach_history.map(outreach => (
-                  <div key={outreach.outreach_id} className="outreach-item">
+                {details.outreach_history.map(o => (
+                  <div key={o.outreach_id} className="outreach-item">
                     <div className="outreach-icon">
                       <MessageCircle size={20} />
                     </div>
                     <div className="outreach-content">
                       <div className="outreach-header">
-                        <h4>{outreach.channel}</h4>
-                        <span className="outreach-date">{outreach.date}</span>
+                        <h4>{o.channel}</h4>
+                        <span className="outreach-date">{o.date}</span>
                       </div>
-                      <p>Care Gap: {outreach.measure_name}</p>
-                      <span className={`outreach-status ${outreach.status.toLowerCase()}`}>
-                        {outreach.status}
-                      </span>
+                      <p>Care Gap: {o.measure_name}</p>
+                      <span className={`outreach-status ${o.status.toLowerCase()}`}>{o.status}</span>
                     </div>
                   </div>
                 ))}
@@ -618,33 +696,35 @@ function MemberDetails({ member, onBack }) {
         )}
       </div>
 
+      {/* ── CONVERSATIONAL CHAT PANEL ────────────────────────────────────── */}
       {chatOpen && (
         <div className="chat-modal">
           <div className="chat-container">
             <div className="chat-header">
-              <h3>Chat with {member.name}</h3>
+              <div className="chat-header-info">
+                <Bot size={20} />
+                <div>
+                  <h3>AI Care Manager</h3>
+                  <p className="chat-member-context">{member.name} · {details?.open_gaps?.length || 0} open gaps</p>
+                </div>
+              </div>
               <button className="close-chat" onClick={() => setChatOpen(false)}>
                 <X size={20} />
               </button>
             </div>
+
             <div className="chat-messages">
-              {chatMessages.length === 0 && (
-                <div className="chat-empty">
-                  <p>Start a conversation with AI Care Manager</p>
-                  <p className="chat-hint">Ask about care gaps, outreach plans, or coverage</p>
-                </div>
-              )}
               {chatMessages.map(msg => (
-                <div key={msg.id} className={`chat-message ${msg.sender}`}>
+                <div key={msg.id} className={`chat-message ${msg.role === 'user' ? 'care_manager' : 'ai_agent'}`}>
                   <div className="message-bubble">
-                    {msg.sender === 'ai_agent' && (
+                    {msg.role === 'assistant' && (
                       <div className="ai-badge">
-                        <Sparkles size={12} />
-                        AI Care Manager
+                        <Bot size={12} />
+                        AI Assistant
                       </div>
                     )}
                     <div className="message-content">
-                      {formatAgentResponse(msg.text)}
+                      {formatText(msg.text)}
                     </div>
                     <span className="message-time">
                       {new Date(msg.timestamp).toLocaleTimeString()}
@@ -652,31 +732,39 @@ function MemberDetails({ member, onBack }) {
                   </div>
                 </div>
               ))}
-              {sendingMessage && (
+
+              {chatLoading && (
                 <div className="chat-message ai_agent">
                   <div className="message-bubble typing">
-                    <Loader size={16} className="spinning" />
-                    AI is analyzing...
+                    <div className="typing-indicator">
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                    </div>
                   </div>
                 </div>
               )}
+              <div ref={chatBottomRef} />
             </div>
+
             <div className="chat-input">
               <input
                 type="text"
-                placeholder="Type your message..."
+                placeholder={`Ask about ${member.name}…`}
                 value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                onChange={e => setMessageInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                disabled={chatLoading}
               />
-              <button onClick={handleSendMessage}>
-                <Send size={20} />
+              <button onClick={handleSendMessage} disabled={chatLoading || !messageInput.trim()}>
+                <Send size={18} />
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── APPOINTMENT MODAL ─────────────────────────────────────────────── */}
       {showAppointmentModal && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -695,11 +783,9 @@ function MemberDetails({ member, onBack }) {
         </div>
       )}
 
+      {/* ── COMPARISON ────────────────────────────────────────────────────── */}
       {showComparison && (
-        <MemberComparison 
-          member={member}
-          onClose={() => setShowComparison(false)}
-        />
+        <MemberComparison member={member} onClose={() => setShowComparison(false)} />
       )}
     </div>
   );

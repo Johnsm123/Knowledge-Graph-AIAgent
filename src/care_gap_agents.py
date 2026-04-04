@@ -1,24 +1,31 @@
 """
-Care Gap Validation Agent System.
+Care Gap Validation Agent System — 6-Agent Architecture.
 
-Workflow per member:
-  1. Fetch member profile + claims from Neo4j
-  2. Query QualityMeasure golden reference nodes to find applicable measures
-  3. Cross-check member's CPT codes against measure's required codes + lookback window
-  4. CDC-HbA1c additionally checks for Diabetes ICD code (E11.x) in claims
-  5. If gap detected → create/update CareGap node in Neo4j
-  6. Pull resolution text from QualityMeasure node → LLM generates actionable suggestion
+Flow per member:
+  1. Fetch member profile + claims from Neo4j (Python — no LLM)
+  2. Filter applicable QualityMeasure golden reference nodes (Python)
+  3. Check exclusion criteria from Neo4j rulebook (Python)
+  4. Cross-check CPT codes vs lookback windows (Python — OR logic for COL/CCS)
+  5. Auto-create CareGap nodes for newly detected gaps (Python)
+  6. Run 6-agent pipeline for analysis + recommendations (LLM)
 
-Agents:
-  - care_gap_validator  : validates compliance per measure, explains why gap is open
-  - outreach_advisor    : generates prioritised outreach script for care manager
-  - benefit_checker     : confirms plan coverage and member cost per gap
+Agents (order):
+  1. patient_analyst      → confirms member profile and eligibility
+  2. hedis_measure_agent  → reviews applicable HEDIS rules and code requirements
+  3. exclusion_agent      → confirms exclusion decisions with clinical codes
+  4. code_validator       → audits CPT code compliance per lookback window
+  5. care_gap_agent       → finalises gap status, confirms Neo4j writes
+  6. recommendation_agent → generates prioritised outreach and care manager scripts
+
+Two execution modes:
+  - validate_and_suggest()        → blocking, returns all responses at once
+  - validate_and_suggest_stream() → generator, yields SSE events per-agent
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, Generator, List, Tuple
 from autogen_agentchat.agents import AssistantAgent
-from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_agentchat.conditions import MaxMessageTermination
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 from config.settings import settings
@@ -28,12 +35,23 @@ from src.care_gap_neo4j import (
     get_member_claims_cpt_codes,
     get_member_profile,
     merge_care_gap,
+    check_member_exclusions,
 )
 
 logger = logging.getLogger(__name__)
 
+# Canonical agent order (used by frontend to render panels in the right sequence)
+AGENT_ORDER = [
+    "patient_analyst",
+    "hedis_measure_agent",
+    "exclusion_agent",
+    "code_validator",
+    "care_gap_agent",
+    "recommendation_agent",
+]
 
-# ── Pure Python helpers (no LLM) ─────────────────────────────────────────────
+
+# ── Pure Python helpers (no LLM) ──────────────────────────────────────────────
 
 def _parse_age(age_str: str) -> int:
     """Extract numeric age from '41 Years, 6 Months' format."""
@@ -54,14 +72,18 @@ def _parse_service_date(date_str: str):
 def _measure_applies(measure: Dict, age: int, gender: str, icd_codes: List[str]) -> bool:
     """
     Returns True if the golden reference measure applies to this member.
+
     Rules:
-      - Age must fall within measure's AgeRange
-      - Gender must match if measure specifies Female/Male
-      - CDC-HbA1c additionally requires at least one E11.x ICD code in claims
+      - Age must fall within measure's age range
+      - Gender must match if measure specifies Female/Male (checked via age_range string
+        and gender_requirement field)
+      - Diabetes measures (GSD, EED, KED, BPD) require E11.x ICD code in claims
     """
     age_range = str(measure.get("age_range", ""))
     gender_required = None
 
+    # Gender can be embedded in the age_range string (e.g. "42-74 Female")
+    # or stored in gender_requirement field
     if "Female" in age_range:
         gender_required = "F"
         age_range = age_range.replace("Female", "").strip()
@@ -69,7 +91,14 @@ def _measure_applies(measure: Dict, age: int, gender: str, icd_codes: List[str])
         gender_required = "M"
         age_range = age_range.replace("Male", "").strip()
 
-    if gender_required and gender.upper()[0] != gender_required:
+    # Also check the dedicated gender_requirement field
+    gender_req_field = str(measure.get("gender_requirement", "Any")).strip()
+    if gender_required is None and gender_req_field == "Female":
+        gender_required = "F"
+    elif gender_required is None and gender_req_field == "Male":
+        gender_required = "M"
+
+    if gender_required and gender.upper()[:1] != gender_required:
         return False
 
     try:
@@ -80,8 +109,10 @@ def _measure_applies(measure: Dict, age: int, gender: str, icd_codes: List[str])
     except Exception:
         pass
 
-    # CDC-HbA1c only applies to members with a confirmed Diabetes diagnosis
-    if measure.get("measure_id") == "CDC-HbA1c":
+    # Diabetes measures require confirmed E11.x ICD code in claims
+    # Covers GSD, EED, KED, BPD (and legacy CDC-HbA1c)
+    diag_req = str(measure.get("diagnosis_requirement", "")).lower()
+    if "diabetes" in diag_req or "e11" in diag_req:
         if not any(str(icd).startswith("E11") for icd in icd_codes):
             return False
 
@@ -89,10 +120,7 @@ def _measure_applies(measure: Dict, age: int, gender: str, icd_codes: List[str])
 
 
 def _build_required_cpt_set(cpt_codes_str: str) -> set:
-    """
-    Parse comma-separated CPT codes from golden reference into a set of plain strings.
-    e.g. '83036,83037' → {'83036', '83037'}
-    """
+    """Parse comma-separated CPT codes into a plain string set."""
     return {
         c.strip()
         for c in str(cpt_codes_str).split(",")
@@ -119,40 +147,69 @@ def _gap_already_satisfied(claims: List[Dict], required_cpt_codes: str,
     return False
 
 
+def _gap_satisfied_multi_option(claims: List[Dict], screening_options: List[Dict]) -> bool:
+    """
+    For measures with multiple screening paths (COL has 5, CCS has 3),
+    gap is satisfied if ANY single option's CPT codes appear within that
+    option's specific lookback window (OR logic).
+    """
+    for option in screening_options:
+        if _gap_already_satisfied(
+            claims,
+            option.get("cpt_codes", ""),
+            int(option.get("lookback_months") or 12),
+        ):
+            return True
+    return False
+
+
 def _format_claims_for_prompt(claims: List[Dict]) -> str:
-    """Format claims list cleanly for the LLM prompt."""
     if not claims:
         return "  No claims found."
     lines = []
     for c in claims:
-        lines.append(f"  CPT: {c.get('cpt_code','?')} | Date: {c.get('service_date','?')} | ICD: {c.get('icd_code','?')}")
+        lines.append(
+            f"  CPT: {c.get('cpt_code','?')} | "
+            f"Date: {c.get('service_date','?')} | "
+            f"ICD: {c.get('icd_code','?')}"
+        )
     return "\n".join(lines)
 
 
 def _format_measures_for_prompt(measures: List[Dict]) -> str:
-    """Format applicable measures cleanly for the LLM prompt."""
     if not measures:
         return "  None applicable."
     lines = []
     for m in measures:
+        opts = m.get("screening_options", [])
+        if opts:
+            opt_lines = " | ".join(
+                f"{o['type']} ({o['lookback_months']}mo)"
+                for o in opts
+            )
+            cpt_info = f"Screening paths: {opt_lines}"
+        else:
+            cpt_info = f"Required CPT: {m['cpt_codes']}"
         lines.append(
-            f"  [{m['measure_id']}] {m['name']}\n"
-            f"    Age Range: {m['age_range']} | Lookback: {m['lookback_months']} months\n"
-            f"    Required CPT Codes: {m['cpt_codes']}\n"
-            f"    Resolution Guide: {m['description']}"
+            f"  [{m['measure_id']}] {m['name']} | "
+            f"Age: {m['age_range']} | "
+            f"Lookback: {m.get('lookback_months')} mo | "
+            f"{cpt_info}"
         )
     return "\n".join(lines)
 
 
 def _format_gaps_for_prompt(gaps: List[Dict]) -> str:
-    """Format existing graph gaps cleanly for the LLM prompt."""
     if not gaps:
         return "  None."
     lines = []
     for g in gaps:
         lines.append(
-            f"  Gap ID: {g.get('care_gap_id')} | Measure: {g.get('measure_id')} "
-            f"({g.get('measure_name')}) | Created: {g.get('created_on')} | Status: {g.get('gap_status')}"
+            f"  {g.get('care_gap_id')} | "
+            f"Measure: {g.get('measure_id')} ({g.get('measure_name')}) | "
+            f"Created: {g.get('created_on')} | "
+            f"Status: {g.get('gap_status')} | "
+            f"Required CPT: {g.get('required_cpt_codes', 'N/A')}"
         )
     return "\n".join(lines)
 
@@ -160,14 +217,22 @@ def _format_gaps_for_prompt(gaps: List[Dict]) -> str:
 # ── Agent System ──────────────────────────────────────────────────────────────
 
 class CareGapAgentSystem:
+    """
+    6-agent system for HEDIS care gap analysis.
+
+    Supports two modes:
+      - validate_and_suggest()        — blocking, returns full result dict
+      - validate_and_suggest_stream() — SSE generator, streams per-agent events
+    """
+
     def __init__(self):
         from autogen_core.models import ModelInfo
         self.model_client = AzureOpenAIChatCompletionClient(
-            azure_deployment=settings.openai_model,
+            azure_deployment=settings.openai_model,          # Azure deployment name
             azure_endpoint=settings.endpoint,
             api_key=settings.openai_api_key,
             api_version=settings.azure_openai_api_version,
-            model=settings.openai_model,
+            model="gpt-5-chat-2025-10-03",                   # resolved model for token estimation
             model_info=ModelInfo(
                 vision=True,
                 function_calling=True,
@@ -180,103 +245,270 @@ class CareGapAgentSystem:
         self._build_agents()
 
     def _build_agents(self):
-        self.validation_agent = AssistantAgent(
-            name="care_gap_validator",
-            system_message="""You are a Care Gap Validation Agent for a health insurance company.
+        # ── Agent 1: Patient Analyst ───────────────────────────────────────────
+        self.patient_analyst = AssistantAgent(
+            name="patient_analyst",
+            system_message="""You are the Patient Analyst for a HEDIS care gap system.
 
-You receive:
-- A member's demographic profile
-- Their full claims history (CPT code, service date, ICD diagnosis code)
-- The applicable Quality Measures (golden reference) with required CPT codes and lookback periods
-- A system-computed list of open and compliant measures
+You receive pre-fetched member profile and claims data from Neo4j.
+
+Your job (respond in ≤8 lines):
+- Confirm member age, gender, and insurance plan
+- Note the PCP name and specialty
+- Identify chronic conditions from ICD codes (E11.x = Type 2 Diabetes)
+- Flag if member's age/gender makes them eligible for female-only or diabetes measures
+
+Format:
+PATIENT SUMMARY
+  Name/ID  : ...
+  Age/Gender: ...  (eligible for diabetes measures: YES/NO)
+  Plan     : ... | $0 copay preventive
+  PCP      : ... (specialty, network status)
+  Conditions: ... (from ICD codes in claims)""",
+            model_client=self.model_client,
+        )
+
+        # ── Agent 2: HEDIS Measure Agent ──────────────────────────────────────
+        self.hedis_measure_agent = AssistantAgent(
+            name="hedis_measure_agent",
+            system_message="""You are the HEDIS Measure Agent for a care gap system.
+
+You receive the list of applicable quality measures from the Neo4j golden reference.
+
+Your job (respond in ≤12 lines):
+- List each applicable measure with measure ID, name, age range, lookback window
+- For multi-path measures (COL: 5 paths, CCS: 3 paths) list each screening option
+- Note diabetes measures (GSD/EED/KED/BPD) require confirmed E11.x ICD code
+- Confirm measures NOT applicable (gender/age/diagnosis mismatch) are correctly excluded
+
+Format per measure:
+[MeasureID] [Name] — Age: X-Y | Lookback: N mo | CPT/paths: ...""",
+            model_client=self.model_client,
+        )
+
+        # ── Agent 3: Exclusion Agent ───────────────────────────────────────────
+        self.exclusion_agent = AssistantAgent(
+            name="exclusion_agent",
+            system_message="""You are the Exclusion Agent for a HEDIS care gap system.
+
+You receive the system's exclusion check results from the Neo4j rulebook.
+
+Your job (respond in ≤10 lines):
+- For each excluded measure: confirm the exclusion and state the exact clinical reason + code
+  (e.g. BCS EXCLUDED — bilateral mastectomy ICD Z90.13)
+- For non-excluded measures: confirm the member is NOT excluded
+- Reference the specific ICD-10 or CPT code that triggered each exclusion
+
+Format per measure:
+[MeasureID] — EXCLUDED (reason | code) | NOT EXCLUDED (exclusion criteria checked: none match)""",
+            model_client=self.model_client,
+        )
+
+        # ── Agent 4: Code Validator ────────────────────────────────────────────
+        self.code_validator = AssistantAgent(
+            name="code_validator",
+            system_message="""You are the Code Validator for a HEDIS care gap system.
+
+You receive the member's claims history and the system's CPT code compliance check results.
+
+Your job (respond in ≤15 lines):
+- For each applicable (non-excluded) measure, confirm the system's COMPLIANT/NON-COMPLIANT verdict
+- For NON-COMPLIANT: state exactly why — no claim found, wrong CPT code, or claim outside lookback
+- For COL/CCS (multi-path): state which option(s) were checked and whether any path was satisfied
+- Flag borderline cases (claim date within 30 days of lookback cutoff)
+
+Format per measure:
+[MeasureID] — CPT found: X / not found | Service date: within/outside N-mo lookback
+              VERDICT CONFIRMED: COMPLIANT / NON-COMPLIANT""",
+            model_client=self.model_client,
+        )
+
+        # ── Agent 5: Care Gap Agent ────────────────────────────────────────────
+        self.care_gap_agent = AssistantAgent(
+            name="care_gap_agent",
+            system_message="""You are the Care Gap Agent for a HEDIS care gap system.
+
+You receive the validated gap status from the Code Validator.
+
+Your job (respond in ≤12 lines):
+- Produce the definitive care gap report: OPEN GAP / COMPLIANT / EXCLUDED per measure
+- For OPEN GAPS: state the exact CPT code(s) needed to close the gap and the deadline
+- Confirm that gap nodes have been written to Neo4j for all OPEN gaps
+- Priority rank the open gaps (shorter lookback = higher priority)
+
+Format per gap:
+[MeasureID] [Name]: OPEN GAP  ← Priority #N
+  Close with: CPT XXXXX ([procedure name]) within N months
+  Neo4j CareGap node: AUTO-[MemberID]-[MeasureID] ✓""",
+            model_client=self.model_client,
+        )
+
+        # ── Agent 6: Recommendation Agent ─────────────────────────────────────
+        self.recommendation_agent = AssistantAgent(
+            name="recommendation_agent",
+            system_message="""You are the Recommendation Agent for a HEDIS care gap system.
+
+You receive the complete care gap analysis from the team above.
 
 Your job:
-1. For each applicable measure, confirm whether the member is COMPLIANT or NON-COMPLIANT
-2. For NON-COMPLIANT measures, explain exactly WHY the gap is open:
-   - Was there no claim at all?
-   - Was there a claim but with the wrong CPT code?
-   - Was there a claim but it fell outside the lookback window?
-3. State which specific CPT codes would close each open gap
-4. Note the last relevant claim date if one exists (even if outside lookback)
+1. Provide a FINAL CARE GAP SUMMARY TABLE (one line per measure: status + action)
+2. For each OPEN GAP:
+   - Exact CPT code + procedure name to close the gap
+   - In-network provider type (Radiology→BCS, OB/GYN→CCS, GI→COL, Lab/Endo→GSD/EED/KED/BPD)
+   - Member cost: $0 copay (all preventive services under plan PL-001)
+   - Best outreach channel: Phone (urgent/chronic), SMS (screening reminders)
+3. Write a 4-6 line care manager script for the #1 priority gap
 
-Output format per measure:
----
-Measure: [MeasureID] — [Name]
-Status: COMPLIANT / NON-COMPLIANT
-Reason: [specific explanation]
-CPT Codes That Would Close This Gap: [list]
-Last Relevant Claim: [date or 'No qualifying claim found']
----""",
+End your response with:
+TOTAL OPEN GAPS: N
+RECOMMENDED NEXT ACTION: [specific action for top gap]""",
             model_client=self.model_client,
         )
 
-        self.outreach_advisor = AssistantAgent(
-            name="outreach_advisor",
-            system_message="""You are a Care Management Outreach Advisor for a health insurance company.
+    # ── Internal helpers ───────────────────────────────────────────────────────
 
-You receive a member's open care gaps with their golden reference resolution guides.
+    def _validate_member(self, member_id: str) -> Dict[str, Any]:
+        """
+        Pure-Python validation (no LLM): exclusions + CPT lookback checks.
+        Writes CareGap nodes to Neo4j for newly detected gaps.
+        Returns a structured dict; sets 'error' key if member not found.
+        """
+        profile = get_member_profile(member_id)
+        if not profile:
+            return {"error": f"Member {member_id} not found in knowledge graph"}
 
-Your job:
-1. Prioritise the open gaps by urgency (shorter lookback = more urgent; e.g. HbA1c at 12 months > BCS at 24 months)
-2. For each open gap, provide:
-   - The exact procedure the member needs (procedure name + CPT code from the resolution guide)
-   - The type of In-Network provider to refer to (e.g. Radiology for BCS, OB/GYN for CCS, Lab/Endocrinology for HbA1c, Gastroenterology for COL)
-   - Recommended outreach channel: Phone for urgent gaps (HbA1c, BCS), SMS for scheduling reminders (COL, CCS)
-3. Write a short care manager talking points script for the top priority gap
+        age = _parse_age(profile.get("age_str", "0"))
+        gender = str(profile.get("gender", ""))
 
-Always reference the resolution guide text directly in your recommendations.
-Be specific — name the CPT code, the provider type, and the exact action needed.""",
-            model_client=self.model_client,
-        )
+        claims = get_member_claims_cpt_codes(member_id)
+        icd_codes = [c.get("icd_code", "") for c in claims]
 
-        self.benefit_checker = AssistantAgent(
-            name="benefit_checker",
-            system_message="""You are a Benefits Coverage Checker for a health insurance company.
+        all_measures = get_applicable_measures(age, gender)
+        applicable = [m for m in all_measures if _measure_applies(m, age, gender, icd_codes)]
 
-You receive a member's benefit plan details and their open care gaps.
+        detected_gaps: List[Dict] = []
+        satisfied_measures: List[str] = []
+        excluded_measures: List[str] = []
 
-Your job — for each open gap:
-1. Confirm whether the required service is covered under the member's plan (check PreventiveServicesCovered field)
-2. State the member's out-of-pocket cost: Copay and whether Deductible applies
-3. Check EligibilityRules for any restrictions (age, gender, diagnosis requirements)
-4. If a service is NOT covered, flag it clearly — this changes the outreach approach
+        for measure in applicable:
+            exclusions = check_member_exclusions(member_id, measure["measure_id"])
+            if exclusions:
+                reason = exclusions[0].get("type", "excluded")
+                excluded_measures.append(f"{measure['measure_id']} ({reason})")
+                continue
 
-Known plan PL-001 coverage:
-  Covered services: Mammography, Colonoscopy, Cervical Cytology, HPV testing, HbA1c, Adult Immunizations
-  Copay: $0 for all preventive services
-  Deductible: $500 (does NOT apply to preventive services)
-  Eligibility: Active enrollment + Age/Gender/Diagnosis per measure
+            options = measure.get("screening_options", [])
+            if options:
+                satisfied = _gap_satisfied_multi_option(claims, options)
+            else:
+                satisfied = _gap_already_satisfied(
+                    claims,
+                    measure.get("cpt_codes", ""),
+                    int(measure.get("lookback_months") or 12),
+                )
 
-Be direct and concise. State covered/not covered, cost to member, and any restrictions.""",
-            model_client=self.model_client,
-        )
+            if not satisfied:
+                detected_gaps.append(measure)
+                gap_id = f"AUTO-{member_id}-{measure['measure_id']}"
+                merge_care_gap(
+                    care_gap_id=gap_id,
+                    member_id=member_id,
+                    measure_id=measure["measure_id"],
+                    gap_status="Open",
+                    is_open=True,
+                    created_on=datetime.now().strftime("%Y-%m-%d"),
+                    closed_on="",
+                )
+            else:
+                satisfied_measures.append(measure["measure_id"])
+
+        existing_gaps = get_member_open_gaps(member_id)
+
+        return {
+            "profile": profile,
+            "age": age,
+            "gender": gender,
+            "claims": claims,
+            "icd_codes": icd_codes,
+            "applicable": applicable,
+            "detected_gaps": detected_gaps,
+            "satisfied_measures": satisfied_measures,
+            "excluded_measures": excluded_measures,
+            "existing_gaps": existing_gaps,
+        }
+
+    def _build_task(self, v: Dict, member_id: str) -> str:
+        """Build the structured task string from a _validate_member() result dict."""
+        profile = v["profile"]
+        age = v["age"]
+        gender = v["gender"]
+        claims = v["claims"]
+        icd_codes = v["icd_codes"]
+        applicable = v["applicable"]
+        detected_gaps = v["detected_gaps"]
+        satisfied_measures = v["satisfied_measures"]
+        excluded_measures = v["excluded_measures"]
+        existing_gaps = v["existing_gaps"]
+
+        return f"""=== HEDIS CARE GAP ANALYSIS — Member {member_id} ===
+
+[SECTION 1 — MEMBER PROFILE]  ← for patient_analyst
+  Member ID : {member_id}
+  Name      : {profile.get('name')}
+  Age       : {profile.get('age_str')} (numeric: {age})
+  Gender    : {gender}
+  DOB       : {profile.get('dob')}
+  Plan      : {profile.get('plan_id')} | Copay: ${profile.get('copay')} | Preventive: $0
+  Covered   : {profile.get('preventive_covered')}
+  Eligibility: {profile.get('eligibility_rules')}
+  PCP       : {profile.get('pcp_name')} | {profile.get('pcp_specialty')} | {profile.get('pcp_network_status')}
+  ICD codes in claims (for diabetes check): {list(set(icd_codes[:10]))}
+
+[SECTION 2 — APPLICABLE HEDIS MEASURES]  ← for hedis_measure_agent
+  Total applicable: {len(applicable)}
+{_format_measures_for_prompt(applicable)}
+
+[SECTION 3 — EXCLUSION CHECK RESULTS]  ← for exclusion_agent
+  Excluded by Neo4j rulebook : {excluded_measures or 'None'}
+  Not excluded (all {len(applicable) - len(excluded_measures)} remaining measures passed exclusion check)
+
+[SECTION 4 — CLAIMS HISTORY + CPT VALIDATION]  ← for code_validator
+  Total claims: {len(claims)}
+{_format_claims_for_prompt(claims)}
+  System CPT check results:
+    COMPLIANT (gap satisfied)     : {satisfied_measures or 'None'}
+    NON-COMPLIANT (gap detected)  : {[m['measure_id'] for m in detected_gaps] or 'None'}
+
+[SECTION 5 — OPEN GAPS WRITTEN TO NEO4J]  ← for care_gap_agent
+  Auto-created CareGap nodes this session: {[f"AUTO-{member_id}-{m['measure_id']}" for m in detected_gaps] or 'None'}
+  Existing open gaps in graph (including Excel-loaded):
+{_format_gaps_for_prompt(existing_gaps)}
+
+[SECTION 6 — OUTREACH CONTEXT]  ← for recommendation_agent
+  Plan ID   : {profile.get('plan_id')}
+  Coverage  : All preventive services $0 copay, $500 deductible (waived for preventive)
+  Open gaps for outreach: {[m['measure_id'] for m in detected_gaps]}
+  Priority order: shorter lookback = more urgent
+    (GSD/EED/KED/BPD = 12 mo, BCS = 24 mo, CCS = 36 mo, COL up to 120 mo)
+
+=== EACH AGENT: RESPOND TO YOUR DESIGNATED SECTION ONLY ==="""
 
     def _run_team(self, task: str) -> Dict[str, str]:
+        """Run all 6 agents as a RoundRobin team (blocking). Returns all responses at once."""
         import asyncio
 
         async def _run():
-            team = SelectorGroupChat(
+            team = RoundRobinGroupChat(
                 participants=[
-                    self.validation_agent,
-                    self.outreach_advisor,
-                    self.benefit_checker,
+                    self.patient_analyst,
+                    self.hedis_measure_agent,
+                    self.exclusion_agent,
+                    self.code_validator,
+                    self.care_gap_agent,
+                    self.recommendation_agent,
                 ],
-                model_client=self.model_client,
-                # 10 = task(1) + validator(1) + outreach(1) + benefit(1) + possible follow-ups(6)
-                termination_condition=MaxMessageTermination(max_messages=10),
-                selector_prompt="""You are coordinating a care gap management team. Select the next agent:
-
-- care_gap_validator  : Use first. Validates member compliance against each quality measure.
-                        Explains why each gap is open (wrong CPT, expired lookback, no claim).
-- outreach_advisor    : Use after validation. Generates prioritised outreach plan and
-                        care manager talking points for each open gap.
-- benefit_checker     : Use after outreach plan. Confirms plan coverage and member cost
-                        for each required service.
-
-Rules:
-- Always start with care_gap_validator
-- Do not repeat an agent unless new information in the conversation requires it
-- Stop after all 3 agents have responded""",
+                # 6 agents + 1 task message + 1 buffer = 8
+                termination_condition=MaxMessageTermination(max_messages=8),
             )
             result = await team.run(task=task)
             return {
@@ -295,101 +527,127 @@ Rules:
         except RuntimeError:
             return asyncio.run(_run())
 
+    def _run_agent_single(self, agent, task: str) -> str:
+        """
+        Run a single AssistantAgent synchronously and return its text response.
+        Resets agent state before each call to prevent history bleed between runs.
+        """
+        import asyncio
+        from autogen_agentchat.messages import TextMessage
+        from autogen_core import CancellationToken
+
+        async def _run():
+            await agent.on_reset(CancellationToken())
+            result = await agent.on_messages(
+                [TextMessage(content=task, source="user")],
+                CancellationToken(),
+            )
+            return result.chat_message.content if result and result.chat_message else ""
+
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    return pool.submit(asyncio.run, _run()).result()
+            return loop.run_until_complete(_run())
+        except RuntimeError:
+            return asyncio.run(_run())
+
+    # ── Public API ─────────────────────────────────────────────────────────────
+
     def validate_and_suggest(self, member_id: str) -> Dict[str, Any]:
         """
-        Main entry point.
-        1. Fetch member profile + claims from Neo4j
-        2. Filter applicable QualityMeasure golden reference nodes by age/gender/diagnosis
-        3. Check each measure's CPT codes against claims within lookback window
-        4. Auto-create CareGap nodes in Neo4j for newly detected gaps
-        5. Run agent team → validation report + outreach plan + benefit check
+        Blocking mode — runs full validation + all 6 agents, returns when done.
+        Used by the original POST /api/v1/care-gaps/validate/<member_id> endpoint.
         """
-        profile = get_member_profile(member_id)
-        if not profile:
-            return {"error": f"Member {member_id} not found in knowledge graph"}
+        v = self._validate_member(member_id)
+        if "error" in v:
+            return v
 
-        age = _parse_age(profile.get("age_str", "0"))
-        gender = str(profile.get("gender", ""))
-
-        # Fetch claims — icd_code needed for HbA1c diabetes eligibility check
-        claims = get_member_claims_cpt_codes(member_id)
-        icd_codes = [c.get("icd_code", "") for c in claims]
-
-        # Filter golden reference measures applicable to this member
-        all_measures = get_applicable_measures(age, gender)
-        applicable = [m for m in all_measures if _measure_applies(m, age, gender, icd_codes)]
-
-        # System-level CPT + lookback validation (no LLM involved here)
-        detected_gaps = []
-        satisfied_measures = []
-        for measure in applicable:
-            satisfied = _gap_already_satisfied(
-                claims,
-                measure.get("cpt_codes", ""),
-                int(measure.get("lookback_months") or 12),
-            )
-            if not satisfied:
-                detected_gaps.append(measure)
-                # Auto-create CareGap node in Neo4j so it persists in the graph
-                gap_id = f"AUTO-{member_id}-{measure['measure_id']}"
-                merge_care_gap(
-                    care_gap_id=gap_id,
-                    member_id=member_id,
-                    measure_id=measure["measure_id"],
-                    gap_status="Open",
-                    is_open=True,
-                    created_on=datetime.now().strftime("%Y-%m-%d"),
-                    closed_on="",
-                )
-            else:
-                satisfied_measures.append(measure["measure_id"])
-
-        # Fetch existing open gaps from graph (includes manually loaded ones from Excel)
-        existing_gaps = get_member_open_gaps(member_id)
-
-        # Build clean, readable prompt for agents
-        task = f"""
-=== CARE GAP ANALYSIS REQUEST ===
-
-MEMBER PROFILE:
-  Member ID  : {member_id}
-  Name       : {profile.get('name')}
-  Age        : {profile.get('age_str')}
-  Gender     : {gender}
-  DOB        : {profile.get('dob')}
-  Plan       : {profile.get('plan_id')} | Copay: ${profile.get('copay')} | Deductible: $500
-  Preventive Services Covered: {profile.get('preventive_covered')}
-  Eligibility Rules: {profile.get('eligibility_rules')}
-  PCP        : {profile.get('pcp_name')} ({profile.get('pcp_specialty')}) — {profile.get('pcp_network_status')}
-
-APPLICABLE QUALITY MEASURES (GOLDEN REFERENCE — {len(applicable)} measures apply):
-{_format_measures_for_prompt(applicable)}
-
-MEMBER'S CLAIMS HISTORY:
-{_format_claims_for_prompt(claims)}
-
-SYSTEM-VALIDATED GAP STATUS (CPT code + lookback window check):
-  Open Gaps    : {[m['measure_id'] for m in detected_gaps] or 'None'}
-  Compliant    : {satisfied_measures or 'None'}
-
-EXISTING OPEN GAPS IN KNOWLEDGE GRAPH:
-{_format_gaps_for_prompt(existing_gaps)}
-
-=== INSTRUCTIONS ===
-1. care_gap_validator: Validate compliance for each applicable measure. Explain exactly why each gap is open.
-2. outreach_advisor: Generate a prioritised outreach plan with care manager talking points.
-3. benefit_checker: Confirm coverage and member cost for each required service under plan {profile.get('plan_id')}.
-"""
+        task = self._build_task(v, member_id)
         responses = self._run_team(task)
 
         return {
             "member_id": member_id,
-            "member_name": profile.get("name"),
-            "age": profile.get("age_str"),
-            "gender": gender,
-            "applicable_measures": [m["measure_id"] for m in applicable],
-            "compliant_measures": satisfied_measures,
-            "open_gaps_detected": [m["measure_id"] for m in detected_gaps],
-            "existing_graph_gaps": existing_gaps,
+            "member_name": v["profile"].get("name"),
+            "age": v["profile"].get("age_str"),
+            "gender": v["gender"],
+            "applicable_measures": [m["measure_id"] for m in v["applicable"]],
+            "compliant_measures": v["satisfied_measures"],
+            "excluded_measures": v["excluded_measures"],
+            "open_gaps_detected": [m["measure_id"] for m in v["detected_gaps"]],
+            "existing_graph_gaps": v["existing_gaps"],
             "agent_responses": responses,
         }
+
+    def validate_and_suggest_stream(self, member_id: str) -> Generator[Tuple[str, Any], None, None]:
+        """
+        Streaming mode — generator that yields (event_type, data) tuples for SSE.
+
+        Event sequence:
+          ('metadata', dict)      — immediately after Python validation (no LLM yet)
+          ('agent_start', dict)   — {'agent': name} just before each LLM call
+          ('agent_done',  dict)   — {'agent': name, 'content': text} when agent finishes
+          ('complete',    dict)   — final summary after all 6 agents finish
+          ('error',       dict)   — if member not found or exception
+
+        Each agent receives cumulative context — it sees all previous agents' outputs.
+        This mirrors RoundRobinGroupChat behaviour while enabling per-agent streaming.
+        """
+        try:
+            v = self._validate_member(member_id)
+        except Exception as exc:
+            yield ("error", {"message": str(exc)})
+            return
+
+        if "error" in v:
+            yield ("error", v)
+            return
+
+        profile = v["profile"]
+
+        # ── Metadata event — instant, no LLM ─────────────────────────────────
+        yield ("metadata", {
+            "member_id": member_id,
+            "member_name": profile.get("name"),
+            "age": profile.get("age_str"),
+            "gender": v["gender"],
+            "applicable_measures": [m["measure_id"] for m in v["applicable"]],
+            "compliant_measures": v["satisfied_measures"],
+            "excluded_measures": v["excluded_measures"],
+            "open_gaps_detected": [m["measure_id"] for m in v["detected_gaps"]],
+            "existing_graph_gaps": v["existing_gaps"],
+        })
+
+        base_task = self._build_task(v, member_id)
+        # Cumulative task: each agent sees all previous agents' outputs
+        cumulative_task = base_task
+
+        agents_in_order = [
+            self.patient_analyst,
+            self.hedis_measure_agent,
+            self.exclusion_agent,
+            self.code_validator,
+            self.care_gap_agent,
+            self.recommendation_agent,
+        ]
+
+        agent_responses: Dict[str, str] = {}
+
+        for agent in agents_in_order:
+            yield ("agent_start", {"agent": agent.name})
+            try:
+                content = self._run_agent_single(agent, cumulative_task)
+            except Exception as exc:
+                content = f"[Agent error: {exc}]"
+            agent_responses[agent.name] = content
+            yield ("agent_done", {"agent": agent.name, "content": content})
+            # Build context for next agent
+            cumulative_task += f"\n\n[{agent.name.upper()} ANALYSIS]\n{content}"
+
+        yield ("complete", {
+            "member_id": member_id,
+            "open_gaps_detected": [m["measure_id"] for m in v["detected_gaps"]],
+            "agent_responses": agent_responses,
+        })

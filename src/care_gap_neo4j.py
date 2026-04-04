@@ -19,6 +19,8 @@ def setup_constraints():
         "CREATE CONSTRAINT IF NOT EXISTS FOR (e:ExclusionCriteria) REQUIRE e.exclusion_id IS UNIQUE",
         "CREATE CONSTRAINT IF NOT EXISTS FOR (cs:CodeSet) REQUIRE cs.code_set_id IS UNIQUE",
         "CREATE CONSTRAINT IF NOT EXISTS FOR (cg:ClinicalGuideline) REQUIRE cg.guideline_id IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (so:ScreeningOption) REQUIRE so.option_id IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (bp:BestPractices) REQUIRE bp.best_practices_id IS UNIQUE",
     ]
     for c in constraints:
         kg.execute_write(c)
@@ -66,7 +68,8 @@ def merge_quality_measure_comprehensive(measure_data: dict):
         "diagnosis_requirement": measure_data.get("diagnosis_requirement", "")
     })
     
-    # Load screening options if present (for COL, CCS)
+    # Load screening options if present (for COL has 5 options, CCS has 3 options)
+    # Each option gets its own CodeSet so per-option lookback gap detection works.
     if "screening_options" in measure_data:
         for option in measure_data["screening_options"]:
             option_id = f"{measure_data['measure_id']}_{option['type']}"
@@ -87,6 +90,45 @@ def merge_quality_measure_comprehensive(measure_data: dict):
                 "age_range": option.get("age_range", ""),
                 "measure_id": measure_data["measure_id"]
             })
+
+            # Store the CPT codes for this specific screening option
+            # Relationship: ScreeningOption -[:USES_CODES]-> CodeSet
+            cpt_codes = option.get("cpt", [])
+            hcpcs_codes = option.get("hcpcs", [])
+            if cpt_codes:
+                opt_cset_id = f"{option_id}_cpt"
+                kg.execute_write("""
+                    MERGE (cs:CodeSet {code_set_id: $code_set_id})
+                    SET cs.code_type = $code_type,
+                        cs.codes = $codes,
+                        cs.measure_id = $measure_id
+                    WITH cs
+                    MATCH (so:ScreeningOption {option_id: $option_id})
+                    MERGE (so)-[:USES_CODES]->(cs)
+                """, {
+                    "code_set_id": opt_cset_id,
+                    "code_type": f"{option['type']}_cpt",
+                    "codes": cpt_codes,
+                    "measure_id": measure_data["measure_id"],
+                    "option_id": option_id
+                })
+            if hcpcs_codes:
+                opt_hset_id = f"{option_id}_hcpcs"
+                kg.execute_write("""
+                    MERGE (cs:CodeSet {code_set_id: $code_set_id})
+                    SET cs.code_type = $code_type,
+                        cs.codes = $codes,
+                        cs.measure_id = $measure_id
+                    WITH cs
+                    MATCH (so:ScreeningOption {option_id: $option_id})
+                    MERGE (so)-[:USES_CODES]->(cs)
+                """, {
+                    "code_set_id": opt_hset_id,
+                    "code_type": f"{option['type']}_hcpcs",
+                    "codes": hcpcs_codes,
+                    "measure_id": measure_data["measure_id"],
+                    "option_id": option_id
+                })
     
     # Load code sets
     if "codes" in measure_data:
@@ -355,33 +397,102 @@ def merge_outreach(outreach_id, care_gap_id, member_id, care_manager_id,
 
 def get_member_open_gaps(member_id: str):
     kg = get_knowledge_graph()
-    return kg.run_query("""
+    results = kg.run_query("""
         MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
         WHERE g.is_open = true
+        OPTIONAL MATCH (q)-[:REQUIRES_CODES]->(cs:CodeSet)
+        WITH g, q,
+             [x IN collect({type: cs.code_type, codes: cs.codes})
+              WHERE x.type IS NOT NULL AND toLower(x.type) CONTAINS 'cpt'] AS cpt_sets
         RETURN g.care_gap_id AS care_gap_id,
                g.created_on AS created_on,
                g.gap_status AS gap_status,
                q.measure_id AS measure_id,
                q.name AS measure_name,
                q.description AS resolution_guide,
-               q.cpt_codes AS required_cpt_codes,
-               q.lookback_months AS lookback_months
+               q.lookback_months AS lookback_months,
+               cpt_sets
     """, {"member_id": member_id})
+
+    for gap in results:
+        all_cpt: list = []
+        for cs in (gap.pop("cpt_sets", []) or []):
+            codes = cs.get("codes", [])
+            if isinstance(codes, list):
+                all_cpt.extend(str(c).strip() for c in codes if c)
+        gap["required_cpt_codes"] = ", ".join(all_cpt)
+
+    return results
 
 
 def get_applicable_measures(age: int, gender: str):
-    """Return all QualityMeasure golden reference nodes — age/gender filtering done in Python."""
+    """
+    Return all QualityMeasure golden reference nodes with:
+      - flat cpt_codes (union of all CPT CodeSets) for simple gap checks
+      - screening_options list (per-option type/lookback/cpt_codes) for
+        measures like COL and CCS that have multiple screening paths.
+    Age/gender filtering is done in Python by _measure_applies().
+    """
     kg = get_knowledge_graph()
-    return kg.run_query("""
+
+    # ── 1. Flat CPT codes from measure-level CodeSet nodes ────────────────────
+    results = kg.run_query("""
         MATCH (q:QualityMeasure)
+        OPTIONAL MATCH (q)-[:REQUIRES_CODES]->(cs:CodeSet)
+        WITH q,
+             [x IN collect({type: cs.code_type, codes: cs.codes})
+              WHERE x.type IS NOT NULL] AS code_sets
         RETURN q.measure_id AS measure_id,
                q.name AS name,
                q.age_range AS age_range,
                q.lookback_months AS lookback_months,
-               q.proactive_lookback_months AS proactive_lookback_months,
-               q.cpt_codes AS cpt_codes,
-               q.description AS description
+               q.description AS description,
+               q.diagnosis_requirement AS diagnosis_requirement,
+               code_sets
     """, {})
+
+    for m in results:
+        all_cpt: list = []
+        for cs in (m.pop("code_sets", []) or []):
+            if cs and "cpt" in str(cs.get("type", "")).lower():
+                codes = cs.get("codes", [])
+                if isinstance(codes, list):
+                    all_cpt.extend(str(c).strip() for c in codes if c)
+        m["cpt_codes"] = ",".join(all_cpt)
+        m["screening_options"] = []   # filled in step 2
+
+    # ── 2. Per-ScreeningOption codes (COL has 5 options, CCS has 3) ───────────
+    option_rows = kg.run_query("""
+        MATCH (q:QualityMeasure)-[:HAS_SCREENING_OPTION]->(so:ScreeningOption)
+        OPTIONAL MATCH (so)-[:USES_CODES]->(soc:CodeSet)
+        WHERE toLower(soc.code_type) CONTAINS 'cpt'
+        WITH q, so, collect(soc.codes) AS code_lists
+        RETURN q.measure_id AS measure_id,
+               so.type AS option_type,
+               so.lookback_months AS option_lookback,
+               code_lists
+        ORDER BY so.lookback_months DESC
+    """, {})
+
+    # Build a lookup: measure_id -> [{type, lookback_months, cpt_codes}, ...]
+    from collections import defaultdict
+    options_by_measure: dict = defaultdict(list)
+    for row in option_rows:
+        all_cpt = []
+        for code_list in (row.get("code_lists", []) or []):
+            if isinstance(code_list, list):
+                all_cpt.extend(str(c).strip() for c in code_list if c)
+        if all_cpt:
+            options_by_measure[row["measure_id"]].append({
+                "type": row["option_type"],
+                "lookback_months": int(row["option_lookback"] or 12),
+                "cpt_codes": ",".join(all_cpt),
+            })
+
+    for m in results:
+        m["screening_options"] = options_by_measure.get(m["measure_id"], [])
+
+    return results
 
 
 def get_member_claims_cpt_codes(member_id: str):

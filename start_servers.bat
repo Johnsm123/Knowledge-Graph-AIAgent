@@ -5,7 +5,7 @@ echo ========================================
 echo.
 
 echo Starting Backend API Server (Flask on port 5001)...
-start cmd /k "cd /d %~dp0 && python -m src.care_gap_api"
+start cmd /k "cd /d %~dp0 && venv\Scripts\python -m src.care_gap_api"
 
 timeout /t 3 /nobreak >nul
 

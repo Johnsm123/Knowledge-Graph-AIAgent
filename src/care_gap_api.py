@@ -2,7 +2,9 @@
 REST API endpoints for Care Gap workflows.
 Run: python -m src.care_gap_api
 """
-from flask import Flask, jsonify, request
+import json
+import logging
+from flask import Flask, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
 from src.care_gap_data_loader import load_all
 from src.care_gap_agents import CareGapAgentSystem
@@ -11,7 +13,6 @@ from src.care_gap_neo4j import (
     get_member_claims_cpt_codes, check_member_exclusions
 )
 from src.neo4j_connection import get_knowledge_graph
-import logging
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
@@ -492,6 +493,117 @@ def get_plans():
         return jsonify({"plans": plans})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/care-gaps/validate/<member_id>/stream", methods=["GET"])
+def validate_member_stream(member_id):
+    """
+    SSE endpoint — streams per-agent results as each of the 6 agents finishes.
+    Frontend connects via EventSource; each event carries a JSON payload.
+
+    Event types: metadata | agent_start | agent_done | complete | error
+    """
+    def generate():
+        try:
+            for event_type, data in get_agents().validate_and_suggest_stream(member_id):
+                yield f"data: {json.dumps({'type': event_type, 'payload': data})}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'payload': {'message': str(exc)}})}\n\n"
+
+    response = Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+    )
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
+@app.route("/api/v1/chat/member/<member_id>", methods=["POST"])
+def chat_with_member(member_id):
+    """
+    Conversational AI assistant that knows the specific member's data.
+    Care managers can ask questions; the assistant answers using member context
+    fetched fresh from Neo4j on every request.
+
+    Body: { "message": str, "history": [{"role": "user"|"assistant", "content": str}] }
+    """
+    try:
+        from openai import AzureOpenAI
+        from config.settings import settings as cfg
+
+        data = request.json or {}
+        message = str(data.get("message", "")).strip()
+        history = data.get("history", [])
+
+        if not message:
+            return jsonify({"error": "message is required"}), 400
+
+        profile = get_member_profile(member_id)
+        if not profile:
+            return jsonify({"error": f"Member {member_id} not found"}), 404
+
+        gaps = get_member_open_gaps(member_id)
+        claims = get_member_claims_cpt_codes(member_id)
+
+        gaps_text = (
+            ", ".join(f"{g['measure_id']} ({g['measure_name']})" for g in gaps)
+            or "None"
+        )
+        claims_text = "\n".join(
+            f"  - CPT {c.get('cpt_code','?')} | {c.get('service_date','?')} | ICD {c.get('icd_code','?')}"
+            for c in claims[:12]
+        ) or "  No claims on record"
+
+        system_msg = f"""You are an AI care manager assistant helping care managers at a health plan.
+You are currently helping with member {profile.get('name')} (ID: {member_id}).
+
+Member profile:
+  Name   : {profile.get('name')} | Age: {profile.get('age_str')} | Gender: {profile.get('gender')}
+  DOB    : {profile.get('dob')} | Plan: {profile.get('plan_id')}
+  PCP    : {profile.get('pcp_name')} ({profile.get('pcp_specialty')}) — {profile.get('pcp_network_status')}
+  Copay  : ${profile.get('copay')} | Preventive: $0 | Deductible: ${profile.get('deductible', 500)}
+
+Open care gaps ({len(gaps)}): {gaps_text}
+
+Recent claims:
+{claims_text}
+
+Guidelines:
+- Answer the care manager's questions about this specific member concisely and accurately.
+- Be helpful and actionable. If asked about outreach, suggest best approach given the gaps.
+- If asked for clinical guidance, provide evidence-based HEDIS-aligned information.
+- Keep responses under 200 words unless the care manager asks for detail.
+- Do not refuse clinical questions — you are assisting a licensed care manager."""
+
+        client = AzureOpenAI(
+            azure_endpoint=cfg.endpoint,
+            api_key=cfg.openai_api_key,
+            api_version=cfg.azure_openai_api_version,
+        )
+
+        messages = [{"role": "system", "content": system_msg}]
+        # Include up to last 10 turns of conversation history
+        for h in history[-10:]:
+            if h.get("role") in ("user", "assistant") and h.get("content"):
+                messages.append({"role": h["role"], "content": h["content"]})
+        messages.append({"role": "user", "content": message})
+
+        completion = client.chat.completions.create(
+            model=cfg.openai_model,
+            messages=messages,
+            max_tokens=600,
+            temperature=0.7,
+        )
+
+        reply = completion.choices[0].message.content
+        return jsonify({"reply": reply, "member_id": member_id})
+
+    except Exception as exc:
+        logger.exception("chat_with_member error")
+        return jsonify({"error": str(exc)}), 500
 
 
 if __name__ == "__main__":

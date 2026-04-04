@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HEDIS Care Gap Analysis — Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070b14;
+    --surface: #0d1424;
+    --surface2: #111c30;
+    --border: #1e3050;
+    --accent-blue: #2d8cf0;
+    --accent-cyan: #00d4ff;
+    --accent-green: #00e5a0;
+    --accent-purple: #a855f7;
+    --accent-orange: #ff7b2c;
+    --accent-pink: #ff4d8d;
+    --accent-yellow: #ffd166;
+    --text: #e8f0fe;
+    --text-dim: #7a9cc4;
+    --glow-blue: rgba(45,140,240,0.15);
+    --glow-green: rgba(0,229,160,0.12);
+    --glow-purple: rgba(168,85,247,0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Syne', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(45,140,240,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(45,140,240,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+
+  .header .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(45,140,240,0.1);
+    border: 1px solid rgba(45,140,240,0.3);
+    border-radius: 100px;
+    padding: 6px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent-cyan);
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+  }
+
+  .header .badge::before {
+    content: '';
+    width: 7px; height: 7px;
+    background: var(--accent-cyan);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  .header h1 {
+    font-size: clamp(26px, 4vw, 44px);
+    font-weight: 800;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #e8f0fe 0%, var(--accent-cyan) 50%, var(--accent-blue) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+  }
+
+  .header p {
+    font-size: 15px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Layer labels */
+  .layer-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 4px 14px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 16px;
+  }
+
+  /* ====== ARCHITECTURE LAYERS ====== */
+  .arch {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Flow arrows between layers */
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 4px 0;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+
+  .flow-arrow::before, .flow-arrow::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+
+  .arrow-down {
+    font-size: 20px;
+    color: var(--accent-blue);
+    animation: bounce 2s infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(4px); }
+  }
+
+  /* ====== LAYER 1 — INPUT ====== */
+  .layer-input {
+    background: linear-gradient(135deg, rgba(255,123,44,0.08), rgba(255,123,44,0.03));
+    border: 1px solid rgba(255,123,44,0.25);
+    border-radius: 20px;
+    padding: 28px 32px;
+  }
+
+  .layer-input .layer-label {
+    background: rgba(255,123,44,0.15);
+    color: var(--accent-orange);
+    border: 1px solid rgba(255,123,44,0.3);
+  }
+
+  .input-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .input-card {
+    background: rgba(255,123,44,0.06);
+    border: 1px solid rgba(255,123,44,0.2);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    transition: all 0.3s ease;
+  }
+
+  .input-card:hover {
+    background: rgba(255,123,44,0.12);
+    transform: translateY(-2px);
+    border-color: rgba(255,123,44,0.4);
+  }
+
+  .input-card .icon { font-size: 24px; margin-bottom: 8px; }
+  .input-card .name { font-size: 12px; font-weight: 700; color: var(--accent-orange); }
+  .input-card .desc { font-size: 10px; color: var(--text-dim); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+
+  /* ====== LAYER 2 — AUTOGEN AGENTS ====== */
+  .layer-agents {
+    background: linear-gradient(135deg, rgba(168,85,247,0.08), rgba(168,85,247,0.03));
+    border: 1px solid rgba(168,85,247,0.3);
+    border-radius: 20px;
+    padding: 28px 32px;
+  }
+
+  .layer-agents .layer-label {
+    background: rgba(168,85,247,0.15);
+    color: var(--accent-purple);
+    border: 1px solid rgba(168,85,247,0.3);
+  }
+
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+  }
+
+  .agent-card {
+    background: rgba(168,85,247,0.06);
+    border: 1px solid rgba(168,85,247,0.2);
+    border-radius: 14px;
+    padding: 18px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-purple), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .agent-card:hover::before { opacity: 1; }
+
+  .agent-card:hover {
+    background: rgba(168,85,247,0.12);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 30px rgba(168,85,247,0.15);
+  }
+
+  .agent-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .agent-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: rgba(168,85,247,0.2);
+    border: 1px solid rgba(168,85,247,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .agent-name { font-size: 13px; font-weight: 700; color: var(--accent-purple); }
+  .agent-role { font-size: 10px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+
+  .agent-tasks { list-style: none; }
+  .agent-tasks li {
+    font-size: 10px;
+    color: var(--text-dim);
+    padding: 3px 0;
+    padding-left: 14px;
+    position: relative;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .agent-tasks li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--accent-purple);
+    opacity: 0.6;
+  }
+
+  /* Agent orchestrator */
+  .orchestrator {
+    background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(45,140,240,0.1));
+    border: 1px solid rgba(168,85,247,0.4);
+    border-radius: 14px;
+    padding: 18px 24px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .orchestrator-icon {
+    width: 48px; height: 48px;
+    border-radius: 14px;
+    background: rgba(168,85,247,0.25);
+    border: 2px solid rgba(168,85,247,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+
+  .orchestrator-title { font-size: 15px; font-weight: 700; color: var(--accent-purple); }
+  .orchestrator-desc { font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; margin-top: 4px; }
+
+  /* ====== LAYER 3 — NEO4J KNOWLEDGE GRAPH ====== */
+  .layer-neo4j {
+    background: linear-gradient(135deg, rgba(0,212,255,0.07), rgba(0,229,160,0.04));
+    border: 1px solid rgba(0,212,255,0.25);
+    border-radius: 20px;
+    padding: 28px 32px;
+  }
+
+  .layer-neo4j .layer-label {
+    background: rgba(0,212,255,0.12);
+    color: var(--accent-cyan);
+    border: 1px solid rgba(0,212,255,0.3);
+  }
+
+  .neo4j-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 768px) {
+    .neo4j-inner { grid-template-columns: 1fr; }
+  }
+
+  .graph-section {
+    background: rgba(0,212,255,0.04);
+    border: 1px solid rgba(0,212,255,0.15);
+    border-radius: 14px;
+    padding: 20px;
+  }
+
+  .graph-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .graph-section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(0,212,255,0.2);
+  }
+
+  /* Node chips */
+  .nodes-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .node-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    border: 1px solid;
+    transition: all 0.2s;
+  }
+
+  .node-chip:hover { transform: scale(1.05); }
+
+  .node-chip.blue { background: rgba(45,140,240,0.12); border-color: rgba(45,140,240,0.4); color: #7bb8f8; }
+  .node-chip.cyan { background: rgba(0,212,255,0.1); border-color: rgba(0,212,255,0.35); color: var(--accent-cyan); }
+  .node-chip.green { background: rgba(0,229,160,0.1); border-color: rgba(0,229,160,0.35); color: var(--accent-green); }
+  .node-chip.purple { background: rgba(168,85,247,0.1); border-color: rgba(168,85,247,0.35); color: #c084fc; }
+  .node-chip.orange { background: rgba(255,123,44,0.1); border-color: rgba(255,123,44,0.35); color: var(--accent-orange); }
+  .node-chip.pink { background: rgba(255,77,141,0.1); border-color: rgba(255,77,141,0.35); color: var(--accent-pink); }
+  .node-chip.yellow { background: rgba(255,209,102,0.1); border-color: rgba(255,209,102,0.35); color: var(--accent-yellow); }
+
+  /* Relationships */
+  .rel-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .rel-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .rel-item .from { color: #7bb8f8; }
+  .rel-item .arrow-rel {
+    color: var(--accent-cyan);
+    font-weight: 700;
+    white-space: nowrap;
+    font-size: 9px;
+  }
+  .rel-item .to { color: var(--accent-green); }
+
+  /* ====== LAYER 4 — RULE ENGINE ====== */
+  .layer-rules {
+    background: linear-gradient(135deg, rgba(0,229,160,0.07), rgba(0,229,160,0.02));
+    border: 1px solid rgba(0,229,160,0.25);
+    border-radius: 20px;
+    padding: 28px 32px;
+  }
+
+  .layer-rules .layer-label {
+    background: rgba(0,229,160,0.1);
+    color: var(--accent-green);
+    border: 1px solid rgba(0,229,160,0.3);
+  }
+
+  .rules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .rule-card {
+    background: rgba(0,229,160,0.05);
+    border: 1px solid rgba(0,229,160,0.15);
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.3s;
+  }
+
+  .rule-card:hover {
+    background: rgba(0,229,160,0.1);
+    border-color: rgba(0,229,160,0.35);
+    transform: translateY(-2px);
+  }
+
+  .rule-card .rule-icon { font-size: 20px; margin-bottom: 8px; }
+  .rule-card .rule-name { font-size: 12px; font-weight: 700; color: var(--accent-green); margin-bottom: 6px; }
+  .rule-card .rule-example {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    background: rgba(0,229,160,0.05);
+    border: 1px solid rgba(0,229,160,0.1);
+    border-radius: 6px;
+    padding: 6px;
+    line-height: 1.6;
+  }
+
+  /* ====== LAYER 5 — OUTPUT ====== */
+  .layer-output {
+    background: linear-gradient(135deg, rgba(255,209,102,0.07), rgba(255,77,141,0.04));
+    border: 1px solid rgba(255,209,102,0.25);
+    border-radius: 20px;
+    padding: 28px 32px;
+  }
+
+  .layer-output .layer-label {
+    background: rgba(255,209,102,0.12);
+    color: var(--accent-yellow);
+    border: 1px solid rgba(255,209,102,0.3);
+  }
+
+  .output-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+  }
+
+  .output-card {
+    background: rgba(255,209,102,0.05);
+    border: 1px solid rgba(255,209,102,0.15);
+    border-radius: 14px;
+    padding: 18px;
+    transition: all 0.3s;
+  }
+
+  .output-card:hover {
+    background: rgba(255,209,102,0.1);
+    border-color: rgba(255,209,102,0.35);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(255,209,102,0.08);
+  }
+
+  .output-card .out-icon { font-size: 24px; margin-bottom: 10px; }
+  .output-card .out-name { font-size: 13px; font-weight: 700; color: var(--accent-yellow); margin-bottom: 6px; }
+  .output-card .out-desc { font-size: 10px; color: var(--text-dim); line-height: 1.6; font-family: 'JetBrains Mono', monospace; }
+
+  /* ====== FLOW DIAGRAM IN CENTER ====== */
+  .flow-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px 32px;
+    margin-top: 8px;
+  }
+
+  .flow-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    text-align: center;
+  }
+
+  .flow-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 110px;
+  }
+
+  .flow-step-bubble {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    border: 2px solid;
+    position: relative;
+  }
+
+  .flow-step-num {
+    position: absolute;
+    top: -6px; right: -6px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+  }
+
+  .flow-step-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.3;
+    max-width: 90px;
+  }
+
+  .flow-connector {
+    width: 40px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+    margin-bottom: 28px;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .flow-connector::after {
+    content: '▶';
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent-cyan);
+    font-size: 10px;
+  }
+
+  .step-s1 .flow-step-bubble { background: rgba(255,123,44,0.15); border-color: rgba(255,123,44,0.5); }
+  .step-s2 .flow-step-bubble { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.5); }
+  .step-s3 .flow-step-bubble { background: rgba(0,212,255,0.15); border-color: rgba(0,212,255,0.5); }
+  .step-s4 .flow-step-bubble { background: rgba(0,229,160,0.15); border-color: rgba(0,229,160,0.5); }
+  .step-s5 .flow-step-bubble { background: rgba(255,209,102,0.15); border-color: rgba(255,209,102,0.5); }
+  .step-s6 .flow-step-bubble { background: rgba(255,77,141,0.15); border-color: rgba(255,77,141,0.5); }
+
+  .step-s1 .flow-step-label { color: var(--accent-orange); }
+  .step-s2 .flow-step-label { color: var(--accent-purple); }
+  .step-s3 .flow-step-label { color: var(--accent-cyan); }
+  .step-s4 .flow-step-label { color: var(--accent-green); }
+  .step-s5 .flow-step-label { color: var(--accent-yellow); }
+  .step-s6 .flow-step-label { color: var(--accent-pink); }
+
+  /* Tech stack pills */
+  .tech-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .tech-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 100px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    transition: all 0.2s;
+  }
+
+  .tech-pill:hover {
+    border-color: var(--accent-blue);
+    color: var(--text);
+    transform: translateY(-2px);
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 8px;
+    padding: 16px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    justify-content: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+
+  @media (max-width: 600px) {
+    .flow-steps { flex-direction: column; }
+    .flow-connector { width: 2px; height: 30px; margin-bottom: 0; margin-right: 0; }
+    .flow-connector::after { content: '▼'; right: 50%; top: auto; bottom: -10px; transform: translateX(50%); }
+    .agents-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="badge">HEDIS CARE GAP ANALYSIS SYSTEM</div>
+    <h1>Knowledge Graph + AutoGen Agent<br>Architecture</h1>
+    <p>Neo4j AuraDB · AutoGen Multi-Agent · Rule Engine · HEDIS Measures</p>
+  </div>
+
+  <div class="arch">
+
+    <!-- LAYER 1: INPUT -->
+    <div class="layer-input">
+      <div class="layer-label">⬆ LAYER 1 — DATA INPUT SOURCES</div>
+      <div class="input-grid">
+        <div class="input-card">
+          <div class="icon">🧑‍⚕️</div>
+          <div class="name">Patient Profile</div>
+          <div class="desc">DOB · Gender · Enrollment<br>Insurance · Demographics</div>
+        </div>
+        <div class="input-card">
+          <div class="icon">🏥</div>
+          <div class="name">Clinical Events</div>
+          <div class="desc">Diagnoses · Procedures<br>Labs · Medications</div>
+        </div>
+        <div class="input-card">
+          <div class="icon">📋</div>
+          <div class="name">HEDIS Measures</div>
+          <div class="desc">80+ measures · Guidelines<br>Annual spec updates</div>
+        </div>
+        <div class="input-card">
+          <div class="icon">🔢</div>
+          <div class="name">Clinical Codes</div>
+          <div class="desc">ICD-10 · CPT · NDC<br>LOINC · SNOMED</div>
+        </div>
+        <div class="input-card">
+          <div class="icon">⛔</div>
+          <div class="name">Exclusion Rules</div>
+          <div class="desc">Mastectomy · Hospice<br>Gender · Age limits</div>
+        </div>
+        <div class="input-card">
+          <div class="icon">📅</div>
+          <div class="name">Measurement Period</div>
+          <div class="desc">Lookback windows<br>Frequency rules</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow"><span class="arrow-down">↓</span> Patient data + HEDIS rules ingested</div>
+
+    <!-- LAYER 2: AUTOGEN AGENTS -->
+    <div class="layer-agents">
+      <div class="layer-label">🤖 LAYER 2 — AUTOGEN MULTI-AGENT SYSTEM</div>
+
+      <!-- Orchestrator -->
+      <div class="orchestrator">
+        <div class="orchestrator-icon">🧠</div>
+        <div>
+          <div class="orchestrator-title">Orchestrator Agent (GroupChat Manager)</div>
+          <div class="orchestrator-desc">Receives patient input → Routes tasks to specialist agents → Collects results → Produces final care gap report</div>
+        </div>
+      </div>
+
+      <div class="agents-grid">
+
+        <div class="agent-card">
+          <div class="agent-header">
+            <div class="agent-icon">🔍</div>
+            <div>
+              <div class="agent-name">Patient Analyst Agent</div>
+              <div class="agent-role">PROFILE_ANALYZER</div>
+            </div>
+          </div>
+          <ul class="agent-tasks">
+            <li>Extract age, gender, enrollment</li>
+            <li>Identify active diagnoses</li>
+            <li>Query Neo4j patient nodes</li>
+            <li>Determine eligible measures</li>
+          </ul>
+        </div>
+
+        <div class="agent-card">
+          <div class="agent-header">
+            <div class="agent-icon">📊</div>
+            <div>
+              <div class="agent-name">HEDIS Measure Agent</div>
+              <div class="agent-role">MEASURE_EVALUATOR</div>
+            </div>
+          </div>
+          <ul class="agent-tasks">
+            <li>Fetch measure rules from graph</li>
+            <li>Check measurement period</li>
+            <li>Validate required CPT/LOINC</li>
+            <li>Apply frequency rules</li>
+          </ul>
+        </div>
+
+        <div class="agent-card">
+          <div class="agent-header">
+            <div class="agent-icon">⛔</div>
+            <div>
+              <div class="agent-name">Exclusion Agent</div>
+              <div class="agent-role">EXCLUSION_CHECKER</div>
+            </div>
+          </div>
+          <ul class="agent-tasks">
+            <li>Check mastectomy / hospice</li>
+            <li>Validate gender-based rules</li>
+            <li>Check bilateral procedure codes</li>
+            <li>Flag patients to exclude</li>
+          </ul>
+        </div>
+
+        <div class="agent-card">
+          <div class="agent-header">
+            <div class="agent-icon">🔬</div>
+            <div>
+              <div class="agent-name">Code Validator Agent</div>
+              <div class="agent-role">CODE_MAPPER</div>
+            </div>
+          </div>
+          <ul class="agent-tasks">
+            <li>Resolve ICD → CPT mappings</li>
+            <li>Validate code combinations</li>
+            <li>Check code version (ICD-10 vs 11)</li>
+            <li>Cross-reference NDC/LOINC</li>
+          </ul>
+        </div>
+
+        <div class="agent-card">
+          <div class="agent-header">
+            <div class="agent-icon">🕳️</div>
+            <div>
+              <div class="agent-name">Care Gap Agent</div>
+              <div class="agent-role">GAP_DETECTOR</div>
+            </div>
+          </div>
+          <ul class="agent-tasks">
+            <li>Compare patient vs. measure</li>
+            <li>Identify missing procedures</li>
+            <li>Calculate gap severity/priority</li>
+            <li>Write gap nodes to Neo4j</li>
+          </ul>
+        </div>
+
+        <div class="agent-card">
+          <div class="agent-header">
+            <div class="agent-icon">💊</div>
+            <div>
+              <div class="agent-name">Recommendation Agent</div>
+              <div class="agent-role">SOLUTION_GENERATOR</div>
+            </div>
+          </div>
+          <ul class="agent-tasks">
+            <li>Generate CPT action codes</li>
+            <li>Suggest medications (NDC)</li>
+            <li>Build referral recommendations</li>
+            <li>Prioritize by clinical urgency</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="flow-arrow"><span class="arrow-down">↓</span> Agents query & write to knowledge graph</div>
+
+    <!-- LAYER 3: NEO4J -->
+    <div class="layer-neo4j">
+      <div class="layer-label">🗄️ LAYER 3 — NEO4J AURA DB — KNOWLEDGE GRAPH</div>
+      <div class="neo4j-inner">
+
+        <!-- Nodes -->
+        <div class="graph-section">
+          <div class="graph-section-title">Graph Nodes</div>
+          <div class="nodes-list">
+            <span class="node-chip blue">👤 Patient</span>
+            <span class="node-chip cyan">📋 Measure</span>
+            <span class="node-chip green">⚕️ CareGapRule</span>
+            <span class="node-chip orange">🔢 ICDCode</span>
+            <span class="node-chip purple">🔢 CPTCode</span>
+            <span class="node-chip pink">🔢 NDCCode</span>
+            <span class="node-chip yellow">🔢 LOINCCode</span>
+            <span class="node-chip blue">🧪 LabResult</span>
+            <span class="node-chip cyan">💉 Procedure</span>
+            <span class="node-chip green">🏥 Diagnosis</span>
+            <span class="node-chip orange">💊 Medication</span>
+            <span class="node-chip purple">⛔ ExclusionCondition</span>
+            <span class="node-chip pink">🕳️ CareGap</span>
+            <span class="node-chip yellow">✅ Recommendation</span>
+          </div>
+        </div>
+
+        <!-- Relationships -->
+        <div class="graph-section">
+          <div class="graph-section-title">Key Relationships</div>
+          <div class="rel-list">
+            <div class="rel-item">
+              <span class="from">(Patient)</span>
+              <span class="arrow-rel">-[:HAS_DIAGNOSIS]→</span>
+              <span class="to">(Diagnosis)</span>
+            </div>
+            <div class="rel-item">
+              <span class="from">(Patient)</span>
+              <span class="arrow-rel">-[:HAD_PROCEDURE]→</span>
+              <span class="to">(Procedure)</span>
+            </div>
+            <div class="rel-item">
+              <span class="from">(Patient)</span>
+              <span class="arrow-rel">-[:HAS_CARE_GAP]→</span>
+              <span class="to">(CareGap)</span>
+            </div>
+            <div class="rel-item">
+              <span class="from">(Measure)</span>
+              <span class="arrow-rel">-[:HAS_RULE]→</span>
+              <span class="to">(CareGapRule)</span>
+            </div>
+            <div class="rel-item">
+              <span class="from">(CareGapRule)</span>
+              <span class="arrow-rel">-[:REQUIRES_CODE]→</span>
+              <span class="to">(CPTCode)</span>
+            </div>
+            <div class="rel-item">
+              <span class="from">(CareGapRule)</span>
+              <span class="arrow-rel">-[:EXCLUDED_IF]→</span>
+              <span class="to">(ExclusionCondition)</span>
+            </div>
+            <div class="rel-item">
+              <span class="from">(ExclusionCondition)</span>
+              <span class="arrow-rel">-[:HAS_CODE]→</span>
+              <span class="to">(ICDCode/CPTCode)</span>
+            </div>
+            <div class="rel-item">
+              <span class="from">(CareGap)</span>
+              <span class="arrow-rel">-[:FOR_MEASURE]→</span>
+              <span class="to">(Measure)</span>
+            </div>
+            <div class="rel-item">
+              <span class="from">(CareGap)</span>
+              <span class="arrow-rel">-[:RESOLVED_BY]→</span>
+              <span class="to">(Recommendation)</span>
+            </div>
+            <div class="rel-item">
+              <span class="from">(Diagnosis)</span>
+              <span class="arrow-rel">-[:HAS_CODE]→</span>
+              <span class="to">(ICDCode)</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="flow-arrow"><span class="arrow-down">↓</span> Rule engine evaluates eligibility & gaps</div>
+
+    <!-- LAYER 4: RULE ENGINE -->
+    <div class="layer-rules">
+      <div class="layer-label">⚙️ LAYER 4 — CYPHER RULE ENGINE (Inside Neo4j)</div>
+      <div class="rules-grid">
+        <div class="rule-card">
+          <div class="rule-icon">🎂</div>
+          <div class="rule-name">Age Eligibility</div>
+          <div class="rule-example">min_age: 50, max_age: 74<br>Breast Cancer Screening</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-icon">⚧</div>
+          <div class="rule-name">Gender Rules</div>
+          <div class="rule-example">applicable_gender: F<br>Cervical Cancer · BCS</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-icon">📅</div>
+          <div class="rule-name">Measurement Window</div>
+          <div class="rule-example">lookback: 24 months<br>Mammogram · Colonoscopy</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-icon">⛔</div>
+          <div class="rule-name">Exclusion Chains</div>
+          <div class="rule-example">Z90.13 → skip BCS<br>Mastectomy · Hospice</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-icon">🔁</div>
+          <div class="rule-name">Frequency Check</div>
+          <div class="rule-example">HbA1c: every 12 months<br>Colonoscopy: every 10 yrs</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-icon">🔬</div>
+          <div class="rule-name">Lab Value Rules</div>
+          <div class="rule-example">HbA1c &lt; 9% = pass<br>BP &lt; 140/90 = pass</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-icon">🔀</div>
+          <div class="rule-name">OR / AND Logic</div>
+          <div class="rule-example">Any of CPT {77066,77067}<br>All of: test + followup</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-icon">💊</div>
+          <div class="rule-name">Medication Rules</div>
+          <div class="rule-example">Statin therapy required<br>for cardiovascular measure</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow"><span class="arrow-down">↓</span> Gaps identified → recommendations generated</div>
+
+    <!-- LAYER 5: OUTPUT -->
+    <div class="layer-output">
+      <div class="layer-label">📤 LAYER 5 — OUTPUT & ACTIONS</div>
+      <div class="output-grid">
+        <div class="output-card">
+          <div class="out-icon">🕳️</div>
+          <div class="out-name">Care Gap Report</div>
+          <div class="out-desc">List of all missing measures<br>with priority scores &<br>clinical urgency ranking</div>
+        </div>
+        <div class="output-card">
+          <div class="out-icon">💊</div>
+          <div class="out-name">Recommendations</div>
+          <div class="out-desc">Exact CPT codes to order<br>Medications (NDC)<br>Referral suggestions</div>
+        </div>
+        <div class="output-card">
+          <div class="out-icon">✅</div>
+          <div class="out-name">Compliance Score</div>
+          <div class="out-desc">HEDIS star rating impact<br>% measures completed<br>vs. total applicable</div>
+        </div>
+        <div class="output-card">
+          <div class="out-icon">📊</div>
+          <div class="out-name">Population Dashboard</div>
+          <div class="out-desc">Aggregate gap trends<br>across all patients<br>by measure / cohort</div>
+        </div>
+        <div class="output-card">
+          <div class="out-icon">🔔</div>
+          <div class="out-name">Alerts & Triggers</div>
+          <div class="out-desc">High-priority gap alerts<br>for care coordinators<br>& clinical staff</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FLOW DIAGRAM -->
+    <div class="flow-section">
+      <div class="flow-title">End-to-End Request Flow</div>
+      <div class="flow-steps">
+        <div class="flow-step step-s1">
+          <div class="flow-step-bubble">🧑‍⚕️<span class="flow-step-num">1</span></div>
+          <div class="flow-step-label">Patient Input Received</div>
+        </div>
+        <div class="flow-connector"></div>
+        <div class="flow-step step-s2">
+          <div class="flow-step-bubble">🧠<span class="flow-step-num">2</span></div>
+          <div class="flow-step-label">Orchestrator Routes Task</div>
+        </div>
+        <div class="flow-connector"></div>
+        <div class="flow-step step-s3">
+          <div class="flow-step-bubble">🔍<span class="flow-step-num">3</span></div>
+          <div class="flow-step-label">Neo4j Graph Queried</div>
+        </div>
+        <div class="flow-connector"></div>
+        <div class="flow-step step-s4">
+          <div class="flow-step-bubble">⛔<span class="flow-step-num">4</span></div>
+          <div class="flow-step-label">Exclusions Checked First</div>
+        </div>
+        <div class="flow-connector"></div>
+        <div class="flow-step step-s5">
+          <div class="flow-step-bubble">🕳️<span class="flow-step-num">5</span></div>
+          <div class="flow-step-label">Gaps Detected & Scored</div>
+        </div>
+        <div class="flow-connector"></div>
+        <div class="flow-step step-s6">
+          <div class="flow-step-bubble">📋<span class="flow-step-num">6</span></div>
+          <div class="flow-step-label">Report + Recommendations</div>
+        </div>
+      </div>
+
+      <!-- Tech Stack -->
+      <div class="tech-bar">
+        <span class="tech-pill">🗄️ Neo4j AuraDB</span>
+        <span class="tech-pill">🤖 AutoGen GroupChat</span>
+        <span class="tech-pill">🔷 Cypher Queries</span>
+        <span class="tech-pill">🐍 Python neo4j Driver</span>
+        <span class="tech-pill">📦 APOC Plugin</span>
+        <span class="tech-pill">🧠 OpenAI / Claude LLM</span>
+        <span class="tech-pill">🔢 ICD-10 · CPT · NDC · LOINC</span>
+        <span class="tech-pill">📋 HEDIS Spec 2024/25</span>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-orange)"></span>Input Layer</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-purple)"></span>AutoGen Agents</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-cyan)"></span>Neo4j Knowledge Graph</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-green)"></span>Rule Engine</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--accent-yellow)"></span>Output Layer</div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

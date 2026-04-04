@@ -12,7 +12,7 @@ from datetime import datetime
 import logging
 from src.care_gap_neo4j import (
     setup_constraints,
-    merge_quality_measure, merge_quality_measure_comprehensive, merge_benefit_plan, merge_provider,
+    merge_quality_measure_comprehensive, merge_benefit_plan, merge_provider,
     merge_member, merge_enrollment, merge_claim,
     merge_care_gap, merge_outreach,
 )
@@ -20,89 +20,6 @@ from src.hedis_golden_reference import get_all_measures
 
 logger = logging.getLogger(__name__)
 EXCEL_PATH = "src/Scenario 2_care_gap_multi_measure_dataset.xlsx"
-
-# ── Golden Reference — hardcoded for all 4 HEDIS measures ─────────────────────
-# Excel sheet has messy merged cells; these are the authoritative values.
-GOLDEN_REFERENCE = [
-    {
-        "measure_id": "BCS",
-        "name": "Breast Cancer Screening",
-        "age_range": "42-74 Female",
-        "lookback_months": 24,
-        "proactive_lookback_months": 18,
-        "cpt_codes": "77062,77061,77066,77065,77063,77067,G0202",
-        "description": (
-            "Breast Cancer Screening (BCS) — Annual bilateral screening mammogram for women aged 42-74. "
-            "To close this gap, the member needs a screening mammogram. "
-            "Primary code: CPT 77067 (bilateral mammogram, 2-views + CAD). "
-            "If 3D tomosynthesis is added: bill CPT 77067 + 77063 together. "
-            "Medicare legacy code: G0202. "
-            "Refer to an In-Network Radiology or Imaging Center. "
-            "Typical workflow: Schedule routine annual mammogram → provider obtains 2 X-ray views per breast "
-            "→ CAD analysis → if 3D imaging added, add CPT 77063. "
-            "Outreach: Call member, confirm last mammogram date, schedule with radiology if overdue."
-        ),
-    },
-    {
-        "measure_id": "COL",
-        "name": "Colorectal Cancer Screening",
-        "age_range": "45-75",
-        "lookback_months": 120,
-        "proactive_lookback_months": 96,
-        "cpt_codes": (
-            "44388,44389,44390,44391,44392,44394,44401,44402,44403,44404,44405,44406,44407,44408,"
-            "45378,45379,45380,45381,45382,45384,45385,45386,45388,45389,45390,45391,45392,45393,45398,"
-            "G0105,G0121,FOBT,FIT"
-        ),
-        "description": (
-            "Colorectal Cancer Screening (COL) — Screening for members aged 45-75 (any gender). "
-            "Lookback window is 10 years (120 months) for colonoscopy. "
-            "To close this gap, the member needs one of: "
-            "Colonoscopy (CPT 45378-45398 series) — valid for 10 years; "
-            "Flexible sigmoidoscopy (CPT 44388-44408 series) — valid for 5 years; "
-            "FIT/FOBT stool test (HCPCS G0105, G0121) — valid for 1 year. "
-            "Refer to In-Network Gastroenterology or General Surgery. "
-            "Outreach: Ask member preference (colonoscopy vs stool test), "
-            "schedule with gastroenterologist or order lab kit for home stool test."
-        ),
-    },
-    {
-        "measure_id": "CCS",
-        "name": "Cervical Cancer Screening",
-        "age_range": "21-64 Female",
-        "lookback_months": 36,
-        "proactive_lookback_months": 30,
-        "cpt_codes": "88141,88142,88143,88147,88148,88150,88152,88153,88164,88165,88166,88167,88174,88175",
-        "description": (
-            "Cervical Cancer Screening (CCS) — Pap smear / HPV co-test for women aged 21-64. "
-            "Lookback window is 36 months (3 years). "
-            "To close this gap, the member needs a cervical cytology (Pap smear): "
-            "CPT 88141-88143, 88147-88148, 88150, 88152-88153, 88164-88167 (cytology interpretation); "
-            "or HPV co-test: CPT 88174-88175. "
-            "Refer to In-Network OB/GYN or Women's Health clinic. "
-            "Outreach: Confirm last Pap smear date, schedule with OB/GYN if overdue. "
-            "For members aged 30-64, HPV co-test (88174/88175) extends interval to 5 years if negative."
-        ),
-    },
-    {
-        "measure_id": "CDC-HbA1c",
-        "name": "HbA1c Testing (Diabetes Care)",
-        "age_range": "18-75",
-        "lookback_months": 12,
-        "proactive_lookback_months": 9,
-        "cpt_codes": "83036,83037",
-        "description": (
-            "HbA1c Testing — CDC Diabetes Care measure for members aged 18-75 with a Diabetes diagnosis (ICD: E11.x). "
-            "Lookback window is 12 months (annual test required). "
-            "To close this gap, the member needs an HbA1c lab test: "
-            "CPT 83036 (HbA1c with interpretation) or CPT 83037 (HbA1c point-of-care). "
-            "Refer to In-Network Laboratory or Endocrinology clinic. "
-            "Outreach: Confirm member has diabetes diagnosis, remind them annual HbA1c is required, "
-            "order lab requisition or schedule with endocrinologist. "
-            "Goal: HbA1c < 8% for good control; flag if result > 9% for urgent follow-up."
-        ),
-    },
-]
 
 
 def _read(sheet: str) -> pd.DataFrame:
@@ -212,6 +129,15 @@ def load_claims():
     logger.info(f"Loaded {len(df)} Claim nodes")
 
 
+# Map Excel legacy measure IDs → golden reference measure IDs
+_MEASURE_ID_MAP = {
+    "CDC-HbA1c": "GSD",   # Excel uses CDC-HbA1c; golden reference uses GSD
+    "CDC-EE":    "EED",
+    "CDC-KED":   "KED",
+    "CDC-BP":    "BPD",
+}
+
+
 def load_care_gaps():
     df = _read("CareGaps_Dashboard")
     for _, r in df.iterrows():
@@ -219,10 +145,12 @@ def load_care_gaps():
         gap_status = str(r.get("CareManagerID", "Open")).strip()
         is_open = gap_status.lower() == "open"
         closed_on = _parse_date(r.get("ClosedOn", "")) if not is_open else ""
+        raw_measure_id = str(r["MeasureID"]).strip()
+        measure_id = _MEASURE_ID_MAP.get(raw_measure_id, raw_measure_id)
         merge_care_gap(
             care_gap_id=str(r["CareGapID"]),
             member_id=str(r["MemberID"]),
-            measure_id=str(r["MeasureID"]),
+            measure_id=measure_id,
             gap_status=gap_status,
             is_open=is_open,
             created_on=_parse_date(r.get("CreatedOn", "")),
