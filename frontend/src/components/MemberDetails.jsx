@@ -61,6 +61,17 @@ function MemberDetails({ member, onBack }) {
   const [selectedGap, setSelectedGap]     = useState(null);
   const [showComparison, setShowComparison] = useState(false);
 
+  // Appointment booking state
+  const [appointmentDate, setAppointmentDate] = useState('');
+  const [appointmentTime, setAppointmentTime] = useState('09:00');
+  const [bookingLoading, setBookingLoading]   = useState(false);
+  const [bookingError, setBookingError]       = useState('');
+  // keyed by care_gap_id → { appointment_id, lab_number, lab_specialist, ... }
+  const [bookings, setBookings]               = useState({});
+  const [viewBooking, setViewBooking]         = useState(null); // booking object being viewed
+  const [completingGap, setCompletingGap]     = useState(false);
+  const [completedGaps, setCompletedGaps]     = useState(new Set()); // care_gap_ids closed this session
+
   useEffect(() => {
     if (member) fetchMemberDetails();
     return () => {
@@ -251,22 +262,73 @@ function MemberDetails({ member, onBack }) {
 
   const handleBookAppointment = (gap) => {
     setSelectedGap(gap);
+    setAppointmentDate('');
+    setAppointmentTime('09:00');
+    setBookingError('');
     setShowAppointmentModal(true);
   };
 
-  const confirmAppointment = async (appointmentDate) => {
+  const confirmAppointment = async () => {
+    if (!appointmentDate) { setBookingError('Please select a date.'); return; }
+    if (!appointmentTime) { setBookingError('Please select a time.'); return; }
+    setBookingLoading(true);
+    setBookingError('');
     try {
-      await axios.post(`${API_BASE}/appointments/book`, {
-        member_id: member.member_id,
-        measure_id: selectedGap.measure_id,
+      const res = await axios.post(`${API_BASE}/appointments/book`, {
+        member_id:        member.member_id,
+        measure_id:       selectedGap.measure_id,
+        measure_name:     selectedGap.measure_name,
         appointment_date: appointmentDate,
-        provider_id: details.profile.pcp_id,
+        appointment_time: appointmentTime,
+        provider_id:      details.profile.pcp_id || '',
+        care_gap_id:      selectedGap.care_gap_id,
       });
-      alert('Appointment booked successfully!');
-      setShowAppointmentModal(false);
-      setSelectedGap(null);
-    } catch (error) {
-      console.error('Error booking appointment:', error);
+      if (res.data.status === 'success') {
+        setBookings(prev => ({
+          ...prev,
+          [selectedGap.care_gap_id]: {
+            ...res.data,
+            measure_name:     selectedGap.measure_name,
+            care_gap_id:      selectedGap.care_gap_id,
+            member_name:      member.name,
+            plan_id:          details.profile.plan_id,
+            insurance_type:   details.profile.insurance_type || 'Commercial',
+            pcp_name:         details.profile.pcp_name,
+          },
+        }));
+        setShowAppointmentModal(false);
+        setSelectedGap(null);
+      } else {
+        setBookingError(res.data.error || 'Booking failed. Please try again.');
+      }
+    } catch (err) {
+      setBookingError(err.response?.data?.error || 'Network error. Please try again.');
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
+  const handleCompleteScreening = async (booking) => {
+    setCompletingGap(true);
+    try {
+      const res = await axios.post(
+        `${API_BASE}/appointments/${booking.appointment_id}/complete`,
+        { care_gap_id: booking.care_gap_id }
+      );
+      if (res.data.status === 'success') {
+        setViewBooking(prev => ({ ...prev, claim_id: res.data.claim_id, status: 'Completed' }));
+        setBookings(prev => ({
+          ...prev,
+          [booking.care_gap_id]: { ...prev[booking.care_gap_id], claim_id: res.data.claim_id, status: 'Completed' },
+        }));
+        setCompletedGaps(prev => new Set([...prev, booking.care_gap_id]));
+        // Refresh member details to reflect closed gap
+        await fetchMemberDetails();
+      }
+    } catch (err) {
+      console.error('Complete screening error:', err);
+    } finally {
+      setCompletingGap(false);
     }
   };
 
@@ -393,10 +455,14 @@ function MemberDetails({ member, onBack }) {
               </div>
             </div>
 
-            {details?.open_gaps && details.open_gaps.length > 0 && (
+            {details && (
               <div className="quick-gaps">
                 <div className="quick-gaps-header">
-                  <h3>Open Care Gaps — Action Required</h3>
+                  <h3>
+                    {details.open_gaps?.length > 0
+                      ? 'Open Care Gaps — Action Required'
+                      : 'Care Gap Analysis'}
+                  </h3>
                   <button
                     className="btn-ai-suggestions"
                     onClick={getAISuggestions}
@@ -518,22 +584,50 @@ function MemberDetails({ member, onBack }) {
                   </div>
                 )}
 
-                {details.open_gaps.map(gap => (
-                  <div key={gap.care_gap_id} className="quick-gap-card">
-                    <div className="gap-header">
-                      <h4>{gap.measure_name}</h4>
-                      <span className="gap-badge">{gap.measure_id}</span>
+                {/* Gap cards — only when gaps exist */}
+                {details.open_gaps?.length > 0 ? (
+                  details.open_gaps.map(gap => {
+                    const booking = bookings[gap.care_gap_id];
+                    const isClosed = completedGaps.has(gap.care_gap_id);
+                    return (
+                      <div key={gap.care_gap_id} className={`quick-gap-card ${isClosed ? 'quick-gap-card--closed' : ''}`}>
+                        <div className="gap-header">
+                          <h4>{gap.measure_name}</h4>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <span className="gap-badge">{gap.measure_id}</span>
+                            {isClosed && <span className="gap-badge gap-badge--closed">✓ Closed</span>}
+                            {booking && !isClosed && <span className="gap-badge gap-badge--booked">📅 Scheduled</span>}
+                          </div>
+                        </div>
+                        <p className="gap-description">{gap.resolution_guide}</p>
+                        <div className="gap-actions">
+                          {!booking ? (
+                            <button className="btn-primary" onClick={() => handleBookAppointment(gap)}>
+                              <Calendar size={16} />
+                              Book Appointment
+                            </button>
+                          ) : (
+                            <button className="btn-view-booking" onClick={() => setViewBooking(booking)}>
+                              <Calendar size={16} />
+                              View Booking
+                            </button>
+                          )}
+                          <button className="btn-secondary">View Guidelines</button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  !aiMetadata && !loadingAI && (
+                    <div className="compliant-notice">
+                      <span className="compliant-icon">✓</span>
+                      <div>
+                        <strong>Compliant with all quality measures</strong>
+                        <p>Run AI analysis to get a full compliance summary and preventive care recommendations.</p>
+                      </div>
                     </div>
-                    <p className="gap-description">{gap.resolution_guide}</p>
-                    <div className="gap-actions">
-                      <button className="btn-primary" onClick={() => handleBookAppointment(gap)}>
-                        <Calendar size={16} />
-                        Book Appointment
-                      </button>
-                      <button className="btn-secondary">View Guidelines</button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                )}
               </div>
             )}
           </div>
@@ -576,10 +670,17 @@ function MemberDetails({ member, onBack }) {
                       </div>
                     </div>
                     <div className="gap-detail-footer">
-                      <button className="btn-primary" onClick={() => handleBookAppointment(gap)}>
-                        <Calendar size={16} />
-                        Schedule Service
-                      </button>
+                      {!bookings[gap.care_gap_id] ? (
+                        <button className="btn-primary" onClick={() => handleBookAppointment(gap)}>
+                          <Calendar size={16} />
+                          Schedule Service
+                        </button>
+                      ) : (
+                        <button className="btn-view-booking" onClick={() => setViewBooking(bookings[gap.care_gap_id])}>
+                          <Calendar size={16} />
+                          View Booking
+                        </button>
+                      )}
                       <button className="btn-secondary" onClick={() => setChatOpen(true)}>
                         <Bot size={16} />
                         Ask AI Assistant
@@ -748,20 +849,154 @@ function MemberDetails({ member, onBack }) {
         </div>
       )}
 
-      {/* ── APPOINTMENT MODAL ─────────────────────────────────────────────── */}
-      {showAppointmentModal && (
+      {/* ── APPOINTMENT BOOKING MODAL ─────────────────────────────────────── */}
+      {showAppointmentModal && selectedGap && (
         <div className="modal-overlay">
-          <div className="modal-content">
-            <h3>Book Appointment</h3>
-            <p>Schedule {selectedGap?.measure_name} for {member.name}</p>
-            <input type="date" className="date-input" />
-            <div className="modal-actions">
-              <button className="btn-primary" onClick={() => confirmAppointment(new Date())}>
-                Confirm
+          <div className="appt-modal">
+            <div className="appt-modal-header">
+              <div>
+                <h3>Schedule Screening</h3>
+                <p className="appt-modal-sub">{selectedGap.measure_name} · {selectedGap.measure_id}</p>
+              </div>
+              <button className="appt-modal-close" onClick={() => { setShowAppointmentModal(false); setBookingError(''); }}>
+                <X size={18} />
               </button>
-              <button className="btn-secondary" onClick={() => setShowAppointmentModal(false)}>
+            </div>
+
+            <div className="appt-modal-body">
+              <div className="appt-member-row">
+                <span className="appt-avatar">{member.name.split(' ').map(n => n[0]).join('').slice(0,2)}</span>
+                <div>
+                  <strong>{member.name}</strong>
+                  <span className="appt-member-id"> · {member.member_id}</span>
+                </div>
+              </div>
+
+              <div className="appt-fields">
+                <div className="appt-field-group">
+                  <label><Calendar size={14} /> Appointment Date *</label>
+                  <input
+                    type="date"
+                    value={appointmentDate}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={e => setAppointmentDate(e.target.value)}
+                    className="appt-input"
+                  />
+                </div>
+                <div className="appt-field-group">
+                  <label>⏰ Appointment Time *</label>
+                  <select value={appointmentTime} onChange={e => setAppointmentTime(e.target.value)} className="appt-input">
+                    {["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30",
+                      "12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30"].map(t => {
+                      const [h, m] = t.split(':');
+                      const hr = parseInt(h);
+                      const label = `${hr > 12 ? hr-12 : hr}:${m} ${hr >= 12 ? 'PM' : 'AM'}`;
+                      return <option key={t} value={t}>{label}</option>;
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              <div className="appt-info-box">
+                <p className="appt-info-title">📧 Confirmation email will be sent to the member&apos;s registered email address with:</p>
+                <ul className="appt-info-list">
+                  <li>Lab number and specialist assignment</li>
+                  <li>Screening CPT &amp; ICD codes</li>
+                  <li>Pre-appointment instructions</li>
+                  <li>Insurance and plan information</li>
+                </ul>
+              </div>
+
+              {bookingError && <div className="appt-error">{bookingError}</div>}
+            </div>
+
+            <div className="appt-modal-footer">
+              <button className="btn-secondary" onClick={() => { setShowAppointmentModal(false); setBookingError(''); }}>
                 Cancel
               </button>
+              <button className="btn-primary appt-confirm-btn" onClick={confirmAppointment} disabled={bookingLoading}>
+                {bookingLoading ? (
+                  <><span className="appt-spinner" /> Booking &amp; Sending Email…</>
+                ) : (
+                  <><Calendar size={15} /> Confirm &amp; Send Invite</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── VIEW BOOKING MODAL ────────────────────────────────────────────── */}
+      {viewBooking && (
+        <div className="modal-overlay">
+          <div className="vb-modal">
+            <div className="vb-header">
+              <div>
+                <h3>Booking Details</h3>
+                <p className="vb-sub">{viewBooking.measure_name}</p>
+              </div>
+              <button className="appt-modal-close" onClick={() => setViewBooking(null)}><X size={18} /></button>
+            </div>
+
+            <div className="vb-body">
+              {/* Status banner */}
+              <div className={`vb-status-banner ${viewBooking.status === 'Completed' ? 'vb-status-done' : 'vb-status-scheduled'}`}>
+                {viewBooking.status === 'Completed'
+                  ? '✅ Screening Completed — Care Gap Closed'
+                  : '📅 Appointment Scheduled'}
+              </div>
+
+              <div className="vb-grid">
+                <div className="vb-section">
+                  <div className="vb-section-title">📅 Appointment</div>
+                  <div className="vb-row"><span>Date</span><strong>{viewBooking.appointment_date}</strong></div>
+                  <div className="vb-row"><span>Time</span><strong>{viewBooking.appointment_time}</strong></div>
+                  <div className="vb-row"><span>Appointment ID</span><code>{viewBooking.appointment_id}</code></div>
+                  <div className="vb-row"><span>Email Sent</span><strong>{viewBooking.email_sent ? `✓ ${viewBooking.member_email}` : 'No email on file'}</strong></div>
+                </div>
+
+                <div className="vb-section">
+                  <div className="vb-section-title">🏥 Lab &amp; Specialist</div>
+                  <div className="vb-row"><span>Lab Number</span><strong>{viewBooking.lab_number}</strong></div>
+                  <div className="vb-row"><span>Location</span><strong>{viewBooking.lab_location}</strong></div>
+                  <div className="vb-row"><span>Specialist</span><strong>{viewBooking.lab_specialist}</strong></div>
+                  <div className="vb-row"><span>Referring PCP</span><strong>{viewBooking.pcp_name || details?.profile?.pcp_name}</strong></div>
+                </div>
+
+                <div className="vb-section">
+                  <div className="vb-section-title">🩺 Screening Codes</div>
+                  <div className="vb-row"><span>Screening</span><strong>{viewBooking.measure_name}</strong></div>
+                  <div className="vb-row"><span>CPT Codes</span><code>{viewBooking.cpt_codes || '—'}</code></div>
+                  <div className="vb-row"><span>ICD-10 Codes</span><code>{viewBooking.icd_codes || '—'}</code></div>
+                </div>
+
+                <div className="vb-section">
+                  <div className="vb-section-title">💳 Insurance &amp; Claim</div>
+                  <div className="vb-row"><span>Plan ID</span><code>{viewBooking.plan_id || details?.profile?.plan_id}</code></div>
+                  <div className="vb-row"><span>Insurance Type</span><strong>{viewBooking.insurance_type || '—'}</strong></div>
+                  <div className="vb-row"><span>Member ID</span><code>{member.member_id}</code></div>
+                  {viewBooking.claim_id
+                    ? <div className="vb-row"><span>Claim ID</span><code className="vb-claim-id">{viewBooking.claim_id}</code></div>
+                    : <div className="vb-row vb-row-pending"><span>Claim ID</span><em>Generated after screening complete</em></div>
+                  }
+                </div>
+              </div>
+            </div>
+
+            <div className="vb-footer">
+              <button className="btn-secondary" onClick={() => setViewBooking(null)}>Close</button>
+              {viewBooking.status !== 'Completed' && !completedGaps.has(viewBooking.care_gap_id) && (
+                <button
+                  className="btn-complete-screening"
+                  onClick={() => handleCompleteScreening(viewBooking)}
+                  disabled={completingGap}
+                >
+                  {completingGap
+                    ? <><span className="appt-spinner" /> Processing…</>
+                    : <>✅ Mark Screening Complete &amp; Close Gap</>
+                  }
+                </button>
+              )}
             </div>
           </div>
         </div>

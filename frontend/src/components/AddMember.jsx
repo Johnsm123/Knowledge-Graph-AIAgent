@@ -1,74 +1,289 @@
 import { useState, useEffect } from 'react';
 import './AddMember.css';
 
+const API_BASE = 'http://localhost:5001/api/v1';
+
+const CHRONIC_OPTIONS = [
+  'Diabetes (Type 1)',
+  'Diabetes (Type 2)',
+  'Hypertension',
+  'Coronary Artery Disease (CAD)',
+  'Congestive Heart Failure (CHF)',
+  'COPD',
+  'Asthma',
+  'Chronic Kidney Disease (CKD)',
+  'End-Stage Renal Disease (ESRD)',
+  'Depression / Anxiety',
+  'Cancer (Active)',
+  'Hospice / Palliative Care',
+  'Pregnancy',
+];
+
+const COUNTRY_STATES = {
+  'United States': [
+    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
+    'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho',
+    'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana',
+    'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota',
+    'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada',
+    'New Hampshire', 'New Jersey', 'New Mexico', 'New York',
+    'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon',
+    'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
+    'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington',
+    'West Virginia', 'Wisconsin', 'Wyoming', 'District of Columbia',
+    'Puerto Rico', 'Guam', 'U.S. Virgin Islands', 'American Samoa',
+    'Northern Mariana Islands',
+  ],
+  'India': [
+    // 28 States
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan',
+    'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh',
+    'Uttarakhand', 'West Bengal',
+    // 8 Union Territories
+    'Andaman and Nicobar Islands', 'Chandigarh',
+    'Dadra and Nagar Haveli and Daman and Diu', 'Delhi (NCT)',
+    'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+  ],
+  'Canada': [
+    'Alberta', 'British Columbia', 'Manitoba', 'New Brunswick',
+    'Newfoundland and Labrador', 'Northwest Territories', 'Nova Scotia',
+    'Nunavut', 'Ontario', 'Prince Edward Island', 'Quebec', 'Saskatchewan',
+    'Yukon',
+  ],
+  'United Kingdom': [
+    'England', 'Northern Ireland', 'Scotland', 'Wales',
+  ],
+  'Australia': [
+    'Australian Capital Territory', 'New South Wales', 'Northern Territory',
+    'Queensland', 'South Australia', 'Tasmania', 'Victoria', 'Western Australia',
+  ],
+  'Mexico': [
+    'Aguascalientes', 'Baja California', 'Baja California Sur', 'Campeche',
+    'Chiapas', 'Chihuahua', 'Coahuila', 'Colima', 'Durango', 'Guanajuato',
+    'Guerrero', 'Hidalgo', 'Jalisco', 'Mexico City', 'Mexico State',
+    'Michoacán', 'Morelos', 'Nayarit', 'Nuevo León', 'Oaxaca', 'Puebla',
+    'Querétaro', 'Quintana Roo', 'San Luis Potosí', 'Sinaloa', 'Sonora',
+    'Tabasco', 'Tamaulipas', 'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas',
+  ],
+  'Philippines': [
+    'Abra', 'Agusan del Norte', 'Agusan del Sur', 'Aklan', 'Albay',
+    'Antique', 'Apayao', 'Aurora', 'Basilan', 'Bataan', 'Batanes',
+    'Batangas', 'Benguet', 'Biliran', 'Bohol', 'Bukidnon', 'Bulacan',
+    'Cagayan', 'Camarines Norte', 'Camarines Sur', 'Camiguin', 'Capiz',
+    'Catanduanes', 'Cavite', 'Cebu', 'Cotabato', 'Davao de Oro',
+    'Davao del Norte', 'Davao del Sur', 'Davao Occidental', 'Davao Oriental',
+    'Dinagat Islands', 'Eastern Samar', 'Guimaras', 'Ifugao', 'Ilocos Norte',
+    'Ilocos Sur', 'Iloilo', 'Isabela', 'Kalinga', 'La Union', 'Laguna',
+    'Lanao del Norte', 'Lanao del Sur', 'Leyte', 'Maguindanao del Norte',
+    'Maguindanao del Sur', 'Marinduque', 'Masbate', 'Metro Manila',
+    'Misamis Occidental', 'Misamis Oriental', 'Mountain Province',
+    'Negros Occidental', 'Negros Oriental', 'Northern Samar', 'Nueva Ecija',
+    'Nueva Vizcaya', 'Occidental Mindoro', 'Oriental Mindoro', 'Palawan',
+    'Pampanga', 'Pangasinan', 'Quezon', 'Quirino', 'Rizal', 'Romblon',
+    'Samar', 'Sarangani', 'Siquijor', 'Sorsogon', 'South Cotabato',
+    'Southern Leyte', 'Sultan Kudarat', 'Sulu', 'Surigao del Norte',
+    'Surigao del Sur', 'Tarlac', 'Tawi-Tawi', 'Zambales',
+    'Zamboanga del Norte', 'Zamboanga del Sur', 'Zamboanga Sibugay',
+  ],
+  'Germany': [
+    'Baden-Württemberg', 'Bavaria', 'Berlin', 'Brandenburg', 'Bremen',
+    'Hamburg', 'Hesse', 'Lower Saxony', 'Mecklenburg-Vorpommern',
+    'North Rhine-Westphalia', 'Rhineland-Palatinate', 'Saarland',
+    'Saxony', 'Saxony-Anhalt', 'Schleswig-Holstein', 'Thuringia',
+  ],
+  'France': [
+    'Auvergne-Rhône-Alpes', 'Bourgogne-Franche-Comté', 'Brittany',
+    'Centre-Val de Loire', 'Corsica', 'Grand Est', 'Hauts-de-France',
+    'Île-de-France', 'Normandy', 'Nouvelle-Aquitaine', 'Occitanie',
+    'Pays de la Loire', 'Provence-Alpes-Côte d\'Azur',
+  ],
+  'Other': ['N/A'],
+};
+
+// Country code mapping for zippopotam.us API
+const ZIP_COUNTRY_MAP = {
+  'United States': 'us',
+  'India': 'in',
+  'Canada': 'ca',
+  'United Kingdom': 'gb',
+  'Australia': 'au',
+  'Germany': 'de',
+  'France': 'fr',
+};
+
+const LANGUAGES = [
+  // English & European (HEDIS standard)
+  { group: 'English & European', options: [
+    'English', 'Spanish', 'French', 'German', 'Portuguese', 'Italian',
+    'Polish', 'Russian', 'Ukrainian',
+  ]},
+  // East Asian & Southeast Asian
+  { group: 'East & Southeast Asian', options: [
+    'Chinese (Mandarin)', 'Chinese (Cantonese)', 'Vietnamese',
+    'Tagalog / Filipino', 'Korean', 'Japanese', 'Khmer (Cambodian)',
+    'Hmong', 'Lao', 'Thai', 'Burmese',
+  ]},
+  // South Asian — Indian Languages (HEDIS-relevant)
+  { group: 'South Asian / Indian Languages', options: [
+    'Hindi', 'Bengali', 'Telugu', 'Marathi', 'Tamil', 'Gujarati',
+    'Urdu', 'Kannada', 'Odia (Oriya)', 'Malayalam', 'Punjabi',
+    'Assamese', 'Maithili', 'Santali', 'Kashmiri', 'Nepali',
+    'Sindhi', 'Konkani', 'Dogri', 'Manipuri (Meitei)', 'Bodo',
+    'Sanskrit',
+  ]},
+  // Middle Eastern & African
+  { group: 'Middle Eastern & African', options: [
+    'Arabic', 'Farsi (Persian)', 'Somali', 'Amharic', 'Swahili',
+    'Haitian Creole',
+  ]},
+  // Other
+  { group: 'Other', options: ['Sign Language (ASL)', 'Other'] },
+];
+
 function AddMember({ onClose, onSuccess }) {
   const [formData, setFormData] = useState({
+    // Identity
     member_id: '',
     name: '',
     dob: '',
+    age_str: '',
     gender: 'Male',
+    // Contact
+    email: '',
+    phone: '',
+    street_address: '',
+    city: '',
+    state: '',
+    zip_code: '',
+    country: 'United States',
+    // Demographics
+    race: '',
+    language: 'English',
+    tobacco_use: false,
+    // Clinical
+    chronic_conditions: [],
+    // Insurance & Enrollment
+    insurance_type: 'Commercial',
     pcp_id: '',
     plan_id: '',
-    zip_code: '',
     enrollment_start: '',
     enrollment_end: '2025-12-31',
-    age_str: ''
   });
 
-  const [providers, setProviders] = useState([]);
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [providers, setProviders]   = useState([]);
+  const [plans, setPlans]           = useState([]);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState('');
+  const [zipLoading, setZipLoading] = useState(false);
+  const [zipStatus, setZipStatus]   = useState('');   // 'ok' | 'error' | ''
 
   useEffect(() => {
-    fetchProviders();
-    fetchPlans();
+    Promise.allSettled([
+      fetch(`${API_BASE}/providers/list`).then(r => r.json()),
+      fetch(`${API_BASE}/plans/list`).then(r => r.json()),
+      fetch(`${API_BASE}/members/next-id`).then(r => r.json()),
+    ]).then(([provResult, plResult, nextIdResult]) => {
+      if (provResult.status === 'fulfilled') {
+        setProviders(provResult.value.providers || []);
+      }
+      if (plResult.status === 'fulfilled') {
+        setPlans(plResult.value.plans || []);
+      }
+      if (nextIdResult.status === 'fulfilled' && nextIdResult.value.next_id) {
+        setFormData(prev => ({ ...prev, member_id: nextIdResult.value.next_id }));
+      }
+    });
   }, []);
-
-  const fetchProviders = async () => {
-    try {
-      const response = await fetch('http://localhost:5001/api/v1/providers/list');
-      const data = await response.json();
-      setProviders(data.providers || []);
-    } catch (err) {
-      console.error('Failed to fetch providers:', err);
-    }
-  };
-
-  const fetchPlans = async () => {
-    try {
-      const response = await fetch('http://localhost:5001/api/v1/plans/list');
-      const data = await response.json();
-      setPlans(data.plans || []);
-    } catch (err) {
-      console.error('Failed to fetch plans:', err);
-    }
-  };
 
   const calculateAge = (dob) => {
     if (!dob) return '';
-    const birthDate = new Date(dob);
+    const birth = new Date(dob);
     const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
+    let age = today.getFullYear() - birth.getFullYear();
+    if (
+      today.getMonth() < birth.getMonth() ||
+      (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())
+    ) age--;
     return age.toString();
   };
 
+  const fetchLocationByZip = async (zip, country) => {
+    const countryCode = ZIP_COUNTRY_MAP[country];
+    if (!countryCode || !zip) return;
+
+    // Minimum ZIP length checks
+    const minLen = countryCode === 'in' ? 6 : countryCode === 'ca' ? 6 : 4;
+    if (zip.replace(/\s/g, '').length < minLen) return;
+
+    setZipLoading(true);
+    setZipStatus('');
+    try {
+      const res = await fetch(`https://api.zippopotam.us/${countryCode}/${zip.trim()}`);
+      if (!res.ok) throw new Error('Not found');
+      const data = await res.json();
+      const place = data.places?.[0];
+      if (place) {
+        const fetchedCity  = place['place name'] || '';
+        const fetchedState = place['state'] || '';
+        setFormData(prev => ({
+          ...prev,
+          city: fetchedCity,
+          state: fetchedState,
+        }));
+        setZipStatus('ok');
+      }
+    } catch {
+      setZipStatus('error');
+    } finally {
+      setZipLoading(false);
+    }
+  };
+
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData(prev => {
-      const updated = { ...prev, [name]: value };
-      
-      // Auto-calculate age when DOB changes
+      const updated = { ...prev, [name]: type === 'checkbox' ? checked : value };
+
       if (name === 'dob') {
         updated.age_str = calculateAge(value);
-        updated.enrollment_start = value; // Default enrollment start to DOB
+        if (!prev.enrollment_start) updated.enrollment_start = value;
       }
-      
+
+      // Reset state when country changes
+      if (name === 'country') {
+        updated.state    = '';
+        updated.zip_code = '';
+        setZipStatus('');
+      }
+
+      // Auto-fetch location on ZIP change
+      if (name === 'zip_code') {
+        const cleanZip = value.replace(/\s/g, '');
+        const cc = ZIP_COUNTRY_MAP[prev.country];
+        const triggerLen = cc === 'in' ? 6 : cc === 'ca' ? 6 : cc === 'us' ? 5 : 4;
+        if (cleanZip.length === triggerLen) {
+          fetchLocationByZip(value, prev.country);
+        } else {
+          setZipStatus('');
+        }
+      }
+
       return updated;
+    });
+  };
+
+  const handleConditionToggle = (condition) => {
+    setFormData(prev => {
+      const exists = prev.chronic_conditions.includes(condition);
+      return {
+        ...prev,
+        chronic_conditions: exists
+          ? prev.chronic_conditions.filter(c => c !== condition)
+          : [...prev.chronic_conditions, condition],
+      };
     });
   };
 
@@ -76,16 +291,13 @@ function AddMember({ onClose, onSuccess }) {
     e.preventDefault();
     setLoading(true);
     setError('');
-
     try {
-      const response = await fetch('http://localhost:5001/api/v1/members/add', {
+      const res = await fetch(`${API_BASE}/members/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(formData),
       });
-
-      const data = await response.json();
-
+      const data = await res.json();
       if (data.status === 'success') {
         onSuccess && onSuccess(data);
         onClose();
@@ -99,150 +311,262 @@ function AddMember({ onClose, onSuccess }) {
     }
   };
 
+  const currentStates = COUNTRY_STATES[formData.country] || [];
+
   return (
     <div className="add-member-modal">
       <div className="add-member-content">
         <div className="add-member-header">
-          <h2>Add New Member</h2>
+          <div>
+            <h2>Add New Member</h2>
+            <p className="add-member-subtitle">Complete all sections for accurate care gap detection</p>
+          </div>
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
 
         {error && <div className="error-message">{error}</div>}
 
         <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Member ID *</label>
-              <input
-                type="text"
-                name="member_id"
-                value={formData.member_id}
-                onChange={handleChange}
-                placeholder="M0031"
-                required
-              />
-            </div>
 
-            <div className="form-group">
-              <label>Full Name *</label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="John Doe"
-                required
-              />
+          {/* ── Section 1: Member Identity ─────────────────────────── */}
+          <div className="form-section">
+            <div className="form-section-title">
+              <span className="section-icon">👤</span> Member Identity
             </div>
-
-            <div className="form-group">
-              <label>Date of Birth *</label>
-              <input
-                type="date"
-                name="dob"
-                value={formData.dob}
-                onChange={handleChange}
-                required
-              />
+            <div className="form-grid form-grid-3">
+              <div className="form-group">
+                <label>Member ID <span className="section-note">Auto-assigned</span></label>
+                <input type="text" name="member_id" value={formData.member_id}
+                  onChange={handleChange} placeholder="Loading…" required
+                  title="Auto-assigned — edit only if needed" />
+              </div>
+              <div className="form-group form-group-wide">
+                <label>Full Name *</label>
+                <input type="text" name="name" value={formData.name}
+                  onChange={handleChange} placeholder="John Doe" required />
+              </div>
+              <div className="form-group">
+                <label>Date of Birth *</label>
+                <input type="date" name="dob" value={formData.dob}
+                  onChange={handleChange} required />
+              </div>
+              <div className="form-group">
+                <label>Age</label>
+                <input type="text" name="age_str" value={formData.age_str}
+                  readOnly placeholder="Auto-calculated" />
+              </div>
+              <div className="form-group">
+                <label>Gender *</label>
+                <select name="gender" value={formData.gender} onChange={handleChange} required>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
             </div>
+          </div>
 
-            <div className="form-group">
-              <label>Age</label>
-              <input
-                type="text"
-                name="age_str"
-                value={formData.age_str}
-                readOnly
-                placeholder="Auto-calculated"
-              />
+          {/* ── Section 2: Contact Information ────────────────────── */}
+          <div className="form-section">
+            <div className="form-section-title">
+              <span className="section-icon">📬</span> Contact Information
+              <span className="section-note">Email required for appointment notifications</span>
             </div>
+            <div className="form-grid form-grid-2">
+              <div className="form-group">
+                <label>Email Address *</label>
+                <input type="email" name="email" value={formData.email}
+                  onChange={handleChange} placeholder="patient@email.com" required />
+              </div>
+              <div className="form-group">
+                <label>Phone Number</label>
+                <input type="tel" name="phone" value={formData.phone}
+                  onChange={handleChange} placeholder="(555) 000-0000" />
+              </div>
+              <div className="form-group form-group-wide">
+                <label>Street Address</label>
+                <input type="text" name="street_address" value={formData.street_address}
+                  onChange={handleChange} placeholder="123 Main Street" />
+              </div>
 
-            <div className="form-group">
-              <label>Gender *</label>
-              <select
-                name="gender"
-                value={formData.gender}
-                onChange={handleChange}
-                required
-              >
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </select>
+              {/* Country */}
+              <div className="form-group">
+                <label>Country</label>
+                <select name="country" value={formData.country} onChange={handleChange}>
+                  {Object.keys(COUNTRY_STATES).map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* ZIP / Postal Code with auto-fetch */}
+              <div className="form-group">
+                <label>
+                  ZIP / Postal Code
+                  {zipLoading && <span className="zip-fetching"> ↻ Fetching…</span>}
+                  {zipStatus === 'ok'    && <span className="zip-ok"> ✓ Location found</span>}
+                  {zipStatus === 'error' && <span className="zip-err"> ✗ Not found</span>}
+                </label>
+                <input
+                  type="text"
+                  name="zip_code"
+                  value={formData.zip_code}
+                  onChange={handleChange}
+                  placeholder={formData.country === 'India' ? '400001' : formData.country === 'Canada' ? 'A1A 1A1' : '12345'}
+                  maxLength="10"
+                />
+              </div>
+
+              {/* City — auto-filled by ZIP fetch */}
+              <div className="form-group">
+                <label>City</label>
+                <input type="text" name="city" value={formData.city}
+                  onChange={handleChange} placeholder="Auto-filled or enter manually" />
+              </div>
+
+              {/* State — filtered by country */}
+              <div className="form-group">
+                <label>State / Province / Region</label>
+                <select name="state" value={formData.state} onChange={handleChange}>
+                  <option value="">Select</option>
+                  {currentStates.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+          </div>
 
-            <div className="form-group">
-              <label>ZIP Code</label>
-              <input
-                type="text"
-                name="zip_code"
-                value={formData.zip_code}
-                onChange={handleChange}
-                placeholder="12345"
-                maxLength="5"
-              />
+          {/* ── Section 3: Demographics ───────────────────────────── */}
+          <div className="form-section">
+            <div className="form-section-title">
+              <span className="section-icon">📊</span> Demographics
+              <span className="section-note">Used for HEDIS measure stratification</span>
             </div>
-
-            <div className="form-group">
-              <label>Primary Care Provider *</label>
-              <select
-                name="pcp_id"
-                value={formData.pcp_id}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select Provider</option>
-                {providers.map(p => (
-                  <option key={p.provider_id} value={p.provider_id}>
-                    {p.name} - {p.specialty}
-                  </option>
-                ))}
-              </select>
+            <div className="form-grid form-grid-3">
+              <div className="form-group">
+                <label>Race / Ethnicity</label>
+                <select name="race" value={formData.race} onChange={handleChange}>
+                  <option value="">Select</option>
+                  <option value="White">White / Caucasian</option>
+                  <option value="Black">Black / African American</option>
+                  <option value="Hispanic">Hispanic / Latino</option>
+                  <option value="Asian">Asian</option>
+                  <option value="South Asian">South Asian (Indian / Pakistani / Bangladeshi)</option>
+                  <option value="Pacific Islander">Native Hawaiian / Pacific Islander</option>
+                  <option value="Native American">American Indian / Alaska Native</option>
+                  <option value="Two or More">Two or More Races</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Preferred Language</label>
+                <select name="language" value={formData.language} onChange={handleChange}>
+                  {LANGUAGES.map(group => (
+                    <optgroup key={group.group} label={group.group}>
+                      {group.options.map(lang => (
+                        <option key={lang} value={lang}>{lang}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group form-group-checkbox">
+                <label className="checkbox-label">
+                  <input type="checkbox" name="tobacco_use"
+                    checked={formData.tobacco_use} onChange={handleChange} />
+                  <span>Current Tobacco User</span>
+                </label>
+                <p className="field-hint">Affects certain HEDIS counseling measures</p>
+              </div>
             </div>
+          </div>
 
-            <div className="form-group">
-              <label>Benefit Plan *</label>
-              <select
-                name="plan_id"
-                value={formData.plan_id}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select Plan</option>
-                {plans.map(p => (
-                  <option key={p.plan_id} value={p.plan_id}>
-                    {p.plan_id} (Copay: ${p.copay})
-                  </option>
-                ))}
-              </select>
+          {/* ── Section 4: Clinical Background ───────────────────── */}
+          <div className="form-section">
+            <div className="form-section-title">
+              <span className="section-icon">🩺</span> Clinical Background
+              <span className="section-note">Select all active diagnoses — affects care gap exclusion criteria</span>
             </div>
-
-            <div className="form-group">
-              <label>Enrollment Start</label>
-              <input
-                type="date"
-                name="enrollment_start"
-                value={formData.enrollment_start}
-                onChange={handleChange}
-              />
+            <div className="conditions-grid">
+              {CHRONIC_OPTIONS.map(cond => (
+                <label
+                  key={cond}
+                  className={`condition-chip ${formData.chronic_conditions.includes(cond) ? 'condition-chip--selected' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.chronic_conditions.includes(cond)}
+                    onChange={() => handleConditionToggle(cond)}
+                    style={{ display: 'none' }}
+                  />
+                  {cond}
+                </label>
+              ))}
             </div>
+            {formData.chronic_conditions.length > 0 && (
+              <p className="conditions-summary">
+                {formData.chronic_conditions.length} condition(s) selected — exclusion criteria will be evaluated automatically
+              </p>
+            )}
+          </div>
 
-            <div className="form-group">
-              <label>Enrollment End</label>
-              <input
-                type="date"
-                name="enrollment_end"
-                value={formData.enrollment_end}
-                onChange={handleChange}
-              />
+          {/* ── Section 5: Insurance & Enrollment ────────────────── */}
+          <div className="form-section">
+            <div className="form-section-title">
+              <span className="section-icon">💳</span> Insurance &amp; Enrollment
+            </div>
+            <div className="form-grid form-grid-2">
+              <div className="form-group">
+                <label>Insurance Type *</label>
+                <select name="insurance_type" value={formData.insurance_type} onChange={handleChange} required>
+                  <option value="Commercial">Commercial</option>
+                  <option value="Medicare">Medicare</option>
+                  <option value="Medicaid">Medicaid</option>
+                  <option value="Dual Eligible">Dual Eligible (Medicare + Medicaid)</option>
+                  <option value="Self-Pay">Self-Pay</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Benefit Plan *</label>
+                <select name="plan_id" value={formData.plan_id} onChange={handleChange} required>
+                  <option value="">Select Plan</option>
+                  {plans.map(p => (
+                    <option key={p.plan_id} value={p.plan_id}>
+                      {p.plan_id} — Copay: ${p.copay}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Primary Care Provider *</label>
+                <select name="pcp_id" value={formData.pcp_id} onChange={handleChange} required>
+                  <option value="">Select Provider</option>
+                  {providers.map(p => (
+                    <option key={p.provider_id} value={p.provider_id}>
+                      {p.name} — {p.specialty}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Enrollment Start</label>
+                <input type="date" name="enrollment_start" value={formData.enrollment_start}
+                  onChange={handleChange} />
+              </div>
+              <div className="form-group">
+                <label>Enrollment End</label>
+                <input type="date" name="enrollment_end" value={formData.enrollment_end}
+                  onChange={handleChange} />
+              </div>
             </div>
           </div>
 
           <div className="form-actions">
-            <button type="button" className="btn-cancel" onClick={onClose}>
-              Cancel
-            </button>
+            <button type="button" className="btn-cancel" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn-submit" disabled={loading}>
-              {loading ? 'Adding...' : 'Add Member'}
+              {loading ? 'Adding Member…' : 'Add Member to Graph'}
             </button>
           </div>
         </form>

@@ -276,8 +276,43 @@ def merge_provider(provider_id, name, specialty, facility_type, network_status, 
 
 # ── Dynamic / Transactional Nodes ─────────────────────────────────────────────
 
+def get_next_member_id():
+    """
+    Return the next available member ID by finding the highest numeric
+    suffix among existing Member nodes that match the pattern M<digits>.
+    E.g. if the highest is M0030, returns 'M0031'.
+    Falls back to 'M0001' if no members exist or none match the pattern.
+    """
+    kg = get_knowledge_graph()
+    rows = kg.run_query("""
+        MATCH (m:Member)
+        WHERE m.member_id =~ 'M[0-9]+'
+        RETURN m.member_id AS member_id
+        ORDER BY m.member_id DESC
+    """, {})
+    if not rows:
+        return "M0001"
+    # Extract numeric parts and find the max
+    max_num = 0
+    for row in rows:
+        mid = row.get("member_id", "")
+        try:
+            num = int(mid[1:])
+            if num > max_num:
+                max_num = num
+        except (ValueError, IndexError):
+            continue
+    next_num = max_num + 1
+    # Preserve at least 4 digits of padding (e.g. M0031), grow naturally beyond that
+    pad = max(4, len(str(next_num)))
+    return f"M{str(next_num).zfill(pad)}"
+
+
 def merge_member(member_id, name, dob, gender, pcp_id, zip_code,
-                 enrollment_start, enrollment_end, age_str):
+                 enrollment_start, enrollment_end, age_str,
+                 email="", phone="", street_address="", city="", state="",
+                 race="", language="English", tobacco_use=False,
+                 insurance_type="Commercial", chronic_conditions=None):
     kg = get_knowledge_graph()
     kg.execute_write("""
         MERGE (m:Member {member_id: $member_id})
@@ -288,11 +323,25 @@ def merge_member(member_id, name, dob, gender, pcp_id, zip_code,
             m.zip = $zip_code,
             m.enrollment_start = $enrollment_start,
             m.enrollment_end = $enrollment_end,
-            m.age_str = $age_str
+            m.age_str = $age_str,
+            m.email = $email,
+            m.phone = $phone,
+            m.street_address = $street_address,
+            m.city = $city,
+            m.state = $state,
+            m.race = $race,
+            m.language = $language,
+            m.tobacco_use = $tobacco_use,
+            m.insurance_type = $insurance_type,
+            m.chronic_conditions = $chronic_conditions
     """, {"member_id": member_id, "name": name, "dob": str(dob), "gender": gender,
           "pcp_id": pcp_id, "zip_code": str(zip_code),
           "enrollment_start": str(enrollment_start),
-          "enrollment_end": str(enrollment_end), "age_str": age_str})
+          "enrollment_end": str(enrollment_end), "age_str": age_str,
+          "email": email, "phone": phone, "street_address": street_address,
+          "city": city, "state": state, "race": race, "language": language,
+          "tobacco_use": tobacco_use, "insurance_type": insurance_type,
+          "chronic_conditions": chronic_conditions or []})
 
 
 def merge_enrollment(member_id, plan_id, pcp_id, effective_from, effective_to):
@@ -517,7 +566,13 @@ def get_member_profile(member_id: str):
                b.copay AS copay, b.preventive_covered AS preventive_covered,
                b.eligibility_rules AS eligibility_rules,
                p.name AS pcp_name, p.specialty AS pcp_specialty,
-               p.network_status AS pcp_network_status
+               p.network_status AS pcp_network_status,
+               m.chronic_conditions AS chronic_conditions,
+               m.tobacco_use AS tobacco_use,
+               m.insurance_type AS insurance_type,
+               m.race AS race,
+               m.language AS language,
+               m.email AS email
     """, {"member_id": member_id})
     return results[0] if results else {}
 
@@ -600,13 +655,14 @@ def get_measure_comprehensive(measure_id: str):
     return result
 
 
-def check_member_exclusions(member_id: str, measure_id: str):
+def check_member_exclusions(member_id: str, measure_id: str, extra_icd_codes: list = None):
     """
     Check if member meets any exclusion criteria for a measure.
+    extra_icd_codes: ICD codes synthesised from chronic_conditions (for new members with no claims).
     Returns list of exclusions that apply to this member.
     """
     kg = get_knowledge_graph()
-    
+
     # Get member's claims with codes
     member_claims = kg.run_query("""
         MATCH (m:Member {member_id: $member_id})-[:HAS_CLAIM]->(c:Claim)
@@ -614,7 +670,7 @@ def check_member_exclusions(member_id: str, measure_id: str):
                c.icd_code AS icd_code,
                c.service_date AS service_date
     """, {"member_id": member_id})
-    
+
     # Get exclusion criteria for measure
     exclusions = kg.run_query("""
         MATCH (q:QualityMeasure {measure_id: $measure_id})-[:HAS_EXCLUSION]->(e:ExclusionCriteria)
@@ -624,23 +680,24 @@ def check_member_exclusions(member_id: str, measure_id: str):
                e.cpt_codes AS cpt_codes,
                e.icd10_codes AS icd10_codes
     """, {"measure_id": measure_id})
-    
+
     matched_exclusions = []
-    
+
     for exclusion in exclusions:
-        # Check if member has any matching codes
         member_cpt_codes = [c["cpt_code"] for c in member_claims if c["cpt_code"]]
+        # Merge claim ICD codes with condition-derived ICD codes
         member_icd_codes = [c["icd_code"] for c in member_claims if c["icd_code"]]
-        
+        if extra_icd_codes:
+            member_icd_codes = list(set(member_icd_codes + extra_icd_codes))
+
         exclusion_cpt = exclusion.get("cpt_codes", [])
         exclusion_icd = exclusion.get("icd10_codes", [])
-        
-        # Check for matches
+
         if exclusion_cpt and any(code in exclusion_cpt for code in member_cpt_codes):
             matched_exclusions.append(exclusion)
         elif exclusion_icd and any(code in exclusion_icd for code in member_icd_codes):
             matched_exclusions.append(exclusion)
-    
+
     return matched_exclusions
 
 
@@ -697,3 +754,118 @@ def mark_email_read(email_id: str):
         MATCH (e:Email {email_id: $email_id})
         SET e.is_read = true
     """, {"email_id": email_id})
+
+
+# ── Appointment Functions ─────────────────────────────────────────────────────
+
+def merge_appointment(appointment_id: str, member_id: str, measure_id: str,
+                      appointment_date: str, appointment_time: str,
+                      lab_number: str, lab_specialist: str, lab_location: str,
+                      screening_name: str, cpt_codes: str, icd_codes: str,
+                      provider_id: str, status: str = "Scheduled"):
+    """Store an Appointment node and link it to Member and QualityMeasure."""
+    kg = get_knowledge_graph()
+    kg.execute_write("""
+        MERGE (a:Appointment {appointment_id: $appointment_id})
+        SET a.member_id        = $member_id,
+            a.measure_id       = $measure_id,
+            a.appointment_date = $appointment_date,
+            a.appointment_time = $appointment_time,
+            a.lab_number       = $lab_number,
+            a.lab_specialist   = $lab_specialist,
+            a.lab_location     = $lab_location,
+            a.screening_name   = $screening_name,
+            a.cpt_codes        = $cpt_codes,
+            a.icd_codes        = $icd_codes,
+            a.provider_id      = $provider_id,
+            a.status           = $status,
+            a.created_at       = datetime()
+    """, {"appointment_id": appointment_id, "member_id": member_id,
+          "measure_id": measure_id, "appointment_date": appointment_date,
+          "appointment_time": appointment_time, "lab_number": lab_number,
+          "lab_specialist": lab_specialist, "lab_location": lab_location,
+          "screening_name": screening_name, "cpt_codes": cpt_codes,
+          "icd_codes": icd_codes, "provider_id": provider_id, "status": status})
+    kg.execute_write("""
+        MATCH (m:Member {member_id: $member_id})
+        MATCH (a:Appointment {appointment_id: $appointment_id})
+        MERGE (m)-[:HAS_APPOINTMENT]->(a)
+    """, {"member_id": member_id, "appointment_id": appointment_id})
+    kg.execute_write("""
+        MATCH (q:QualityMeasure {measure_id: $measure_id})
+        MATCH (a:Appointment {appointment_id: $appointment_id})
+        MERGE (a)-[:FOR_MEASURE]->(q)
+    """, {"measure_id": measure_id, "appointment_id": appointment_id})
+
+
+def get_appointment(appointment_id: str):
+    """Return full appointment details including member and plan info."""
+    kg = get_knowledge_graph()
+    results = kg.run_query("""
+        MATCH (a:Appointment {appointment_id: $appointment_id})
+        MATCH (m:Member {member_id: a.member_id})
+        OPTIONAL MATCH (m)-[:ENROLLED_IN]->(b:BenefitPlan)
+        OPTIONAL MATCH (m)-[:ASSIGNED_TO]->(p:Provider)
+        RETURN a.appointment_id   AS appointment_id,
+               a.member_id        AS member_id,
+               a.measure_id       AS measure_id,
+               a.appointment_date AS appointment_date,
+               a.appointment_time AS appointment_time,
+               a.lab_number       AS lab_number,
+               a.lab_specialist   AS lab_specialist,
+               a.lab_location     AS lab_location,
+               a.screening_name   AS screening_name,
+               a.cpt_codes        AS cpt_codes,
+               a.icd_codes        AS icd_codes,
+               a.provider_id      AS provider_id,
+               a.status           AS status,
+               m.name             AS member_name,
+               m.email            AS member_email,
+               m.insurance_type   AS insurance_type,
+               b.plan_id          AS plan_id,
+               b.copay            AS copay,
+               p.name             AS pcp_name
+    """, {"appointment_id": appointment_id})
+    return results[0] if results else None
+
+
+def close_care_gap_with_claim(care_gap_id: str, member_id: str, measure_id: str,
+                               provider_id: str, cpt_code: str, icd_code: str,
+                               service_date: str, claim_id: str, plan_id: str):
+    """Create a Claim, link it to Member/Provider, then close the CareGap."""
+    kg = get_knowledge_graph()
+    # Create and link claim
+    kg.execute_write("""
+        MERGE (c:Claim {claim_id: $claim_id})
+        SET c.cpt_code     = $cpt_code,
+            c.icd_code     = $icd_code,
+            c.service_date = $service_date,
+            c.status       = 'Processed',
+            c.plan_id      = $plan_id,
+            c.measure_id   = $measure_id
+    """, {"claim_id": claim_id, "cpt_code": cpt_code, "icd_code": icd_code,
+          "service_date": service_date, "plan_id": plan_id, "measure_id": measure_id})
+    kg.execute_write("""
+        MATCH (m:Member {member_id: $member_id})
+        MATCH (c:Claim {claim_id: $claim_id})
+        MERGE (m)-[:HAS_CLAIM]->(c)
+    """, {"member_id": member_id, "claim_id": claim_id})
+    kg.execute_write("""
+        MATCH (c:Claim {claim_id: $claim_id})
+        MATCH (p:Provider {provider_id: $provider_id})
+        MERGE (c)-[:SERVICED_BY]->(p)
+    """, {"claim_id": claim_id, "provider_id": provider_id})
+    # Close the care gap
+    kg.execute_write("""
+        MATCH (g:CareGap {care_gap_id: $care_gap_id})
+        SET g.is_open    = false,
+            g.closed_on  = $service_date,
+            g.claim_id   = $claim_id,
+            g.gap_status = 'Closed'
+    """, {"care_gap_id": care_gap_id, "service_date": service_date, "claim_id": claim_id})
+    # Link claim to care gap
+    kg.execute_write("""
+        MATCH (c:Claim {claim_id: $claim_id})
+        MATCH (g:CareGap {care_gap_id: $care_gap_id})
+        MERGE (c)-[:CLOSES_GAP]->(g)
+    """, {"claim_id": claim_id, "care_gap_id": care_gap_id})

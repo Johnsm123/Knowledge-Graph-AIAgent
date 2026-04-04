@@ -225,23 +225,273 @@ def send_chat_message():
 
 @app.route("/api/v1/appointments/book", methods=["POST"])
 def book_appointment():
-    """Book appointment for member."""
+    """
+    Book a screening appointment:
+    - Assigns lab number and specialist by measure type
+    - Persists an Appointment node in Neo4j
+    - Sends a professional medical invitation email via ACS to the member
+    """
     try:
-        data = request.json
-        member_id = data.get("member_id")
-        measure_id = data.get("measure_id")
-        appointment_date = data.get("appointment_date")
-        provider_id = data.get("provider_id")
-        
-        # In production, this would integrate with scheduling system
-        logger.info(f"Booking appointment for {member_id}: {measure_id} on {appointment_date}")
-        
+        from src.care_gap_neo4j import merge_appointment, get_appointment
+        from azure.communication.email import EmailClient
+        from config.settings import settings as cfg
+        import uuid
+        from datetime import datetime
+
+        data = request.json or {}
+        member_id    = data.get("member_id", "")
+        measure_id   = data.get("measure_id", "")
+        measure_name = data.get("measure_name", measure_id)
+        appt_date    = data.get("appointment_date", "")
+        appt_time    = data.get("appointment_time", "09:00")
+        provider_id  = data.get("provider_id", "")
+        care_gap_id  = data.get("care_gap_id", "")
+
+        if not all([member_id, measure_id, appt_date]):
+            return jsonify({"status": "error", "error": "member_id, measure_id and appointment_date are required"}), 400
+
+        # ── Lab assignment by measure ─────────────────────────────────────
+        LAB_MAP = {
+            "BCS": {"lab_number": "LAB-02", "lab_specialist": "Dr. Sarah Mitchell",
+                    "lab_location": "Radiology & Mammography Unit, 2nd Floor",
+                    "specialty": "Diagnostic Radiology"},
+            "CCS": {"lab_number": "LAB-01", "lab_specialist": "Dr. James Rodriguez",
+                    "lab_location": "Cytology & Gynecology Lab, 1st Floor",
+                    "specialty": "Gynecologic Oncology"},
+            "COL": {"lab_number": "LAB-03", "lab_specialist": "Dr. Emily Chen",
+                    "lab_location": "Gastroenterology & Endoscopy Suite, 3rd Floor",
+                    "specialty": "Gastroenterology"},
+            "CBP": {"lab_number": "LAB-04", "lab_specialist": "Dr. Michael Thompson",
+                    "lab_location": "Cardiology Clinic, 4th Floor",
+                    "specialty": "Cardiology"},
+            "CDC": {"lab_number": "LAB-05", "lab_specialist": "Dr. Lisa Patel",
+                    "lab_location": "Diabetes & Endocrinology Center, 2nd Floor",
+                    "specialty": "Endocrinology"},
+            "KED": {"lab_number": "LAB-05", "lab_specialist": "Dr. Lisa Patel",
+                    "lab_location": "Renal & Nephrology Lab, 2nd Floor",
+                    "specialty": "Nephrology"},
+            "LSC": {"lab_number": "LAB-04", "lab_specialist": "Dr. Michael Thompson",
+                    "lab_location": "Internal Medicine Lab, 4th Floor",
+                    "specialty": "Internal Medicine"},
+        }
+        lab_info = LAB_MAP.get(measure_id, {
+            "lab_number": "LAB-01", "lab_specialist": "On-Call Specialist",
+            "lab_location": "General Screening Lab, 1st Floor",
+            "specialty": "General Medicine",
+        })
+
+        # ── CPT / ICD codes from golden reference ────────────────────────
+        measure_detail = get_measure_comprehensive(measure_id) or {}
+        cpt_codes_raw = measure_detail.get("code_sets", {}).get("CPT", "")
+        cpt_codes = cpt_codes_raw if isinstance(cpt_codes_raw, str) else ", ".join(cpt_codes_raw or [])
+        icd_codes = measure_detail.get("code_sets", {}).get("ICD-10", "") or ""
+        if not isinstance(icd_codes, str):
+            icd_codes = ", ".join(icd_codes)
+
+        # ── Persist to Neo4j ─────────────────────────────────────────────
+        appointment_id = f"APT-{member_id}-{measure_id}-{uuid.uuid4().hex[:6].upper()}"
+        merge_appointment(
+            appointment_id=appointment_id,
+            member_id=member_id,
+            measure_id=measure_id,
+            appointment_date=appt_date,
+            appointment_time=appt_time,
+            lab_number=lab_info["lab_number"],
+            lab_specialist=lab_info["lab_specialist"],
+            lab_location=lab_info["lab_location"],
+            screening_name=measure_name,
+            cpt_codes=cpt_codes,
+            icd_codes=icd_codes,
+            provider_id=provider_id,
+        )
+
+        appt = get_appointment(appointment_id)
+
+        # ── Format date/time for email ────────────────────────────────────
+        try:
+            dt = datetime.strptime(appt_date, "%Y-%m-%d")
+            friendly_date = dt.strftime("%A, %B %d, %Y")
+        except Exception:
+            friendly_date = appt_date
+        try:
+            hh, mm = appt_time.split(":")
+            h = int(hh)
+            ampm = "AM" if h < 12 else "PM"
+            h12 = h % 12 or 12
+            friendly_time = f"{h12}:{mm} {ampm}"
+        except Exception:
+            friendly_time = appt_time
+
+        member_email = (appt or {}).get("member_email", "")
+        member_name  = (appt or {}).get("member_name", member_id)
+        plan_id      = (appt or {}).get("plan_id", "N/A")
+        insurance    = (appt or {}).get("insurance_type", "Commercial")
+        pcp_name     = (appt or {}).get("pcp_name", "Your Provider")
+
+        # ── Send professional email ───────────────────────────────────────
+        if member_email and cfg.azure_communication_connection_string:
+            sender = cfg.azure_communication_sender
+            subject = f"Appointment Confirmation: {measure_name} — {friendly_date}"
+            body_html = f"""
+<html><body style="font-family: Arial, sans-serif; color: #1a1a2e; max-width:680px; margin:auto;">
+<div style="background:#0033A1; padding:20px 32px; border-radius:8px 8px 0 0;">
+  <h1 style="color:white; margin:0; font-size:22px;">HealthCare Management Portal</h1>
+  <p style="color:#b3c7f7; margin:4px 0 0;">Appointment Confirmation</p>
+</div>
+<div style="border:1px solid #dce3f5; border-top:none; padding:32px; border-radius:0 0 8px 8px;">
+  <p style="font-size:16px;">Dear <strong>{member_name}</strong>,</p>
+  <p>Your screening appointment has been successfully scheduled. Please review the details below and keep this email for your records.</p>
+
+  <table style="width:100%; border-collapse:collapse; margin:24px 0; background:#f0f4ff; border-radius:6px; overflow:hidden;">
+    <tr style="background:#0033A1; color:white;">
+      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">📅 Appointment Details</th>
+    </tr>
+    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">Screening Type</td><td style="padding:10px 16px;">{measure_name}</td></tr>
+    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Date</td><td style="padding:10px 16px;">{friendly_date}</td></tr>
+    <tr><td style="padding:10px 16px; font-weight:600;">Time</td><td style="padding:10px 16px;">{friendly_time}</td></tr>
+    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Appointment ID</td><td style="padding:10px 16px; font-family:monospace;">{appointment_id}</td></tr>
+  </table>
+
+  <table style="width:100%; border-collapse:collapse; margin:24px 0; background:#f0f4ff; border-radius:6px; overflow:hidden;">
+    <tr style="background:#005EB8; color:white;">
+      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">🏥 Lab &amp; Specialist Information</th>
+    </tr>
+    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">Lab Number</td><td style="padding:10px 16px;">{lab_info['lab_number']}</td></tr>
+    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Lab Location</td><td style="padding:10px 16px;">{lab_info['lab_location']}</td></tr>
+    <tr><td style="padding:10px 16px; font-weight:600;">Assigned Specialist</td><td style="padding:10px 16px;">{lab_info['lab_specialist']}</td></tr>
+    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Specialty</td><td style="padding:10px 16px;">{lab_info['specialty']}</td></tr>
+  </table>
+
+  <table style="width:100%; border-collapse:collapse; margin:24px 0; background:#f0f4ff; border-radius:6px; overflow:hidden;">
+    <tr style="background:#004494; color:white;">
+      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">🩺 Clinical Codes</th>
+    </tr>
+    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">CPT Code(s)</td><td style="padding:10px 16px; font-family:monospace;">{cpt_codes or "Per provider order"}</td></tr>
+    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">ICD-10 Code(s)</td><td style="padding:10px 16px; font-family:monospace;">{icd_codes or "Per diagnosis"}</td></tr>
+    <tr><td style="padding:10px 16px; font-weight:600;">Referring Provider</td><td style="padding:10px 16px;">{pcp_name}</td></tr>
+  </table>
+
+  <table style="width:100%; border-collapse:collapse; margin:24px 0; background:#f0f4ff; border-radius:6px; overflow:hidden;">
+    <tr style="background:#1a6b3c; color:white;">
+      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">💳 Insurance Information</th>
+    </tr>
+    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">Plan ID</td><td style="padding:10px 16px; font-family:monospace;">{plan_id}</td></tr>
+    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Insurance Type</td><td style="padding:10px 16px;">{insurance}</td></tr>
+    <tr><td style="padding:10px 16px; font-weight:600;">Member ID</td><td style="padding:10px 16px; font-family:monospace;">{member_id}</td></tr>
+  </table>
+
+  <div style="background:#fff8e1; border-left:4px solid #f59e0b; padding:16px; border-radius:4px; margin:24px 0;">
+    <strong>📋 Pre-Appointment Instructions:</strong>
+    <ul style="margin:8px 0; padding-left:20px;">
+      <li>Please arrive 15 minutes before your scheduled time.</li>
+      <li>Bring a valid government-issued photo ID and your insurance card.</li>
+      <li>Wear comfortable, loose-fitting clothing appropriate for the screening.</li>
+      <li>If you need to reschedule, please contact us at least 24 hours in advance.</li>
+    </ul>
+  </div>
+
+  <p>If you have any questions, please contact your care management team. Do not reply to this email.</p>
+  <hr style="border:none; border-top:1px solid #dce3f5; margin:24px 0;">
+  <p style="color:#888; font-size:12px;">This is an automated message from the HealthCare Management Portal. Appointment ID: {appointment_id}</p>
+</div>
+</body></html>"""
+
+            try:
+                client = EmailClient.from_connection_string(cfg.azure_communication_connection_string)
+                message = {
+                    "senderAddress": sender,
+                    "recipients": {"to": [{"address": member_email}]},
+                    "content": {"subject": subject, "html": body_html},
+                }
+                poller = client.begin_send(message)
+                poller.result()
+                logger.info(f"Appointment email sent to {member_email} for {appointment_id}")
+            except Exception as email_err:
+                logger.warning(f"Email send failed for {appointment_id}: {email_err}")
+
         return jsonify({
             "status": "success",
-            "appointment_id": f"APT-{member_id}-{measure_id}",
-            "message": "Appointment booked successfully"
+            "appointment_id": appointment_id,
+            "care_gap_id": care_gap_id,
+            "lab_number": lab_info["lab_number"],
+            "lab_specialist": lab_info["lab_specialist"],
+            "lab_location": lab_info["lab_location"],
+            "specialty": lab_info["specialty"],
+            "cpt_codes": cpt_codes,
+            "icd_codes": icd_codes,
+            "appointment_date": appt_date,
+            "appointment_time": appt_time,
+            "member_email": member_email,
+            "email_sent": bool(member_email),
         })
     except Exception as e:
+        logger.error(f"book_appointment error: {e}", exc_info=True)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/appointments/<appointment_id>", methods=["GET"])
+def get_appointment_details(appointment_id):
+    """Retrieve full appointment record including plan and member info."""
+    try:
+        from src.care_gap_neo4j import get_appointment
+        appt = get_appointment(appointment_id)
+        if not appt:
+            return jsonify({"status": "error", "error": "Appointment not found"}), 404
+        return jsonify(appt)
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/appointments/<appointment_id>/complete", methods=["POST"])
+def complete_appointment(appointment_id):
+    """
+    Mark screening as completed:
+    - Generates a Claim node in Neo4j
+    - Closes the linked CareGap (is_open=false)
+    """
+    try:
+        from src.care_gap_neo4j import get_appointment, close_care_gap_with_claim
+        import uuid
+        from datetime import date
+
+        data = request.json or {}
+        care_gap_id = data.get("care_gap_id", "")
+
+        appt = get_appointment(appointment_id)
+        if not appt:
+            return jsonify({"status": "error", "error": "Appointment not found"}), 404
+
+        service_date = appt.get("appointment_date", str(date.today()))
+        claim_id = f"CLM-{appt['member_id']}-{appt['measure_id']}-{uuid.uuid4().hex[:8].upper()}"
+
+        close_care_gap_with_claim(
+            care_gap_id=care_gap_id,
+            member_id=appt["member_id"],
+            measure_id=appt["measure_id"],
+            provider_id=appt.get("provider_id", ""),
+            cpt_code=appt.get("cpt_codes", ""),
+            icd_code=appt.get("icd_codes", ""),
+            service_date=service_date,
+            claim_id=claim_id,
+            plan_id=appt.get("plan_id", ""),
+        )
+
+        # Mark appointment as completed
+        from src.neo4j_connection import get_knowledge_graph
+        kg = get_knowledge_graph()
+        kg.execute_write("""
+            MATCH (a:Appointment {appointment_id: $appt_id})
+            SET a.status = 'Completed'
+        """, {"appt_id": appointment_id})
+
+        return jsonify({
+            "status": "success",
+            "claim_id": claim_id,
+            "care_gap_id": care_gap_id,
+            "message": "Screening completed and care gap closed",
+        })
+    except Exception as e:
+        logger.error(f"complete_appointment error: {e}", exc_info=True)
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
@@ -253,6 +503,16 @@ def get_measure_details(measure_id):
         if not measure:
             return jsonify({"status": "error", "error": "Measure not found"}), 404
         return jsonify(measure)
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/members/next-id", methods=["GET"])
+def get_next_member_id_route():
+    """Return the next available member ID based on existing graph members."""
+    try:
+        from src.care_gap_neo4j import get_next_member_id
+        return jsonify({"status": "success", "next_id": get_next_member_id()})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
@@ -280,7 +540,17 @@ def add_member():
             zip_code=data.get("zip_code", ""),
             enrollment_start=data.get("enrollment_start", data["dob"]),
             enrollment_end=data.get("enrollment_end", "2025-12-31"),
-            age_str=data.get("age_str", "")
+            age_str=data.get("age_str", ""),
+            email=data.get("email", ""),
+            phone=data.get("phone", ""),
+            street_address=data.get("street_address", ""),
+            city=data.get("city", ""),
+            state=data.get("state", ""),
+            race=data.get("race", ""),
+            language=data.get("language", "English"),
+            tobacco_use=data.get("tobacco_use", False),
+            insurance_type=data.get("insurance_type", "Commercial"),
+            chronic_conditions=data.get("chronic_conditions", []),
         )
         
         # Create enrollment relationships

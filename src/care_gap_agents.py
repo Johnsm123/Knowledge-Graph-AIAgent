@@ -51,6 +51,41 @@ AGENT_ORDER = [
 ]
 
 
+# ── Chronic condition → ICD-10 code mapping ───────────────────────────────────
+# Used to synthesise ICD evidence for newly added members who have no claims yet.
+# This ensures diabetes/chronic disease measures are evaluated even before any
+# claim history exists.
+CHRONIC_CONDITION_ICD_MAP = {
+    "Diabetes (Type 1)":              ["E10.9", "E10.65", "E10.8", "E10.40"],
+    "Diabetes (Type 2)":              ["E11.9", "E11.65", "E11.8", "E11.40"],
+    "Hypertension":                   ["I10"],
+    "Coronary Artery Disease (CAD)":  ["I25.10", "I25.9"],
+    "Congestive Heart Failure (CHF)": ["I50.9", "I50.32"],
+    "COPD":                           ["J44.9", "J44.1"],
+    "Asthma":                         ["J45.909", "J45.20"],
+    "Chronic Kidney Disease (CKD)":   ["N18.9", "N18.3", "N18.4", "N18.5"],
+    "End-Stage Renal Disease (ESRD)": ["N18.6", "Z99.2"],
+    "Depression / Anxiety":           ["F32.9", "F41.9", "F33.0"],
+    "Cancer (Active)":                ["C80.1", "C78.9"],
+    "Hospice / Palliative Care":      ["Z51.5", "Z51.89"],
+    "Pregnancy":                      ["Z34.90", "Z34.00"],
+}
+
+
+def _icd_codes_from_conditions(chronic_conditions) -> list:
+    """
+    Convert a member's chronic_conditions list (stored on the Member node)
+    into a flat list of ICD-10 codes for use in measure applicability and
+    exclusion checks when no claim history exists.
+    """
+    if not chronic_conditions:
+        return []
+    codes = []
+    for cond in (chronic_conditions if isinstance(chronic_conditions, list) else []):
+        codes.extend(CHRONIC_CONDITION_ICD_MAP.get(cond, []))
+    return codes
+
+
 # ── Pure Python helpers (no LLM) ──────────────────────────────────────────────
 
 def _parse_age(age_str: str) -> int:
@@ -381,7 +416,16 @@ RECOMMENDED NEXT ACTION: [specific action for top gap]""",
         gender = str(profile.get("gender", ""))
 
         claims = get_member_claims_cpt_codes(member_id)
-        icd_codes = [c.get("icd_code", "") for c in claims]
+        # ICD codes from actual claims
+        claim_icd_codes = [c.get("icd_code", "") for c in claims if c.get("icd_code")]
+
+        # Supplement with ICD codes derived from stored chronic_conditions.
+        # This ensures newly added members (zero claims) still have diabetes /
+        # chronic disease measures evaluated correctly.
+        condition_icd_codes = _icd_codes_from_conditions(
+            profile.get("chronic_conditions") or []
+        )
+        icd_codes = list(set(claim_icd_codes + condition_icd_codes))
 
         all_measures = get_applicable_measures(age, gender)
         applicable = [m for m in all_measures if _measure_applies(m, age, gender, icd_codes)]
@@ -391,7 +435,12 @@ RECOMMENDED NEXT ACTION: [specific action for top gap]""",
         excluded_measures: List[str] = []
 
         for measure in applicable:
-            exclusions = check_member_exclusions(member_id, measure["measure_id"])
+            # Pass condition-derived ICD codes so exclusion checks also work
+            # for members who have conditions recorded but no claims yet.
+            exclusions = check_member_exclusions(
+                member_id, measure["measure_id"],
+                extra_icd_codes=condition_icd_codes,
+            )
             if exclusions:
                 reason = exclusions[0].get("type", "excluded")
                 excluded_measures.append(f"{measure['measure_id']} ({reason})")
@@ -462,7 +511,8 @@ RECOMMENDED NEXT ACTION: [specific action for top gap]""",
   Covered   : {profile.get('preventive_covered')}
   Eligibility: {profile.get('eligibility_rules')}
   PCP       : {profile.get('pcp_name')} | {profile.get('pcp_specialty')} | {profile.get('pcp_network_status')}
-  ICD codes in claims (for diabetes check): {list(set(icd_codes[:10]))}
+  Chronic Conditions (from member record): {profile.get('chronic_conditions') or 'None recorded'}
+  ICD codes (claims + conditions combined): {list(set(icd_codes[:15]))}
 
 [SECTION 2 — APPLICABLE HEDIS MEASURES]  ← for hedis_measure_agent
   Total applicable: {len(applicable)}
