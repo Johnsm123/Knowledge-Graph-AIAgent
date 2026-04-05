@@ -1981,3 +1981,253 @@
   from { opacity: 0; transform: translateX(-50%) translateY(-16px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   OUTREACH TIMELINE WAVE GRAPH
+   ═══════════════════════════════════════════════════════════════ */
+.ot-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ot-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.ot-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ot-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.ot-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* SVG container */
+.ot-svg-wrap {
+  background: white;
+  border-radius: 16px;
+  padding: 20px 16px 8px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.ot-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  cursor: default;
+}
+
+/* Detail card */
+.ot-detail {
+  background: white;
+  border-radius: 12px;
+  border: 2px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  animation: ot-slide-in 0.25s cubic-bezier(0.16,1,0.3,1);
+}
+
+@keyframes ot-slide-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ot-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ot-detail-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.ot-detail-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.ot-detail-sub {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.ot-detail-badge {
+  margin-left: auto;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ot-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0;
+  padding: 4px 0;
+}
+
+.ot-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 9px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 12px;
+}
+
+.ot-row:last-child { border-bottom: none; }
+
+.ot-row-label {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  font-weight: 500;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.ot-row-value {
+  font-size: 0.85rem;
+  color: #1e293b;
+  font-weight: 600;
+  text-align: right;
+}
+
+.ot-row-value code {
+  font-family: monospace;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  color: #3730a3;
+}
+
+/* Email preview section */
+.ot-email-section {
+  padding: 12px 20px 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.ot-email-toggle {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ot-email-toggle:hover { background: #dbeafe; }
+
+.ot-email-frame {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ot-email-empty {
+  padding: 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+/* Compact event list */
+.ot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ot-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: white;
+  border-radius: 8px;
+  border-left: 4px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.ot-list-item:hover {
+  transform: translateX(3px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.ot-list-item--active {
+  background: #f0f9ff;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.15);
+}
+
+.ot-list-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.ot-list-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ot-list-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.ot-list-meta {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.ot-list-badge {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  text-transform: capitalize;
+}

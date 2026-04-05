@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader, GitCompare, Bot, CheckCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -855,33 +855,11 @@ function MemberDetails({ member, onBack }) {
 
         {/* ── OUTREACH TAB ───────────────────────────────────────────────── */}
         {activeTab === 'outreach' && (
-          <div className="outreach-tab">
-            {details?.outreach_history?.length > 0 ? (
-              <div className="outreach-timeline">
-                {details.outreach_history.map(o => (
-                  <div key={o.outreach_id} className="outreach-item">
-                    <div className="outreach-icon">
-                      <MessageCircle size={20} />
-                    </div>
-                    <div className="outreach-content">
-                      <div className="outreach-header">
-                        <h4>{o.channel}</h4>
-                        <span className="outreach-date">{o.date}</span>
-                      </div>
-                      <p>Care Gap: {o.measure_name}</p>
-                      <span className={`outreach-status ${o.status.toLowerCase()}`}>{o.status}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="no-data">
-                <MessageCircle size={48} color="#94a3b8" />
-                <h3>No Outreach History</h3>
-                <p>No outreach attempts recorded for this member.</p>
-              </div>
-            )}
-          </div>
+          <OutreachTimeline
+            outreach={details?.outreach_history || []}
+            appointments={details?.appointments || []}
+            member={member}
+          />
         )}
       </div>
 
@@ -1120,6 +1098,293 @@ function MemberDetails({ member, onBack }) {
       {emailPanelOpen && (
         <EmailPanel member={member} onClose={() => setEmailPanelOpen(false)} />
       )}
+    </div>
+  );
+}
+
+// ── Outreach Timeline Wave Graph ─────────────────────────────────────────────
+function OutreachTimeline({ outreach, appointments, member }) {
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [emailHtml, setEmailHtml]         = useState({});
+  const [expandedEmail, setExpandedEmail] = useState(null);
+
+  // Merge outreach + appointment events into one sorted timeline
+  const events = useMemo(() => {
+    const list = [];
+
+    appointments.forEach(a => {
+      list.push({
+        id:       a.appointment_id,
+        date:     a.appointment_date,
+        type:     a.status === 'Completed' ? 'completed' : 'appointment',
+        label:    a.screening_name || a.measure_id,
+        sub:      a.status === 'Completed' ? 'Screening Completed' : 'Appointment Scheduled',
+        channel:  'Email Invite',
+        email:    a.member_email,
+        cpt:      a.cpt_codes,
+        icd:      a.icd_codes,
+        lab:      a.lab_number,
+        specialist: a.lab_specialist,
+        location: a.lab_location,
+        time:     a.appointment_time,
+        appt_id:  a.appointment_id,
+        measure:  a.measure_id,
+      });
+    });
+
+    outreach.forEach(o => {
+      list.push({
+        id:      o.outreach_id,
+        date:    o.date,
+        type:    o.status?.toLowerCase() === 'completed' ? 'completed' : 'outreach',
+        label:   o.measure_name || o.measure_id || 'Outreach',
+        sub:     o.channel,
+        channel: o.channel,
+        status:  o.status,
+      });
+    });
+
+    return list
+      .filter(e => e.date)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [outreach, appointments]);
+
+  // Fetch HTML email bodies once
+  useEffect(() => {
+    if (!appointments.some(a => a.member_email)) return;
+    axios.get(`${API_BASE}/email/${member.member_id}`)
+      .then(res => {
+        const map = {};
+        (res.data.emails || []).forEach(e => {
+          if (e.appointment_id && e.html_body) map[e.appointment_id] = e.html_body;
+        });
+        setEmailHtml(map);
+      })
+      .catch(() => {});
+  }, [member.member_id]);
+
+  if (events.length === 0) {
+    return (
+      <div className="no-data">
+        <MessageCircle size={48} color="#94a3b8" />
+        <h3>No Outreach History</h3>
+        <p>No outreach or appointment activity recorded for this member.</p>
+      </div>
+    );
+  }
+
+  // ── SVG wave graph dimensions ──────────────────────────────────────────────
+  const W = 900, H = 220, PAD = 60;
+  const n = events.length;
+  const xStep = n > 1 ? (W - PAD * 2) / (n - 1) : 0;
+
+  // Y positions: wave pattern — alternate between 3 heights
+  const yLevels = [H * 0.25, H * 0.55, H * 0.35];
+  const getY = i => yLevels[i % yLevels.length];
+
+  // Build smooth SVG path through all points
+  const points = events.map((_, i) => ({
+    x: n === 1 ? W / 2 : PAD + i * xStep,
+    y: getY(i),
+  }));
+
+  const pathD = points.reduce((d, p, i) => {
+    if (i === 0) return `M ${p.x} ${p.y}`;
+    const prev = points[i - 1];
+    const cpx = (prev.x + p.x) / 2;
+    return `${d} C ${cpx} ${prev.y}, ${cpx} ${p.y}, ${p.x} ${p.y}`;
+  }, '');
+
+  // Color per event type
+  const typeColor = {
+    appointment: '#3b82f6',
+    completed:   '#10b981',
+    outreach:    '#8b5cf6',
+  };
+  const typeIcon = {
+    appointment: '📅',
+    completed:   '✅',
+    outreach:    '📞',
+  };
+
+  const fmtDate = d => {
+    if (!d) return '';
+    try { return new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return d; }
+  };
+
+  return (
+    <div className="ot-wrap">
+      <div className="ot-header">
+        <h3 className="ot-title">Outreach Activity Timeline</h3>
+        <div className="ot-legend">
+          {Object.entries(typeColor).map(([t, c]) => (
+            <span key={t} className="ot-legend-item">
+              <span className="ot-legend-dot" style={{ background: c }} />
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Wave SVG ──────────────────────────────────────────────────── */}
+      <div className="ot-svg-wrap">
+        <svg viewBox={`0 0 ${W} ${H}`} className="ot-svg" preserveAspectRatio="xMidYMid meet">
+          {/* Gradient fill under the wave */}
+          <defs>
+            <linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"  stopColor="#3b82f6" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.01" />
+            </linearGradient>
+          </defs>
+
+          {/* Filled area under wave */}
+          {points.length > 1 && (
+            <path
+              d={`${pathD} L ${points[points.length-1].x} ${H} L ${points[0].x} ${H} Z`}
+              fill="url(#waveGrad)"
+            />
+          )}
+
+          {/* Wave line */}
+          <path d={pathD} fill="none" stroke="#3b82f6" strokeWidth="2.5"
+            strokeLinecap="round" strokeLinejoin="round"
+            style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.3))' }}
+          />
+
+          {/* Vertical drop lines + date labels */}
+          {points.map((p, i) => (
+            <g key={i}>
+              <line x1={p.x} y1={p.y + 10} x2={p.x} y2={H - 18}
+                stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3,3" />
+              <text x={p.x} y={H - 4} textAnchor="middle"
+                fontSize="9" fill="#94a3b8" fontFamily="system-ui">
+                {fmtDate(events[i].date)}
+              </text>
+            </g>
+          ))}
+
+          {/* Event nodes */}
+          {points.map((p, i) => {
+            const ev = events[i];
+            const col = typeColor[ev.type] || '#64748b';
+            const isSelected = selectedEvent?.id === ev.id;
+            return (
+              <g key={ev.id} style={{ cursor: 'pointer' }}
+                onClick={() => setSelectedEvent(isSelected ? null : ev)}>
+                {/* Pulse ring on selected */}
+                {isSelected && (
+                  <circle cx={p.x} cy={p.y} r={20} fill={col} opacity={0.15}>
+                    <animate attributeName="r" values="16;24;16" dur="1.8s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.2;0.05;0.2" dur="1.8s" repeatCount="indefinite" />
+                  </circle>
+                )}
+                {/* Outer ring */}
+                <circle cx={p.x} cy={p.y} r={isSelected ? 14 : 11}
+                  fill="white" stroke={col} strokeWidth={isSelected ? 3 : 2}
+                  style={{ transition: 'r 0.2s, stroke-width 0.2s',
+                    filter: isSelected ? `drop-shadow(0 0 6px ${col})` : 'none' }}
+                />
+                {/* Inner fill */}
+                <circle cx={p.x} cy={p.y} r={isSelected ? 8 : 6} fill={col} />
+                {/* Icon */}
+                <text x={p.x} y={p.y - 20} textAnchor="middle" fontSize="13">
+                  {typeIcon[ev.type]}
+                </text>
+                {/* Label above icon */}
+                <text x={p.x} y={p.y - 34} textAnchor="middle"
+                  fontSize="8.5" fill="#475569" fontWeight="600" fontFamily="system-ui"
+                  style={{ maxWidth: 80 }}>
+                  {ev.label?.length > 14 ? ev.label.slice(0, 13) + '…' : ev.label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* ── Event detail card ─────────────────────────────────────────── */}
+      {selectedEvent && (
+        <div className="ot-detail" style={{ borderColor: typeColor[selectedEvent.type] || '#e2e8f0' }}>
+          <div className="ot-detail-header">
+            <span className="ot-detail-icon">{typeIcon[selectedEvent.type]}</span>
+            <div>
+              <div className="ot-detail-title">{selectedEvent.label}</div>
+              <div className="ot-detail-sub">{selectedEvent.sub} &nbsp;·&nbsp; {fmtDate(selectedEvent.date)}</div>
+            </div>
+            <span className="ot-detail-badge"
+              style={{ background: typeColor[selectedEvent.type] + '20',
+                       color: typeColor[selectedEvent.type] }}>
+              {selectedEvent.type.charAt(0).toUpperCase() + selectedEvent.type.slice(1)}
+            </span>
+          </div>
+
+          <div className="ot-detail-grid">
+            {selectedEvent.channel && <OtRow label="Channel" value={selectedEvent.channel} />}
+            {selectedEvent.time     && <OtRow label="Time" value={selectedEvent.time} />}
+            {selectedEvent.lab      && <OtRow label="Lab" value={selectedEvent.lab} />}
+            {selectedEvent.specialist && <OtRow label="Specialist" value={selectedEvent.specialist} />}
+            {selectedEvent.location && <OtRow label="Location" value={selectedEvent.location} />}
+            {selectedEvent.cpt      && <OtRow label="CPT Code" value={<code>{selectedEvent.cpt}</code>} />}
+            {selectedEvent.icd      && <OtRow label="ICD-10" value={<code>{selectedEvent.icd}</code>} />}
+            {selectedEvent.email    && <OtRow label="Sent To" value={selectedEvent.email} />}
+            {selectedEvent.status   && <OtRow label="Status" value={selectedEvent.status} />}
+          </div>
+
+          {/* Email HTML preview toggle */}
+          {selectedEvent.appt_id && (
+            <div className="ot-email-section">
+              <button className="ot-email-toggle"
+                onClick={() => setExpandedEmail(expandedEmail === selectedEvent.appt_id ? null : selectedEvent.appt_id)}>
+                {expandedEmail === selectedEvent.appt_id ? '▲ Hide Email Preview' : '▼ View Appointment Email'}
+              </button>
+              {expandedEmail === selectedEvent.appt_id && (
+                <div className="ot-email-frame">
+                  {emailHtml[selectedEvent.appt_id] ? (
+                    <iframe
+                      srcDoc={emailHtml[selectedEvent.appt_id]}
+                      title="Email Preview"
+                      sandbox="allow-same-origin"
+                      style={{ width: '100%', height: 500, border: 'none', display: 'block' }}
+                    />
+                  ) : (
+                    <div className="ot-email-empty">Email preview not available</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Compact event list below graph ───────────────────────────── */}
+      <div className="ot-list">
+        {events.map((ev, i) => (
+          <div key={ev.id}
+            className={`ot-list-item ${selectedEvent?.id === ev.id ? 'ot-list-item--active' : ''}`}
+            style={{ borderLeftColor: typeColor[ev.type] || '#e2e8f0' }}
+            onClick={() => setSelectedEvent(selectedEvent?.id === ev.id ? null : ev)}>
+            <span className="ot-list-icon">{typeIcon[ev.type]}</span>
+            <div className="ot-list-body">
+              <span className="ot-list-label">{ev.label}</span>
+              <span className="ot-list-meta">{ev.sub} &nbsp;·&nbsp; {fmtDate(ev.date)}</span>
+            </div>
+            <span className="ot-list-badge"
+              style={{ background: typeColor[ev.type] + '18', color: typeColor[ev.type] }}>
+              {ev.type}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OtRow({ label, value }) {
+  return (
+    <div className="ot-row">
+      <span className="ot-row-label">{label}</span>
+      <span className="ot-row-value">{value}</span>
     </div>
   );
 }

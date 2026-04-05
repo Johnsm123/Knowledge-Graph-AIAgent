@@ -765,14 +765,19 @@ def get_member_emails(member_id: str):
     kg = get_knowledge_graph()
     return kg.run_query("""
         MATCH (m:Member {member_id: $member_id})-[:HAS_EMAIL]->(e:Email)
-        RETURN e.email_id  AS email_id,
-               e.subject   AS subject,
-               e.body      AS body,
+        RETURN e.email_id   AS email_id,
+               e.subject    AS subject,
+               e.body       AS body,
+               e.html_body  AS html_body,
                e.from_email AS from_email,
-               e.to_email  AS to_email,
-               e.timestamp AS timestamp,
-               e.direction AS direction,
-               e.is_read   AS is_read
+               e.to_email   AS to_email,
+               e.timestamp  AS timestamp,
+               e.direction  AS direction,
+               e.is_read    AS is_read,
+               e.email_type     AS email_type,
+               e.appointment_id AS appointment_id,
+               e.measure_id     AS measure_id,
+               e.care_gap_id    AS care_gap_id
         ORDER BY e.timestamp DESC
     """, {"member_id": member_id})
 

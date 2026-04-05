@@ -473,6 +473,43 @@ def book_appointment():
             except Exception as email_err:
                 logger.warning(f"Email send failed for {appointment_id}: {email_err}")
 
+        # Persist appointment email in Neo4j so it appears in Outreach History
+        if member_email:
+            from src.care_gap_neo4j import merge_email
+            from datetime import datetime as _dt
+            import uuid as _uuid2
+            email_id = f"APPT-EMAIL-{appointment_id}"
+            # Store a plain-text summary as body (HTML stored separately)
+            plain_body = (
+                f"Appointment Confirmation: {measure_name}\n"
+                f"Date: {friendly_date} at {friendly_time}\n"
+                f"Lab: {lab_info['lab_number']} - {lab_info['lab_location']}\n"
+                f"Specialist: {lab_info['lab_specialist']}\n"
+                f"CPT Code: {cpt_codes or 'Per provider order'}\n"
+                f"ICD-10 Code: {icd_codes or 'Per diagnosis'}\n"
+                f"Appointment ID: {appointment_id}"
+            )
+            merge_email(
+                email_id=email_id,
+                member_id=member_id,
+                subject=f"Appointment Confirmation: {measure_name} - {friendly_date}",
+                body=plain_body,
+                from_email=cfg.azure_communication_sender if cfg.azure_communication_connection_string else "system@healthportal.com",
+                to_email=member_email,
+                timestamp=_dt.now().isoformat(),
+                direction="sent",
+                is_read=True,
+            )
+            # Also store the HTML body on the email node for rich preview
+            from src.neo4j_connection import get_knowledge_graph as _gkg2
+            _gkg2().execute_write(
+                "MATCH (e:Email {email_id: $eid}) SET e.html_body = $html, "
+                "e.email_type = 'appointment_confirmation', e.appointment_id = $appt_id, "
+                "e.measure_id = $mid, e.care_gap_id = $cgid",
+                {"eid": email_id, "html": body_html, "appt_id": appointment_id,
+                 "mid": measure_id, "cgid": care_gap_id}
+            )
+
         return jsonify({
             "status": "success",
             "appointment_id": appointment_id,
