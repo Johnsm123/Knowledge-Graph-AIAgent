@@ -140,31 +140,41 @@ function MemberComparison({ member, onClose }) {
             </div>
           </div>
 
-          {/* Better Performers Section */}
-          {comparisonData?.better_performers && comparisonData.better_performers.length > 0 && (
+          {/* How Peers Closed the Same Gaps */}
+          {comparisonData?.gap_closure_examples && comparisonData.gap_closure_examples.length > 0 && (
             <div className="better-performers-section">
               <div className="section-header">
                 <Award size={24} />
-                <h3>Top Performing Similar Members</h3>
-                <p>Learn from members with better care gap management</p>
+                <h3>How Similar Members Closed These Gaps</h3>
+                <p>Real examples from peers who resolved the same care gaps</p>
               </div>
               <div className="performers-grid">
-                {comparisonData.better_performers.slice(0, 6).map((performer) => (
-                  <div key={performer.member_id} className="performer-card">
-                    <div className="performer-avatar">
-                      {performer.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div className="performer-info">
-                      <h4>{performer.name}</h4>
-                      <p className="performer-id">{performer.member_id}</p>
-                      <div className="performer-stats">
-                        <div className="stat-badge success">
-                          <CheckCircle size={14} />
-                          {performer.open_gaps} Open
+                {comparisonData.gap_closure_examples.map((ex, i) => (
+                  <div key={i} className="performer-card" style={{ borderLeft: '4px solid #10b981' }}>
+                    <div className="performer-info" style={{ width: '100%' }}>
+                      <h4 style={{ color: '#10b981' }}>{ex.measure_name}</h4>
+                      <p className="performer-id">Closed by: <strong>{ex.closed_by}</strong> ({ex.member_id})</p>
+                      <div className="performer-stats" style={{ flexDirection: 'column', gap: 4, marginTop: 8 }}>
+                        <div style={{ fontSize: '0.8rem' }}>
+                          <span style={{ color: '#64748b' }}>CPT Code: </span>
+                          <code style={{ background: '#f0fdf4', padding: '2px 6px', borderRadius: 4 }}>{ex.cpt_code}</code>
                         </div>
-                        <div className="stat-badge info">
-                          {performer.closed_gaps} Closed
+                        <div style={{ fontSize: '0.8rem' }}>
+                          <span style={{ color: '#64748b' }}>ICD-10: </span>
+                          <code style={{ background: '#f0fdf4', padding: '2px 6px', borderRadius: 4 }}>{ex.icd_code}</code>
                         </div>
+                        {ex.closed_on && (
+                          <div style={{ fontSize: '0.8rem' }}>
+                            <span style={{ color: '#64748b' }}>Closed on: </span>
+                            <strong>{ex.closed_on}</strong>
+                          </div>
+                        )}
+                        {ex.claim_id && (
+                          <div style={{ fontSize: '0.8rem' }}>
+                            <span style={{ color: '#64748b' }}>Claim: </span>
+                            <code style={{ fontSize: '0.75rem' }}>{ex.claim_id}</code>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

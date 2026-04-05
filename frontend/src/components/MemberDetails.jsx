@@ -108,7 +108,49 @@ function MemberDetails({ member, onBack }) {
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE}/members/${member.member_id}/details`);
-      setDetails(response.data);
+      const data = response.data;
+      setDetails(data);
+
+      // Restore booking state from DB appointments so refresh doesn't lose state
+      if (data.appointments?.length > 0) {
+        const restoredBookings = {};
+        const restoredCompleted = new Set();
+
+        data.appointments.forEach(appt => {
+          // Use stored care_gap_id if available, else match by measure_id
+          const care_gap_id = appt.care_gap_id
+            || data.open_gaps?.find(g => g.measure_id === appt.measure_id)?.care_gap_id
+            || data.closed_gaps?.find(g => g.measure_id === appt.measure_id)?.care_gap_id
+            || `AUTO-${member.member_id}-${appt.measure_id}`;
+
+          restoredBookings[care_gap_id] = {
+            appointment_id:   appt.appointment_id,
+            measure_name:     appt.screening_name || appt.measure_id,
+            care_gap_id,
+            appointment_date: appt.appointment_date,
+            appointment_time: appt.appointment_time,
+            lab_number:       appt.lab_number,
+            lab_location:     appt.lab_location,
+            lab_specialist:   appt.lab_specialist,
+            cpt_codes:        appt.cpt_codes,
+            icd_codes:        appt.icd_codes,
+            status:           appt.status,
+            member_email:     appt.member_email,
+            member_name:      appt.member_name,
+            plan_id:          appt.plan_id,
+            insurance_type:   appt.insurance_type,
+            pcp_name:         appt.pcp_name,
+            email_sent:       !!appt.member_email,
+          };
+
+          if (appt.status === 'Completed') {
+            restoredCompleted.add(care_gap_id);
+          }
+        });
+
+        setBookings(restoredBookings);
+        setCompletedGaps(restoredCompleted);
+      }
     } catch (error) {
       console.error('Error fetching member details:', error);
     } finally {

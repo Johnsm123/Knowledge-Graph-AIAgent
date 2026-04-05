@@ -792,7 +792,8 @@ def merge_appointment(appointment_id: str, member_id: str, measure_id: str,
                       appointment_date: str, appointment_time: str,
                       lab_number: str, lab_specialist: str, lab_location: str,
                       screening_name: str, cpt_codes: str, icd_codes: str,
-                      provider_id: str, status: str = "Scheduled"):
+                      provider_id: str, status: str = "Scheduled",
+                      care_gap_id: str = ""):
     """Store an Appointment node and link it to Member and QualityMeasure."""
     kg = get_knowledge_graph()
     kg.execute_write("""
@@ -809,13 +810,15 @@ def merge_appointment(appointment_id: str, member_id: str, measure_id: str,
             a.icd_codes        = $icd_codes,
             a.provider_id      = $provider_id,
             a.status           = $status,
+            a.care_gap_id      = $care_gap_id,
             a.created_at       = datetime()
     """, {"appointment_id": appointment_id, "member_id": member_id,
           "measure_id": measure_id, "appointment_date": appointment_date,
           "appointment_time": appointment_time, "lab_number": lab_number,
           "lab_specialist": lab_specialist, "lab_location": lab_location,
           "screening_name": screening_name, "cpt_codes": cpt_codes,
-          "icd_codes": icd_codes, "provider_id": provider_id, "status": status})
+          "icd_codes": icd_codes, "provider_id": provider_id, "status": status,
+          "care_gap_id": care_gap_id})
     kg.execute_write("""
         MATCH (m:Member {member_id: $member_id})
         MATCH (a:Appointment {appointment_id: $appointment_id})

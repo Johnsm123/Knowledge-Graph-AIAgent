@@ -99,10 +99,18 @@ def get_member_details(member_id):
         from src.care_gap_agents import detect_care_gaps
         kg = get_knowledge_graph()
 
-        # Run pure-Python gap detection first so the panel always reflects
-        # the same agent-computed CPT/ICD codes without requiring a separate
-        # "AI Suggestions" click.  This is fast (no LLM) and idempotent.
-        detect_care_gaps(member_id)
+        # Only run gap detection if member has no closed gaps yet.
+        # Once a gap is closed via a claim, detect_care_gaps would re-open it
+        # because the claim's CPT code may not match the full lookback check.
+        # The claim created by close_care_gap_with_claim already marks is_open=false
+        # so we trust that state and skip re-detection for members with closed gaps.
+        closed_count = kg.run_query("""
+            MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+            WHERE g.is_open = false AND g.claim_id IS NOT NULL
+            RETURN count(g) AS cnt
+        """, {"mid": member_id})
+        if not closed_count or closed_count[0]["cnt"] == 0:
+            detect_care_gaps(member_id)
 
         # Get member profile
         profile = get_member_profile(member_id)
@@ -144,13 +152,39 @@ def get_member_details(member_id):
             ORDER BY g.closed_on DESC
         """, {"member_id": member_id})
         
+        # Load appointments so frontend can restore booking state after refresh
+        appointments = kg.run_query("""
+            MATCH (m:Member {member_id: $member_id})-[:HAS_APPOINTMENT]->(a:Appointment)
+            OPTIONAL MATCH (m)-[:ENROLLED_IN]->(b:BenefitPlan)
+            OPTIONAL MATCH (m)-[:ASSIGNED_TO]->(p:Provider)
+            RETURN a.appointment_id   AS appointment_id,
+                   a.measure_id        AS measure_id,
+                   a.appointment_date  AS appointment_date,
+                   a.appointment_time  AS appointment_time,
+                   a.lab_number        AS lab_number,
+                   a.lab_specialist    AS lab_specialist,
+                   a.lab_location      AS lab_location,
+                   a.screening_name    AS screening_name,
+                   a.cpt_codes         AS cpt_codes,
+                   a.icd_codes         AS icd_codes,
+                   a.status            AS status,
+                   a.care_gap_id       AS care_gap_id,
+                   m.email             AS member_email,
+                   m.name              AS member_name,
+                   b.plan_id           AS plan_id,
+                   m.insurance_type    AS insurance_type,
+                   p.name              AS pcp_name
+            ORDER BY a.appointment_date DESC
+        """, {"member_id": member_id})
+
         return jsonify({
             "member_id": member_id,
             "profile": profile,
             "open_gaps": gaps,
             "closed_gaps": closed_gaps,
             "claims": claims,
-            "outreach_history": outreach
+            "outreach_history": outreach,
+            "appointments": appointments
         })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
@@ -243,38 +277,15 @@ def send_chat_message():
 
 def _get_hedis_codes(measure_id: str):
     """
-    Extract CPT and ICD-10 codes for a HEDIS measure directly from the Python
-    golden reference dict (ground truth).  Handles top-level 'codes' dict AND
-    per-option codes inside 'screening_options' (COL/CCS).
-    Returns (cpt_codes_str, icd_codes_str).
+    Return the single primary CPT code and primary ICD-10 code for a measure.
+    Uses primary_cpt and primary_icd10 fields from the golden reference.
+    These are the specific codes used for appointment booking and claim creation.
     """
     from src.hedis_golden_reference import HEDIS_MEASURES
     mdata = HEDIS_MEASURES.get(measure_id, {})
-    cpt_list: list = []
-    icd_list: list = []
-
-    # ── top-level codes dict ─────────────────────────────────────────────────
-    for k, v in mdata.get("codes", {}).items():
-        if not isinstance(v, list):
-            continue
-        kl = k.lower()
-        if "cpt" in kl or "hcpcs" in kl:
-            cpt_list.extend(v)
-        elif "icd" in kl:
-            icd_list.extend(v)
-
-    # ── screening options (COL has 5 options, CCS has 3) ────────────────────
-    for opt in mdata.get("screening_options", []):
-        cpt_list.extend(opt.get("cpt", []))
-        cpt_list.extend(opt.get("hcpcs", []))
-        # screening options don't carry ICD codes — diagnosis_requirement handles those
-
-    # ── deduplicate preserving order ─────────────────────────────────────────
-    seen: set = set()
-    cpt_codes = ", ".join(c for c in cpt_list if c and not (c in seen or seen.add(c)))
-    seen = set()
-    icd_codes = ", ".join(c for c in icd_list if c and not (c in seen or seen.add(c)))
-    return cpt_codes, icd_codes
+    cpt_code = mdata.get("primary_cpt", "")
+    icd_code = mdata.get("primary_icd10", "")
+    return cpt_code, icd_code
 
 
 @app.route("/api/v1/appointments/book", methods=["POST"])
@@ -355,6 +366,7 @@ def book_appointment():
             cpt_codes=cpt_codes,
             icd_codes=icd_codes,
             provider_id=provider_id,
+            care_gap_id=care_gap_id,
         )
 
         appt = get_appointment(appointment_id)
@@ -516,15 +528,20 @@ def complete_appointment(appointment_id):
         service_date = appt.get("appointment_date", str(date.today()))
         claim_id = f"CLM-{appt['member_id']}-{appt['measure_id']}-{uuid.uuid4().hex[:8].upper()}"
 
-        # Use codes already on the appointment; fall back to golden reference
-        # extraction so claims created from old (pre-fix) appointments still
-        # have correct CPT/ICD codes.
-        cpt_code = appt.get("cpt_codes") or ""
-        icd_code = appt.get("icd_codes") or ""
-        if not cpt_code or not icd_code:
-            gr_cpt, gr_icd = _get_hedis_codes(appt["measure_id"])
-            cpt_code = cpt_code or gr_cpt
-            icd_code = icd_code or gr_icd
+        # Use primary codes from golden reference — always single specific codes
+        cpt_code, icd_code = _get_hedis_codes(appt["measure_id"])
+        # Override with member's actual ICD from the gap node if available
+        gap_icd = ""
+        if care_gap_id:
+            kg = get_knowledge_graph()
+            gap_rows = kg.run_query("""
+                MATCH (g:CareGap {care_gap_id: $gid})
+                RETURN g.primary_icd10 AS icd
+            """, {"gid": care_gap_id})
+            if gap_rows and gap_rows[0].get("icd"):
+                gap_icd = gap_rows[0]["icd"]
+        if gap_icd:
+            icd_code = gap_icd
 
         close_care_gap_with_claim(
             care_gap_id=care_gap_id,
@@ -539,7 +556,6 @@ def complete_appointment(appointment_id):
         )
 
         # Mark appointment as completed
-        from src.neo4j_connection import get_knowledge_graph
         from src.care_gap_neo4j import merge_outreach
         import uuid as _uuid
         kg = get_knowledge_graph()
@@ -690,120 +706,137 @@ def get_providers():
 @app.route("/api/v1/members/<member_id>/compare", methods=["GET"])
 def compare_member(member_id):
     """
-    Compare a member with similar members and provide improvement recommendations.
-
-    Similarity is determined by:
-      1. Same gender
-      2. Age within ±5 years
-      3. Shared open QualityMeasure gap nodes (graph traversal)
-    CPT codes come from the Python HEDIS_MEASURES golden reference to avoid
-    stale Neo4j CodeSet data.
+    Compare a member's open gaps against similar members who CLOSED those same
+    gaps — showing exactly how they closed them (CPT code, ICD code, claim, date).
     """
     try:
         from src.hedis_golden_reference import HEDIS_MEASURES
         kg = get_knowledge_graph()
 
-        # ── Current member summary ────────────────────────────────────────────
+        # Current member summary
         current_member = kg.run_query("""
             MATCH (m:Member {member_id: $member_id})
             OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
             WITH m,
                  count(CASE WHEN g.is_open = true  THEN 1 END) AS open_gaps,
                  count(CASE WHEN g.is_open = false THEN 1 END) AS closed_gaps
-            RETURN m.member_id          AS member_id,
-                   m.name               AS name,
-                   m.age_str            AS age,
-                   m.gender             AS gender,
-                   m.dob                AS dob,
+            RETURN m.member_id AS member_id, m.name AS name, m.age_str AS age,
+                   m.gender AS gender, m.dob AS dob,
                    m.chronic_conditions AS chronic_conditions,
-                   open_gaps,
-                   closed_gaps
+                   open_gaps, closed_gaps
         """, {"member_id": member_id})
 
         if not current_member:
             return jsonify({"status": "error", "error": "Member not found"}), 404
 
         current = current_member[0]
-
         try:
             age = int(current["age"].split()[0]) if current["age"] else 0
         except (ValueError, AttributeError, IndexError):
             age = 0
 
-        # ── Current member's open gaps (IDs of QualityMeasures) ─────────────
-        current_open_measure_ids = [
-            row["measure_id"] for row in kg.run_query("""
-                MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)
-                      -[:RELATES_TO]->(q:QualityMeasure)
-                WHERE g.is_open = true
-                RETURN q.measure_id AS measure_id
-            """, {"member_id": member_id})
-        ]
-
-        # ── Similar members via shared open QualityMeasure nodes ─────────────
-        # Primary path: traverse the graph — Member → CareGap → QualityMeasure
-        # ← CareGap ← Member to find members sharing at least one open gap.
-        graph_similar = kg.run_query("""
+        # Current member's open gaps with golden reference codes
+        current_open_gaps = kg.run_query("""
             MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)
                   -[:RELATES_TO]->(q:QualityMeasure)
-                  <-[:RELATES_TO]-(g2:CareGap)<-[:HAS_CARE_GAP]-(m2:Member)
             WHERE g.is_open = true
-              AND g2.is_open = true
-              AND m2.member_id <> $member_id
-              AND m2.gender = $gender
-            WITH m2, count(DISTINCT q) AS shared_gaps
-            OPTIONAL MATCH (m2)-[:HAS_CARE_GAP]->(allg:CareGap)
-            WITH m2, shared_gaps,
-                 count(CASE WHEN allg.is_open = true  THEN 1 END) AS open_gaps,
-                 count(CASE WHEN allg.is_open = false THEN 1 END) AS closed_gaps,
-                 count(allg) AS total_gaps
-            OPTIONAL MATCH (m2)-[:HAS_CLAIM]->(c:Claim)
-            WITH m2, shared_gaps, open_gaps, closed_gaps, total_gaps,
-                 count(c) AS total_claims
-            RETURN m2.member_id  AS member_id,
-                   m2.name        AS name,
-                   m2.age_str     AS age,
-                   m2.gender      AS gender,
-                   shared_gaps,
-                   open_gaps,
-                   closed_gaps,
-                   total_gaps,
-                   total_claims
-            ORDER BY shared_gaps DESC, open_gaps ASC
-            LIMIT 20
+            RETURN g.care_gap_id AS care_gap_id, q.measure_id AS measure_id,
+                   q.name AS measure_name, q.description AS description,
+                   q.lookback_months AS lookback_months, g.created_on AS created_on,
+                   g.primary_cpt_code AS primary_cpt_code, g.primary_icd10 AS primary_icd10
+        """, {"member_id": member_id})
+
+        current_open_measure_ids = [g["measure_id"] for g in current_open_gaps]
+
+        for gap in current_open_gaps:
+            m_data = HEDIS_MEASURES.get(gap["measure_id"], {})
+            gap["cpt_codes"]          = m_data.get("primary_cpt", gap.get("primary_cpt_code") or "N/A")
+            gap["icd_codes"]          = m_data.get("primary_icd10", gap.get("primary_icd10") or "N/A")
+            gap["best_practices"]     = m_data.get("best_practices", [])
+            gap["numerator_criteria"] = m_data.get("numerator_criteria", "")
+
+        # Find members who CLOSED the same measure gaps — the key fix.
+        # Show their name, how they closed it (CPT, ICD, date, claim).
+        better_performers_raw = []
+        gap_closure_examples  = []
+
+        if current_open_measure_ids:
+            closers = kg.run_query("""
+                MATCH (m2:Member)-[:HAS_CARE_GAP]->(g2:CareGap)
+                      -[:RELATES_TO]->(q:QualityMeasure)
+                WHERE q.measure_id IN $measure_ids
+                  AND g2.is_open = false
+                  AND m2.member_id <> $member_id
+                  AND m2.gender = $gender
+                OPTIONAL MATCH (c:Claim {claim_id: g2.claim_id})
+                OPTIONAL MATCH (m2)-[:HAS_CARE_GAP]->(all_g:CareGap)
+                WITH m2, q, g2, c,
+                     count(CASE WHEN all_g.is_open = true  THEN 1 END) AS open_gaps,
+                     count(CASE WHEN all_g.is_open = false THEN 1 END) AS closed_gaps
+                RETURN m2.member_id AS member_id, m2.name AS name,
+                       m2.age_str AS age, m2.gender AS gender,
+                       q.measure_id AS measure_id, q.name AS measure_name,
+                       g2.care_gap_id AS care_gap_id, g2.closed_on AS closed_on,
+                       g2.claim_id AS claim_id,
+                       c.cpt_code AS cpt_code, c.icd_code AS icd_code,
+                       c.service_date AS service_date,
+                       open_gaps, closed_gaps
+                ORDER BY g2.closed_on DESC
+            """, {"measure_ids": current_open_measure_ids,
+                  "member_id": member_id, "gender": current["gender"]})
+
+            seen_members  = set()
+            seen_measures = set()
+            for row in closers:
+                try:
+                    m_age = int(row["age"].split()[0]) if row.get("age") else 0
+                except (ValueError, AttributeError, IndexError):
+                    m_age = 0
+                if abs(m_age - age) > 10:
+                    continue
+
+                if row["member_id"] not in seen_members:
+                    seen_members.add(row["member_id"])
+                    better_performers_raw.append({
+                        "member_id":   row["member_id"],
+                        "name":        row["name"],
+                        "age":         row["age"],
+                        "gender":      row["gender"],
+                        "open_gaps":   row["open_gaps"],
+                        "closed_gaps": row["closed_gaps"],
+                    })
+
+                if row["measure_id"] not in seen_measures:
+                    seen_measures.add(row["measure_id"])
+                    m_data   = HEDIS_MEASURES.get(row["measure_id"], {})
+                    cpt_used = row["cpt_code"]  or m_data.get("primary_cpt", "N/A")
+                    icd_used = row["icd_code"]  or m_data.get("primary_icd10", "N/A")
+                    gap_closure_examples.append({
+                        "measure_id":   row["measure_id"],
+                        "measure_name": row["measure_name"],
+                        "closed_by":    row["name"],
+                        "member_id":    row["member_id"],
+                        "closed_on":    row["closed_on"],
+                        "claim_id":     row["claim_id"],
+                        "cpt_code":     cpt_used,
+                        "icd_code":     icd_used,
+                        "service_date": row["service_date"],
+                    })
+
+        # Age/gender cohort for metrics
+        all_similar = kg.run_query("""
+            MATCH (m2:Member)
+            WHERE m2.member_id <> $member_id AND m2.gender = $gender
+            OPTIONAL MATCH (m2)-[:HAS_CARE_GAP]->(g:CareGap)
+            WITH m2,
+                 count(CASE WHEN g.is_open = true  THEN 1 END) AS open_gaps,
+                 count(CASE WHEN g.is_open = false THEN 1 END) AS closed_gaps
+            RETURN m2.member_id AS member_id, m2.age_str AS age,
+                   open_gaps, closed_gaps
         """, {"member_id": member_id, "gender": current["gender"]})
 
-        # Fallback: gender + age cohort (no shared gap found or result empty)
-        if not graph_similar:
-            graph_similar = kg.run_query("""
-                MATCH (m2:Member)
-                WHERE m2.member_id <> $member_id
-                  AND m2.gender = $gender
-                OPTIONAL MATCH (m2)-[:HAS_CARE_GAP]->(g:CareGap)
-                WITH m2,
-                     0 AS shared_gaps,
-                     count(CASE WHEN g.is_open = true  THEN 1 END) AS open_gaps,
-                     count(CASE WHEN g.is_open = false THEN 1 END) AS closed_gaps,
-                     count(g) AS total_gaps
-                OPTIONAL MATCH (m2)-[:HAS_CLAIM]->(c:Claim)
-                WITH m2, shared_gaps, open_gaps, closed_gaps, total_gaps,
-                     count(c) AS total_claims
-                RETURN m2.member_id  AS member_id,
-                       m2.name        AS name,
-                       m2.age_str     AS age,
-                       m2.gender      AS gender,
-                       shared_gaps,
-                       open_gaps,
-                       closed_gaps,
-                       total_gaps,
-                       total_claims
-                ORDER BY open_gaps ASC, closed_gaps DESC
-                LIMIT 20
-            """, {"member_id": member_id, "gender": current["gender"]})
-
-        # Filter by age ±5 years
         filtered_similar = []
-        for m in graph_similar:
+        for m in all_similar:
             try:
                 m_age = int(m["age"].split()[0]) if m.get("age") else 0
                 if abs(m_age - age) <= 5:
@@ -811,48 +844,19 @@ def compare_member(member_id):
             except (ValueError, AttributeError, IndexError):
                 continue
 
-        # ── Current member's open gaps with HEDIS golden reference codes ─────
-        current_gaps = kg.run_query("""
-            MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)
-                  -[:RELATES_TO]->(q:QualityMeasure)
-            WHERE g.is_open = true
-            RETURN g.care_gap_id   AS care_gap_id,
-                   q.measure_id    AS measure_id,
-                   q.name          AS measure_name,
-                   q.description   AS description,
-                   q.lookback_months AS lookback_months,
-                   g.created_on    AS created_on
-        """, {"member_id": member_id})
-
-        # Attach CPT codes from Python golden reference (not Neo4j CodeSet)
-        for gap in current_gaps:
-            m_data = HEDIS_MEASURES.get(gap["measure_id"], {})
-            from src.care_gap_agents import _get_flat_cpt_for_measure
-            flat_cpt = _get_flat_cpt_for_measure(m_data)
-            # Show first 5 representative codes to keep UI compact
-            cpt_list = [c for c in flat_cpt.split(",") if c][:5]
-            gap["cpt_codes"] = ", ".join(cpt_list) if cpt_list else "N/A"
-            # Include best practices inline from golden reference
-            gap["best_practices"] = m_data.get("best_practices", [])
-            gap["numerator_criteria"] = m_data.get("numerator_criteria", "")
-
-        # ── Improvement guidelines from golden reference ──────────────────────
+        # Improvement guidelines from golden reference
         improvement_guidelines = []
-        for gp in current_gaps:
+        for gp in current_open_gaps:
             m_data = HEDIS_MEASURES.get(gp["measure_id"], {})
             improvement_guidelines.append({
-                "measure_id":              gp["measure_id"],
-                "measure_name":            gp["measure_name"],
-                "best_practices":          m_data.get("best_practices", []),
-                "acceptable_documentation": m_data.get("clinical_guidelines", {})
-                                               .get("acceptable", []),
-                "numerator_criteria":      m_data.get("numerator_criteria", ""),
+                "measure_id":               gp["measure_id"],
+                "measure_name":             gp["measure_name"],
+                "best_practices":           m_data.get("best_practices", []),
+                "acceptable_documentation": m_data.get("clinical_guidelines", {}).get("acceptable", []),
+                "numerator_criteria":       m_data.get("numerator_criteria", ""),
             })
 
-        # ── Metrics ──────────────────────────────────────────────────────────
-        better_performers = [
-            m for m in filtered_similar if m["open_gaps"] < current["open_gaps"]
-        ]
+        # Metrics
         avg_open   = (sum(m["open_gaps"]   for m in filtered_similar) / len(filtered_similar)
                       if filtered_similar else 0)
         avg_closed = (sum(m["closed_gaps"] for m in filtered_similar) / len(filtered_similar)
@@ -862,7 +866,7 @@ def compare_member(member_id):
             [m["open_gaps"] for m in filtered_similar],
         )
 
-        # Shared measures summary: which measures this member shares with peers
+        # Peers who closed same measures (for summary)
         shared_measure_summary = []
         if current_open_measure_ids:
             shared_rows = kg.run_query("""
@@ -870,20 +874,19 @@ def compare_member(member_id):
                 WHERE q.measure_id IN $measure_ids
                 OPTIONAL MATCH (m2:Member)-[:HAS_CARE_GAP]->(g2:CareGap)
                               -[:RELATES_TO]->(q)
-                WHERE g2.is_open = true
-                  AND m2.member_id <> $member_id
-                RETURN q.measure_id AS measure_id,
-                       q.name       AS measure_name,
-                       count(DISTINCT m2) AS peer_count
-                ORDER BY peer_count DESC
+                WHERE g2.is_open = false AND m2.member_id <> $member_id
+                RETURN q.measure_id AS measure_id, q.name AS measure_name,
+                       count(DISTINCT m2) AS peers_who_closed
+                ORDER BY peers_who_closed DESC
             """, {"measure_ids": current_open_measure_ids, "member_id": member_id})
             shared_measure_summary = shared_rows
 
         return jsonify({
-            "current_member":        current,
-            "similar_members":       filtered_similar,
-            "better_performers":     better_performers,
-            "current_gaps":          current_gaps,
+            "current_member":         current,
+            "similar_members":        filtered_similar,
+            "better_performers":      better_performers_raw,
+            "current_gaps":           current_open_gaps,
+            "gap_closure_examples":   gap_closure_examples,
             "improvement_guidelines": improvement_guidelines,
             "shared_measure_summary": shared_measure_summary,
             "comparison_metrics": {
@@ -893,15 +896,13 @@ def compare_member(member_id):
                 "avg_closed_gaps_similar": round(avg_closed, 1),
                 "percentile_rank":         percentile,
                 "total_similar_members":   len(filtered_similar),
-                "better_performers_count": len(better_performers),
+                "better_performers_count": len(better_performers_raw),
             },
         })
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "error": str(e)}), 500
-
-
 def calculate_percentile(value, values_list):
     """Calculate percentile rank based on open gaps (lower gaps = higher percentile = better)."""
     if not values_list:

@@ -183,26 +183,32 @@ function AddMember({ onClose, onSuccess }) {
   const [plans, setPlans]           = useState([]);
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
+  const [loadingForm, setLoadingForm] = useState(true);
   const [zipLoading, setZipLoading] = useState(false);
   const [zipStatus, setZipStatus]   = useState('');   // 'ok' | 'error' | ''
 
-  useEffect(() => {
+  const loadFormData = () => {
+    setLoadingForm(true);
     Promise.allSettled([
       fetch(`${API_BASE}/providers/list`).then(r => r.json()),
       fetch(`${API_BASE}/plans/list`).then(r => r.json()),
       fetch(`${API_BASE}/members/next-id`).then(r => r.json()),
     ]).then(([provResult, plResult, nextIdResult]) => {
-      if (provResult.status === 'fulfilled') {
-        setProviders(provResult.value.providers || []);
+      if (provResult.status === 'fulfilled' && provResult.value.providers) {
+        setProviders(provResult.value.providers);
+      } else {
+        setError('Could not load providers. Is the server running?');
       }
-      if (plResult.status === 'fulfilled') {
-        setPlans(plResult.value.plans || []);
+      if (plResult.status === 'fulfilled' && plResult.value.plans) {
+        setPlans(plResult.value.plans);
       }
       if (nextIdResult.status === 'fulfilled' && nextIdResult.value.next_id) {
         setFormData(prev => ({ ...prev, member_id: nextIdResult.value.next_id }));
       }
-    });
-  }, []);
+    }).finally(() => setLoadingForm(false));
+  };
+
+  useEffect(() => { loadFormData(); }, []);
 
   const calculateAge = (dob) => {
     if (!dob) return '';
@@ -547,14 +553,29 @@ function AddMember({ onClose, onSuccess }) {
               </div>
               <div className="form-group">
                 <label>Primary Care Provider *</label>
-                <select name="pcp_id" value={formData.pcp_id} onChange={handleChange} required>
-                  <option value="">Select Provider</option>
-                  {providers.map(p => (
-                    <option key={p.provider_id} value={p.provider_id}>
-                      {p.name} — {p.specialty}
-                    </option>
-                  ))}
-                </select>
+                {loadingForm ? (
+                  <select disabled><option>Loading providers…</option></select>
+                ) : providers.length === 0 ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <select name="pcp_id" disabled style={{ flex: 1 }}>
+                      <option>No providers found</option>
+                    </select>
+                    <button type="button" onClick={loadFormData}
+                      style={{ padding: '6px 12px', fontSize: '0.8rem', cursor: 'pointer',
+                               background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6 }}>
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <select name="pcp_id" value={formData.pcp_id} onChange={handleChange} required>
+                    <option value="">Select Provider</option>
+                    {providers.map(p => (
+                      <option key={p.provider_id} value={p.provider_id}>
+                        {p.name} — {p.specialty}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="form-group">
                 <label>Enrollment Start</label>
