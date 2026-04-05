@@ -22,6 +22,144 @@ function MarkdownContent({ text, className = '' }) {
   );
 }
 
+// ── Per-agent structured renderers ───────────────────────────────────────────
+
+// Parses lines into sections split by blank lines or header lines
+function parseAgentSections(text) {
+  if (!text) return [];
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const sections = [];
+  let current = { heading: '', lines: [] };
+  lines.forEach(line => {
+    const isHeading = /^[A-Z][A-Z\s\/\-&]{3,}$/.test(line) ||
+                      /^#+\s/.test(line) ||
+                      /^\*\*[^*]+\*\*$/.test(line) ||
+                      /^[A-Z][^a-z]{0,2}[A-Z].*:$/.test(line);
+    if (isHeading) {
+      if (current.lines.length) sections.push({ ...current });
+      current = { heading: line.replace(/^#+\s*/, '').replace(/\*\*/g, '').replace(/:$/, ''), lines: [] };
+    } else {
+      current.lines.push(line);
+    }
+  });
+  if (current.lines.length || current.heading) sections.push(current);
+  return sections;
+}
+
+// Renders a single line — bold, code, bullet
+function AgentLine({ line }) {
+  // Table row detection: | col | col |
+  if (line.startsWith('|')) return null; // handled by table parser
+  // Bullet
+  const isBullet = /^[-•*]\s/.test(line);
+  const text = line.replace(/^[-•*]\s/, '').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  if (isBullet) {
+    return (
+      <div className="ap-bullet">
+        <span className="ap-bullet-dot" />
+        <span dangerouslySetInnerHTML={{ __html: text }} />
+      </div>
+    );
+  }
+  // Key: value line
+  const kvMatch = line.match(/^([A-Za-z][\w\s\/\-()]+):\s*(.+)$/);
+  if (kvMatch) {
+    return (
+      <div className="ap-kv">
+        <span className="ap-kv-key">{kvMatch[1]}</span>
+        <span className="ap-kv-val" dangerouslySetInnerHTML={{ __html: kvMatch[2].replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>') }} />
+      </div>
+    );
+  }
+  return <p className="ap-para" dangerouslySetInnerHTML={{ __html: text }} />;
+}
+
+// Parse markdown table from lines
+function parseTable(lines) {
+  const tableLines = lines.filter(l => l.startsWith('|'));
+  if (tableLines.length < 2) return null;
+  const headers = tableLines[0].split('|').map(h => h.trim()).filter(Boolean);
+  const rows = tableLines.slice(2).map(r => r.split('|').map(c => c.trim()).filter(Boolean));
+  return { headers, rows };
+}
+
+function AgentTable({ headers, rows }) {
+  return (
+    <div className="ap-table-wrap">
+      <table className="ap-table">
+        <thead>
+          <tr>{headers.map((h, i) => <th key={i}>{h.replace(/\*\*/g, '')}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {row.map((cell, j) => (
+                <td key={j} dangerouslySetInnerHTML={{
+                  __html: cell
+                    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+                    .replace(/`([^`]+)`/g, '<code>$1</code>')
+                    .replace(/OPEN/g, '<span class="ap-badge ap-badge--open">OPEN</span>')
+                    .replace(/CLOSED/g, '<span class="ap-badge ap-badge--closed">CLOSED</span>')
+                    .replace(/COMPLIANT/g, '<span class="ap-badge ap-badge--compliant">COMPLIANT</span>')
+                    .replace(/NON.COMPLIANT/g, '<span class="ap-badge ap-badge--open">NON-COMPLIANT</span>')
+                    .replace(/EXCLUDED/g, '<span class="ap-badge ap-badge--excluded">EXCLUDED</span>')
+                    .replace(/NOT EXCLUDED/g, '<span class="ap-badge ap-badge--compliant">NOT EXCLUDED</span>')
+                    .replace(/High/g, '<span class="ap-badge ap-badge--high">High</span>')
+                    .replace(/Medium/g, '<span class="ap-badge ap-badge--medium">Medium</span>')
+                }} />
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Main structured agent content renderer
+function AgentContent({ agentName, text }) {
+  if (!text) return null;
+  const lines = text.split('\n').map(l => l.trim());
+
+  // Check for tables
+  const hasTable = lines.some(l => l.startsWith('|'));
+  const table = hasTable ? parseTable(lines) : null;
+  const nonTableLines = lines.filter(l => !l.startsWith('|') && !/^[-|]+$/.test(l));
+
+  const sections = parseAgentSections(nonTableLines.join('\n'));
+
+  // Agent-specific accent colors
+  const accentMap = {
+    patient_analyst:     '#3b82f6',
+    hedis_measure_agent: '#8b5cf6',
+    exclusion_agent:     '#f59e0b',
+    code_validator:      '#06b6d4',
+    care_gap_agent:      '#ef4444',
+    recommendation_agent:'#10b981',
+  };
+  const accent = accentMap[agentName] || '#64748b';
+
+  return (
+    <div className="ap-content">
+      {sections.map((sec, si) => (
+        <div key={si} className="ap-section">
+          {sec.heading && (
+            <div className="ap-section-heading" style={{ borderLeftColor: accent }}>
+              {sec.heading}
+            </div>
+          )}
+          <div className="ap-section-body">
+            {sec.lines.map((line, li) => (
+              <AgentLine key={li} line={line} />
+            ))}
+          </div>
+        </div>
+      ))}
+      {table && <AgentTable headers={table.headers} rows={table.rows} />}
+    </div>
+  );
+}
+
 // Agent panel configuration — order must match AGENT_ORDER in care_gap_agents.py
 const AGENT_CONFIG = {
   patient_analyst:     { icon: '👤', label: 'Patient Profile Analysis',     color: '#3b82f6' },
@@ -299,7 +437,10 @@ function MemberDetails({ member, onBack }) {
           </div>
         ) : (
           <div className="agent-panel-content">
-            <MarkdownContent text={content} />
+            {agentName === 'recommendation_agent'
+              ? <MarkdownContent text={content} />
+              : <AgentContent agentName={agentName} text={content} />
+            }
           </div>
         )}
       </div>
