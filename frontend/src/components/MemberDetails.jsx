@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader, GitCompare, Bot } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader, GitCompare, Bot, CheckCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import axios from 'axios';
@@ -56,6 +56,9 @@ function MemberDetails({ member, onBack }) {
   // Email panel state
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
 
+  // Compliance toast state
+  const [compliantToast, setCompliantToast]   = useState(false);
+
   // Other UI state
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [selectedGap, setSelectedGap]     = useState(null);
@@ -71,6 +74,7 @@ function MemberDetails({ member, onBack }) {
   const [viewBooking, setViewBooking]         = useState(null); // booking object being viewed
   const [completingGap, setCompletingGap]     = useState(false);
   const [completedGaps, setCompletedGaps]     = useState(new Set()); // care_gap_ids closed this session
+  const [completeError, setCompleteError]     = useState('');
 
   useEffect(() => {
     if (member) fetchMemberDetails();
@@ -310,23 +314,33 @@ function MemberDetails({ member, onBack }) {
 
   const handleCompleteScreening = async (booking) => {
     setCompletingGap(true);
+    setCompleteError('');
     try {
       const res = await axios.post(
         `${API_BASE}/appointments/${booking.appointment_id}/complete`,
         { care_gap_id: booking.care_gap_id }
       );
       if (res.data.status === 'success') {
-        setViewBooking(prev => ({ ...prev, claim_id: res.data.claim_id, status: 'Completed' }));
+        const claimId = res.data.claim_id;
+        setViewBooking(prev => ({ ...prev, claim_id: claimId, cpt_codes: res.data.cpt_codes || prev.cpt_codes, icd_codes: res.data.icd_codes || prev.icd_codes, status: 'Completed' }));
         setBookings(prev => ({
           ...prev,
-          [booking.care_gap_id]: { ...prev[booking.care_gap_id], claim_id: res.data.claim_id, status: 'Completed' },
+          [booking.care_gap_id]: { ...prev[booking.care_gap_id], claim_id: claimId, status: 'Completed' },
         }));
         setCompletedGaps(prev => new Set([...prev, booking.care_gap_id]));
-        // Refresh member details to reflect closed gap
+        // Refresh member details to reflect closed gap + new claim in Claims tab
         await fetchMemberDetails();
+        // Show compliance banner if all gaps are now closed
+        if (res.data.is_now_compliant) {
+          setCompliantToast(true);
+          setTimeout(() => setCompliantToast(false), 6000);
+        }
+      } else {
+        setCompleteError(res.data.error || 'Completion failed. Please try again.');
       }
     } catch (err) {
       console.error('Complete screening error:', err);
+      setCompleteError(err.response?.data?.error || 'Network error. Please try again.');
     } finally {
       setCompletingGap(false);
     }
@@ -343,6 +357,18 @@ function MemberDetails({ member, onBack }) {
 
   return (
     <div className="member-details">
+      {/* ── Compliance Toast ─────────────────────────────────────────────── */}
+      {compliantToast && (
+        <div className="compliant-toast">
+          <CheckCircle size={20} />
+          <div>
+            <strong>{member.name} is now fully compliant!</strong>
+            <span> All care gaps have been closed. Outreach recorded.</span>
+          </div>
+          <button className="toast-close" onClick={() => setCompliantToast(false)}>✕</button>
+        </div>
+      )}
+
       <div className="details-header">
         <button className="back-button" onClick={onBack}>
           <ArrowLeft size={20} />
@@ -661,9 +687,15 @@ function MemberDetails({ member, onBack }) {
                         <span className="value">{gap.lookback_months} months</span>
                       </div>
                       <div className="gap-info-row">
-                        <span className="label">Required CPT Codes:</span>
-                        <span className="value code">{gap.required_cpt_codes}</span>
+                        <span className="label">Required CPT Code:</span>
+                        <span className="value code">{gap.primary_cpt_code || gap.required_cpt_codes}</span>
                       </div>
+                      {gap.primary_icd10 && (
+                        <div className="gap-info-row">
+                          <span className="label">ICD-10 Code:</span>
+                          <span className="value code">{gap.primary_icd10}</span>
+                        </div>
+                      )}
                       <div className="gap-resolution">
                         <h4>Resolution Guide:</h4>
                         <p>{gap.resolution_guide}</p>
@@ -702,10 +734,36 @@ function MemberDetails({ member, onBack }) {
                 {details.closed_gaps.map(gap => (
                   <div key={gap.care_gap_id} className="closed-gap-card">
                     <div className="closed-gap-info">
-                      <h4>{gap.measure_name}</h4>
+                      <div>
+                        <h4>{gap.measure_name}</h4>
+                        <span className="closed-gap-measure-id">{gap.measure_id}</span>
+                      </div>
                       <span className="gap-status closed">CLOSED</span>
                     </div>
-                    <p>Closed on: {gap.closed_on}</p>
+                    <div className="closed-gap-meta">
+                      <div className="closed-meta-row">
+                        <span className="closed-meta-label">Closed on:</span>
+                        <span>{gap.closed_on || gap.service_date || '—'}</span>
+                      </div>
+                      {gap.claim_id && (
+                        <div className="closed-meta-row">
+                          <span className="closed-meta-label">Claim ID:</span>
+                          <code className="claim-id-code">{gap.claim_id}</code>
+                        </div>
+                      )}
+                      {gap.cpt_code && (
+                        <div className="closed-meta-row">
+                          <span className="closed-meta-label">CPT Code(s):</span>
+                          <code className="closed-cpt-code">{gap.cpt_code}</code>
+                        </div>
+                      )}
+                      {gap.icd_code && (
+                        <div className="closed-meta-row">
+                          <span className="closed-meta-label">ICD-10:</span>
+                          <code>{gap.icd_code}</code>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -721,19 +779,23 @@ function MemberDetails({ member, onBack }) {
                 <table>
                   <thead>
                     <tr>
+                      <th>Claim ID</th>
+                      <th>Measure</th>
                       <th>Service Date</th>
-                      <th>CPT Code</th>
-                      <th>ICD Code</th>
+                      <th>CPT Code(s)</th>
+                      <th>ICD-10 Code(s)</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {details.claims.map((claim, i) => (
                       <tr key={i}>
-                        <td>{claim.service_date}</td>
-                        <td><code>{claim.cpt_code}</code></td>
-                        <td><code>{claim.icd_code}</code></td>
-                        <td><span className="status-badge">Processed</span></td>
+                        <td><code className="claim-id-code">{claim.claim_id || '—'}</code></td>
+                        <td><span className="measure-badge">{claim.measure_id || '—'}</span></td>
+                        <td>{claim.service_date || '—'}</td>
+                        <td className="code-cell"><code>{claim.cpt_code || '—'}</code></td>
+                        <td className="code-cell"><code>{claim.icd_code || '—'}</code></td>
+                        <td><span className="status-badge">{claim.status || 'Processed'}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -984,19 +1046,24 @@ function MemberDetails({ member, onBack }) {
             </div>
 
             <div className="vb-footer">
-              <button className="btn-secondary" onClick={() => setViewBooking(null)}>Close</button>
-              {viewBooking.status !== 'Completed' && !completedGaps.has(viewBooking.care_gap_id) && (
-                <button
-                  className="btn-complete-screening"
-                  onClick={() => handleCompleteScreening(viewBooking)}
-                  disabled={completingGap}
-                >
-                  {completingGap
-                    ? <><span className="appt-spinner" /> Processing…</>
-                    : <>✅ Mark Screening Complete &amp; Close Gap</>
-                  }
-                </button>
+              {completeError && (
+                <div className="complete-error-msg">{completeError}</div>
               )}
+              <div className="vb-footer-btns">
+                <button className="btn-secondary" onClick={() => { setViewBooking(null); setCompleteError(''); }}>Close</button>
+                {viewBooking.status !== 'Completed' && !completedGaps.has(viewBooking.care_gap_id) && (
+                  <button
+                    className="btn-complete-screening"
+                    onClick={() => handleCompleteScreening(viewBooking)}
+                    disabled={completingGap}
+                  >
+                    {completingGap
+                      ? <><span className="appt-spinner" /> Processing…</>
+                      : <>✅ Mark Screening Complete &amp; Close Gap</>
+                    }
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

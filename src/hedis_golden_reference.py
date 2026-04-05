@@ -28,15 +28,17 @@ HEDIS_MEASURES = {
     "BCS": {
         "measure_id": "BCS",
         "name": "Breast Cancer Screening",
+        "primary_cpt": "77067",        # Bilateral screening mammogram (preferred)
+        "primary_icd10": "Z12.31",     # Encounter for screening mammogram
         "description": (
-            "Women 42–74 who had a mammogram to screen for breast cancer on or between "
+            "Women 52–74 who had a mammogram to screen for breast cancer on or between "
             "October 1 two years prior to the measurement year and December 31 of the "
             "measurement year. To close this gap the member needs a bilateral or unilateral "
             "screening mammogram: CPT 77067 (bilateral, preferred), 77061-77066. "
             "Refer to an In-Network Radiology or Imaging Center."
         ),
-        "age_range": "42-74 Female",
-        "min_age": 42,
+        "age_range": "52-74 Female",
+        "min_age": 52,
         "max_age": 74,
         "gender_requirement": "Female",
         "lookback_months": 24,
@@ -96,7 +98,7 @@ HEDIS_MEASURES = {
                     "type": "palliative_care",
                     "description": "Palliative care encounter during measurement year",
                     "hcpcs": ["G9054", "M1017"],
-                    "icd10": ["Z51.5"],
+                    "icd10": ["Z51.5", "Z51.89"],
                     "criteria": "Any palliative care encounter (do not include POS code 81 lab claims)"
                 },
                 {
@@ -152,6 +154,8 @@ HEDIS_MEASURES = {
     "COL": {
         "measure_id": "COL",
         "name": "Colorectal Cancer Screening",
+        "primary_cpt": "45378",        # Colonoscopy (gold standard)
+        "primary_icd10": "Z12.11",     # Encounter for screening for malignant neoplasm of colon
         "description": (
             "Members 45–75 who received one or more screenings for colorectal cancer. "
             "Multiple acceptable screening types with different lookback windows. "
@@ -163,7 +167,7 @@ HEDIS_MEASURES = {
         "max_age": 75,
         "gender_requirement": "Any",
         "lookback_months": 120,   # max lookback (colonoscopy); per-option checked by screening_options
-        "lookback_description": "Colonoscopy: 9 years | Flex sig / CT colonography: 4 years | FIT-DNA: 2 years | FOBT: 1 year",
+        "lookback_description": "Colonoscopy: 10 years | Flex sig / CT colonography: 5 years | FIT-DNA: 3 years | FOBT: 1 year",
         "product_lines": ["Advantage MD", "D-SNP", "EHP", "Priority Partners", "USFHP"],
         "continuous_enrollment": "Measurement period and year prior",
         "numerator_criteria": "One or more appropriate colorectal cancer screenings within required lookback",
@@ -185,8 +189,8 @@ HEDIS_MEASURES = {
             },
             {
                 "type": "flexible_sigmoidoscopy",
-                "lookback_months": 48,
-                "description": "Flexible sigmoidoscopy during MY or 4 years prior",
+                "lookback_months": 60,
+                "description": "Flexible sigmoidoscopy during MY or 5 years prior",
                 "cpt": [
                     "45330", "45331", "45332", "45333", "45334", "45335",
                     "45337", "45338", "45340", "45341", "45342",
@@ -196,14 +200,14 @@ HEDIS_MEASURES = {
             },
             {
                 "type": "ct_colonography",
-                "lookback_months": 48,
-                "description": "CT colonography (virtual colonoscopy) during MY or 4 years prior",
+                "lookback_months": 60,
+                "description": "CT colonography (virtual colonoscopy) during MY or 5 years prior",
                 "cpt": ["74261", "74262", "74263"]
             },
             {
                 "type": "fit_dna",
-                "lookback_months": 24,
-                "description": "FIT-DNA (Cologuard) during MY or 2 years prior",
+                "lookback_months": 36,
+                "description": "FIT-DNA (Cologuard) during MY or 3 years prior",
                 "cpt": ["81528"],
                 "hcpcs": ["G0464"]
             },
@@ -326,6 +330,8 @@ HEDIS_MEASURES = {
     "CCS": {
         "measure_id": "CCS",
         "name": "Cervical Cancer Screening",
+        "primary_cpt": "88175",        # Cervical cytology, liquid-based (ThinPrep, preferred)
+        "primary_icd10": "Z12.4",      # Encounter for screening for malignant neoplasm of cervix
         "description": (
             "Female members 21–64 screened for cervical cancer with age-appropriate cervical "
             "cytology and/or hrHPV testing. Ages 24–64: Pap smear every 3 years. "
@@ -351,12 +357,12 @@ HEDIS_MEASURES = {
                 "description": "Cervical cytology (Pap smear) every 3 years — member must be 21+ on test date",
                 "cpt": [
                     "88141", "88142", "88143", "88147", "88148", "88150",
-                    "88152", "88153", "88164", "88165", "88166", "88167",
+                    "88152", "88153", "88154", "88164", "88165", "88166", "88167",
                     "88174", "88175"
                 ],
                 "hcpcs": [
                     "G0123", "G0124", "G0141", "G0143", "G0144", "G0145",
-                    "G0147", "G0148", "P3000", "P3001"
+                    "G0147", "G0148", "P3000", "P3001", "Q0091"
                 ],
                 "loinc": [
                     "104866-9", "10524-7", "18500-9", "19762-4", "19765-7",
@@ -385,7 +391,7 @@ HEDIS_MEASURES = {
                 "cpt": [
                     "87624", "87625", "87626", "0502U",
                     "88141", "88142", "88143", "88147", "88148", "88150",
-                    "88152", "88153", "88164", "88165", "88166", "88167",
+                    "88152", "88153", "88154", "88164", "88165", "88166", "88167",
                     "88174", "88175"
                 ]
             }
@@ -394,12 +400,12 @@ HEDIS_MEASURES = {
         "codes": {
             "cervical_cytology_cpt": [
                 "88141", "88142", "88143", "88147", "88148", "88150",
-                "88152", "88153", "88164", "88165", "88166", "88167",
+                "88152", "88153", "88154", "88164", "88165", "88166", "88167",
                 "88174", "88175"
             ],
             "cervical_cytology_hcpcs": [
                 "G0123", "G0124", "G0141", "G0143", "G0144", "G0145",
-                "G0147", "G0148", "P3000", "P3001"
+                "G0147", "G0148", "P3000", "P3001", "Q0091"
             ],
             "cervical_cytology_loinc": [
                 "104866-9", "10524-7", "18500-9", "19762-4", "19765-7",
@@ -427,7 +433,7 @@ HEDIS_MEASURES = {
                         "58290", "58291", "58292", "58293", "58294",
                         "58548", "58550", "58552", "58553", "58554",
                         "58570", "58571", "58572", "58573", "58575",
-                        "58951", "58953", "58954", "59856", "59135", "51925", "56308"
+                        "58951", "58953", "58954", "58956", "59856", "59135", "51925", "56308"
                     ],
                     "icd10": ["Q51.5", "Z90.710", "Z90.712"],
                     "icd10pcs": ["0UTC0ZZ", "0UTC4ZZ", "0UTC7ZZ", "0UTC8ZZ"],
@@ -499,6 +505,8 @@ HEDIS_MEASURES = {
     "GSD": {
         "measure_id": "GSD",
         "name": "Glycemic Status Assessment for Patients with Diabetes",
+        "primary_cpt": "83036",        # HbA1c lab test (most common)
+        "primary_icd10": "E11.9",      # Type 2 diabetes unspecified (default; overridden by member's actual ICD)
         "description": (
             "Members 18–75 with diabetes (types 1 and 2) whose most recent glycemic status "
             "(HbA1c or Glucose Management Indicator [GMI]) was assessed during measurement year. "
@@ -512,7 +520,7 @@ HEDIS_MEASURES = {
         "gender_requirement": "Any",
         "lookback_months": 12,
         "lookback_description": "Measurement year (January 1 – December 31); use MOST RECENT result",
-        "diagnosis_requirement": "Type 1 or Type 2 Diabetes (ICD-10 E10.x, E11.x, E13.x)",
+        "diagnosis_requirement": "Type 1 or Type 2 Diabetes (ICD-10 E08–E13)",
         "product_lines": ["Advantage MD", "EHP", "Priority Partners", "USFHP"],
         "continuous_enrollment": "Measurement year",
         "numerator_criteria": "Most recent HbA1c or GMI result during measurement year at defined threshold",
@@ -535,7 +543,13 @@ HEDIS_MEASURES = {
             "hba1c_cpt": ["83036", "83037"],
             "hba1c_loinc": ["4548-4", "17855-8", "4549-2", "17856-6", "96595-4"],
             "hba1c_result_cpt_cat2": ["3044F", "3046F", "3051F", "3052F"],
-            "diabetes_icd10": ["E10.9", "E11.9", "E13.9"],
+            # E08–E13 full diabetes spectrum per HEDIS MY2025 rulebook
+            "diabetes_icd10": [
+                "E08.9", "E08.65", "E09.9", "E09.65",
+                "E10.9", "E10.65", "E10.649", "E10.641",
+                "E11.9", "E11.65", "E11.649", "E11.641",
+                "E12.9", "E13.9", "E13.65"
+            ],
             "diabetes_type1_icd10": ["E10.9", "E10.65", "E10.649", "E10.641"],
             "diabetes_type2_icd10": ["E11.9", "E11.65", "E11.649", "E11.641"]
         },
@@ -618,6 +632,8 @@ HEDIS_MEASURES = {
     "EED": {
         "measure_id": "EED",
         "name": "Eye Exam for Patients with Diabetes",
+        "primary_cpt": "92014",        # Comprehensive ophthalmologic exam, established patient
+        "primary_icd10": "E11.9",      # Type 2 diabetes unspecified (default; overridden by member's actual ICD)
         "description": (
             "Members 18–75 with diabetes who had a retinal or dilated eye exam by an "
             "ophthalmologist or optometrist, OR a negative retinal exam in the prior year, "
@@ -631,7 +647,7 @@ HEDIS_MEASURES = {
         "gender_requirement": "Any",
         "lookback_months": 12,
         "lookback_description": "Measurement year; OR negative retinal exam in prior year",
-        "diagnosis_requirement": "Type 1 or Type 2 Diabetes",
+        "diagnosis_requirement": "Type 1 or Type 2 Diabetes (ICD-10 E08–E13)",
         "product_lines": ["Advantage MD", "EHP", "Priority Partners", "USFHP"],
         "continuous_enrollment": "Measurement year",
         "numerator_criteria": (
@@ -653,7 +669,12 @@ HEDIS_MEASURES = {
             "retinal_imaging_cpt": ["92227", "92228"],
             "negative_exam_prior_year_cpt_cat2": ["3072F"],
             "eye_exam_result_cpt_cat2": ["2022F", "2023F", "2024F", "2025F", "2026F", "2033F"],
-            "diabetes_icd10": ["E10.9", "E11.9", "E13.9"]
+            "diabetes_icd10": [
+                "E08.9", "E08.65", "E09.9", "E09.65",
+                "E10.9", "E10.65", "E10.649", "E10.641",
+                "E11.9", "E11.65", "E11.649", "E11.641",
+                "E12.9", "E13.9", "E13.65"
+            ]
         },
 
         "exclusions": {
@@ -704,6 +725,8 @@ HEDIS_MEASURES = {
     "KED": {
         "measure_id": "KED",
         "name": "Kidney Health Evaluation for Patients with Diabetes",
+        "primary_cpt": "82565",        # Creatinine (eGFR) — ordered first; 82570+82043 also required
+        "primary_icd10": "E11.9",      # Type 2 diabetes unspecified (default; overridden by member's actual ICD)
         "description": (
             "Members 18–85 with diabetes who received BOTH an eGFR (estimated glomerular "
             "filtration rate) AND a urine albumin-creatinine ratio (uACR) during the measurement year. "
@@ -717,7 +740,7 @@ HEDIS_MEASURES = {
         "gender_requirement": "Any",
         "lookback_months": 12,
         "lookback_description": "Measurement year (both tests must occur during measurement year)",
-        "diagnosis_requirement": "Type 1 or Type 2 Diabetes",
+        "diagnosis_requirement": "Type 1 or Type 2 Diabetes (ICD-10 E08–E13)",
         "product_lines": ["Advantage MD", "EHP", "Priority Partners", "USFHP"],
         "continuous_enrollment": "Measurement year",
         "numerator_criteria": (
@@ -729,7 +752,12 @@ HEDIS_MEASURES = {
             "egfr_cpt": ["80047", "80048", "80050", "80053", "80069", "82565"],
             "urine_albumin_cpt": ["82043"],
             "urine_creatinine_cpt": ["82570"],
-            "diabetes_icd10": ["E10.9", "E11.9", "E13.9"]
+            "diabetes_icd10": [
+                "E08.9", "E08.65", "E09.9", "E09.65",
+                "E10.9", "E10.65", "E10.649", "E10.641",
+                "E11.9", "E11.65", "E11.649", "E11.641",
+                "E12.9", "E13.9", "E13.65"
+            ]
         },
 
         "exclusions": {
@@ -810,6 +838,8 @@ HEDIS_MEASURES = {
     "BPD": {
         "measure_id": "BPD",
         "name": "Blood Pressure Control for Patients with Diabetes",
+        "primary_cpt": "3074F",        # BP systolic < 130 (CPT Category II — controlled BP)
+        "primary_icd10": "E11.9",      # Type 2 diabetes unspecified (default; overridden by member's actual ICD)
         "description": (
             "Members 18–75 with diabetes who had blood pressure control (< 140/90 mmHg) "
             "during the measurement year. Remote measurements by any digital device are acceptable. "
@@ -823,7 +853,7 @@ HEDIS_MEASURES = {
         "gender_requirement": "Any",
         "lookback_months": 12,
         "lookback_description": "Measurement year",
-        "diagnosis_requirement": "Type 1 or Type 2 Diabetes",
+        "diagnosis_requirement": "Type 1 or Type 2 Diabetes (ICD-10 E08–E13)",
         "product_lines": ["Advantage MD", "EHP", "Priority Partners", "USFHP"],
         "continuous_enrollment": "Measurement year",
         "numerator_criteria": "Most recent BP reading during measurement year with systolic < 140 AND diastolic < 90",
@@ -837,7 +867,12 @@ HEDIS_MEASURES = {
             "bp_diastolic_uncontrolled_cpt_cat2": ["3080F"],          # >=90
             "bp_systolic_loinc": ["8459-0", "8480-6", "8508-4", "8546-4", "8547-2", "75997-7"],
             "bp_diastolic_loinc": ["8453-3", "8462-4", "8496-2", "8514-2", "8515-9", "75995-1"],
-            "diabetes_icd10": ["E10.9", "E11.9", "E13.9"]
+            "diabetes_icd10": [
+                "E08.9", "E08.65", "E09.9", "E09.65",
+                "E10.9", "E10.65", "E10.649", "E10.641",
+                "E11.9", "E11.65", "E11.649", "E11.641",
+                "E12.9", "E13.9", "E13.65"
+            ]
         },
 
         "exclusions": {
@@ -906,6 +941,319 @@ HEDIS_MEASURES = {
             "Target: Systolic < 140 AND Diastolic < 90 mmHg",
             "Coordinate with cardiology or nephrology for complex BP management",
             "Document BP with date in structured format"
+        ]
+    },
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # AAP  |  Adults' Access to Preventive/Ambulatory Health Services
+    # Source: HEDIS MY2025 Rulebook — Measure 1
+    # ─────────────────────────────────────────────────────────────────────────
+    "AAP": {
+        "measure_id": "AAP",
+        "name": "Adults' Access to Preventive/Ambulatory Health Services",
+        "primary_cpt": "99213",        # Office visit, established patient, moderate complexity
+        "primary_icd10": "Z00.00",     # Encounter for general adult medical examination without abnormal findings
+        "description": (
+            "Members 20 and older who had at least one ambulatory or preventive care visit "
+            "during the measurement year. Includes in-person, telephone, and e-visit/virtual "
+            "check-in encounters. To close this gap, schedule any preventive or primary care "
+            "visit with the member's PCP. CPT 99202–99215 (office/outpatient visit), "
+            "99381–99397 (preventive visits)."
+        ),
+        "age_range": "20-999",
+        "min_age": 20,
+        "max_age": 999,
+        "gender_requirement": "Any",
+        "lookback_months": 12,
+        "lookback_description": "January 1 – December 31 of measurement year",
+        "diagnosis_requirement": "",
+        "product_lines": ["Medicaid", "Medicare"],
+        "continuous_enrollment": "Measurement year",
+        "numerator_criteria": "At least ONE qualifying ambulatory, preventive, telephone, or e-visit encounter during measurement year",
+        "denominator_criteria": "Members 20 and older enrolled during the measurement year",
+        "rule_type": "ANY_ONE_OF",
+
+        "codes": {
+            # Office / outpatient / preventive visit CPT
+            "ambulatory_visit_cpt": [
+                "99202", "99203", "99204", "99205",
+                "99211", "99212", "99213", "99214", "99215",
+                "99242", "99243", "99244", "99245",
+                "99304", "99305", "99306", "99307", "99308", "99309", "99310",
+                "99318",
+                "99324", "99325", "99326", "99327", "99328",
+                "99334", "99335", "99336", "99337",
+                "99341", "99345",
+                "99347", "99348", "99349", "99350",
+                "99381", "99382", "99383", "99384", "99385", "99386", "99387",
+                "99391", "99392", "99393", "99394", "99395", "99396", "99397",
+                "99401", "99402", "99403", "99404",
+                "99411", "99412", "99429", "99483",
+                "92002", "92004", "92012", "92014",
+                "99315", "99316"
+            ],
+            "ambulatory_visit_hcpcs": [
+                "G0402", "G0438", "G0439", "G0463", "T1015", "S0620", "S0621"
+            ],
+            # Telephone visit CPT
+            "telephone_visit_cpt": ["98966", "98967", "98968", "99441", "99442", "99443"],
+            # E-visit / virtual check-in CPT
+            "evisit_cpt": [
+                "98970", "98971", "98972", "98980", "98981",
+                "99421", "99422", "99423", "99457", "99458"
+            ],
+            "evisit_hcpcs": ["G0071", "G2010", "G2012", "G2250", "G2251", "G2252"],
+            # ICD preventive visit encounter codes (Z00.x)
+            "preventive_icd10": [
+                "Z00.00", "Z00.01", "Z00.121", "Z00.129", "Z00.3", "Z00.5", "Z00.8",
+                "Z02.0", "Z02.1", "Z02.2", "Z02.3", "Z02.4", "Z02.5", "Z02.6",
+                "Z02.71", "Z02.79", "Z02.81", "Z02.82", "Z02.83", "Z02.84",
+                "Z02.89", "Z02.9", "Z76.1", "Z76.2"
+            ]
+        },
+
+        "exclusions": {
+            "required": [
+                {
+                    "type": "hospice",
+                    "description": "Member in hospice care during measurement year",
+                    "hcpcs": ["G9054", "M1017"],
+                    "icd10": ["Z51.5"]
+                },
+                {
+                    "type": "deceased",
+                    "description": "Member deceased during measurement year"
+                }
+            ]
+        },
+
+        "clinical_guidelines": {
+            "acceptable": [
+                "In-person office visits, preventive wellness visits, telehealth, telephone, e-visits",
+                "Any qualifying CPT/HCPCS code from the ambulatory, telephone, or e-visit code sets",
+                "ICD-10 Z00.x preventive visit encounter codes",
+                "Member-reported visits with documented date and provider"
+            ],
+            "not_acceptable": [
+                "ED-only visits without ambulatory component",
+                "Lab-only visits with no face-to-face encounter",
+                "Inpatient-only encounters"
+            ]
+        },
+
+        "best_practices": [
+            "Encourage annual wellness visit — use G0438 (initial) or G0439 (subsequent) for Medicare",
+            "Any preventive or illness-related outpatient visit qualifies",
+            "Engage members with telehealth options to reduce access barriers",
+            "Flag members with zero visits in last 12 months for outreach",
+            "Document encounter date and CPT/HCPCS code in structured format"
+        ]
+    },
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # CBP  |  Controlling Blood Pressure
+    # Source: HEDIS MY2025 Rulebook — Measure 16
+    # Trigger: Hypertension (ICD I10)
+    # ─────────────────────────────────────────────────────────────────────────
+    "CBP": {
+        "measure_id": "CBP",
+        "name": "Controlling Blood Pressure",
+        "primary_cpt": "3074F",        # BP systolic < 130 (CPT Category II — controlled BP)
+        "primary_icd10": "I10",        # Essential (primary) hypertension
+        "description": (
+            "Members 18–85 with hypertension (ICD I10) whose most recent blood pressure "
+            "reading during the measurement year was adequately controlled (< 140/90 mmHg). "
+            "Remote and member-reported BP measurements are acceptable. "
+            "To close gap: document a BP reading using CPT-CAT-II codes 3074F or 3075F "
+            "(systolic < 140) AND 3078F or 3079F (diastolic < 90). "
+            "Refer to PCP or Cardiology for blood pressure management."
+        ),
+        "age_range": "18-85",
+        "min_age": 18,
+        "max_age": 85,
+        "gender_requirement": "Any",
+        "lookback_months": 12,
+        "lookback_description": "Measurement year — use most recent BP reading",
+        "diagnosis_requirement": "Hypertension (ICD-10 I10)",
+        "product_lines": ["Medicaid", "Medicare", "Commercial"],
+        "continuous_enrollment": "Measurement year",
+        "numerator_criteria": "Most recent BP < 140/90 mmHg documented during measurement year",
+        "denominator_criteria": "Members 18–85 with hypertension (ICD I10) and at least 2 outpatient HTN visits",
+        "bp_target": "< 140/90 mmHg",
+        "rule_type": "VALUE_BASED",
+
+        "codes": {
+            # CPT Category II — BP reading documentation
+            "bp_systolic_controlled_cpt_cat2": ["3074F", "3075F"],    # systolic < 130 / 130–139
+            "bp_systolic_uncontrolled_cpt_cat2": ["3077F"],            # systolic ≥ 140
+            "bp_diastolic_controlled_cpt_cat2": ["3078F", "3079F"],   # diastolic < 80 / 80–89
+            "bp_diastolic_uncontrolled_cpt_cat2": ["3080F"],           # diastolic ≥ 90
+            # Hypertension trigger
+            "hypertension_icd10": ["I10"],
+            # LOINC for BP readings
+            "bp_systolic_loinc": ["8459-0", "8480-6", "8508-4", "8546-4", "8547-2", "75997-7"],
+            "bp_diastolic_loinc": ["8453-3", "8462-4", "8496-2", "8514-2", "8515-9", "75995-1"]
+        },
+
+        "exclusions": {
+            "required": [
+                {
+                    "type": "esrd",
+                    "description": "End-stage renal disease, dialysis, or kidney transplant",
+                    "icd10": ["N18.5", "N18.6", "Z99.2"],
+                    "cpt": ["90935", "90937", "90945", "90947", "90997", "90999", "99512"]
+                },
+                {
+                    "type": "pregnancy",
+                    "description": "Active pregnancy diagnosis during measurement period"
+                },
+                {
+                    "type": "palliative_care",
+                    "description": "Palliative care during measurement year",
+                    "hcpcs": ["G9054", "M1017"],
+                    "icd10": ["Z51.5", "Z51.89"]
+                },
+                {
+                    "type": "hospice",
+                    "description": "Hospice services during measurement year",
+                    "hcpcs": ["G9054", "M1017"],
+                    "icd10": ["Z51.5"]
+                },
+                {
+                    "type": "deceased",
+                    "description": "Member deceased during measurement year"
+                },
+                {
+                    "type": "frailty_advanced_illness",
+                    "description": "Members 66–80 with frailty AND advanced illness"
+                },
+                {
+                    "type": "frailty_81_plus",
+                    "description": "Members 81+ with frailty"
+                }
+            ]
+        },
+
+        "clinical_guidelines": {
+            "acceptable": [
+                "In-person BP measurement documented in medical record",
+                "Remote/digital device measurements (home BP monitor)",
+                "Member-reported BP documented in chart by a provider",
+                "Telehealth BP measurement with documented result",
+                "Most recent BP reading in measurement year is used",
+                "CPT-CAT-II codes (3074F, 3075F, 3077F, 3078F, 3079F, 3080F) count"
+            ],
+            "not_acceptable": [
+                "BP self-reported without provider documentation",
+                "BP reading from outside the measurement year",
+                "Missing systolic or diastolic value"
+            ]
+        },
+
+        "best_practices": [
+            "Document BP at every visit using structured CPT-CAT-II codes",
+            "Encourage home BP monitoring and telehealth BP reporting",
+            "Target systolic < 140 AND diastolic < 90 mmHg",
+            "Adjust antihypertensive medication if BP uncontrolled",
+            "Schedule follow-up within 4 weeks for uncontrolled BP",
+            "Coordinate with cardiology for resistant hypertension",
+            "Educate on lifestyle factors: diet, exercise, salt restriction, weight management"
+        ]
+    },
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # CHL  |  Chlamydia Screening in Women
+    # Source: HEDIS MY2025 Rulebook — Measure 6
+    # ─────────────────────────────────────────────────────────────────────────
+    "CHL": {
+        "measure_id": "CHL",
+        "name": "Chlamydia Screening in Women",
+        "primary_cpt": "87491",        # Chlamydia trachomatis, NAAT (nucleic acid amplification, preferred)
+        "primary_icd10": "Z11.8",      # Encounter for screening for other specified infectious and parasitic diseases
+        "description": (
+            "Female members 16–24 (sexually active) who were screened for chlamydia "
+            "during the measurement year. Annual screening is recommended. "
+            "To close gap: order CPT 87491 (chlamydia trachomatis, NAATs) or 87490 (culture). "
+            "Refer to OB/GYN, women's health clinic, or STI testing site."
+        ),
+        "age_range": "16-24 Female",
+        "min_age": 16,
+        "max_age": 24,
+        "gender_requirement": "Female",
+        "lookback_months": 12,
+        "lookback_description": "January 1 – December 31 of measurement year",
+        "diagnosis_requirement": "",
+        "product_lines": ["Medicaid"],
+        "continuous_enrollment": "Measurement year",
+        "numerator_criteria": "At least one chlamydia test during the measurement year",
+        "denominator_criteria": "Female members 16–24 who are sexually active (Medicaid)",
+        "rule_type": "REQUIRED",
+
+        "codes": {
+            "chlamydia_cpt": [
+                "87110", "87270", "87320",
+                "87490", "87491", "87492",
+                "87810"
+            ]
+        },
+
+        "exclusions": {
+            "required": [
+                {
+                    "type": "hysterectomy_no_cervix",
+                    "description": "Hysterectomy without residual cervix",
+                    "cpt": [
+                        "57530", "57531", "57540", "57545", "57550", "57555", "57556",
+                        "58150", "58152", "58200", "58210", "58240", "58260", "58262",
+                        "58263", "58267", "58270", "58275", "58280", "58285",
+                        "58290", "58291", "58292", "58293", "58294",
+                        "58548", "58550", "58552", "58553", "58554",
+                        "58570", "58571", "58572", "58573", "58575",
+                        "58951", "58953", "58954", "59135", "51925", "56308"
+                    ],
+                    "icd10": ["Q51.5", "Z90.710", "Z90.712"],
+                    "icd10pcs": ["0UTC0ZZ", "0UTC4ZZ", "0UTC7ZZ", "0UTC8ZZ"]
+                },
+                {
+                    "type": "sex_assigned_male_at_birth",
+                    "description": "Members with sex assigned male at birth",
+                    "loinc_code": "76689-9",
+                    "loinc_value": "LA2-8"
+                },
+                {
+                    "type": "hospice",
+                    "description": "Hospice or palliative care during measurement year",
+                    "hcpcs": ["G9054", "M1017"],
+                    "icd10": ["Z51.5"]
+                },
+                {
+                    "type": "deceased",
+                    "description": "Member deceased during measurement year"
+                }
+            ]
+        },
+
+        "clinical_guidelines": {
+            "acceptable": [
+                "Any chlamydia NAAT, culture, or antigen test during measurement year",
+                "Tests performed during any visit type (preventive, sick, STI screening)",
+                "Lab order with result documented in medical record",
+                "Combo STI panel that includes chlamydia testing"
+            ],
+            "not_acceptable": [
+                "Gonorrhea-only test without chlamydia component",
+                "Referral to lab without documented result",
+                "Rapid self-test without provider documentation"
+            ]
+        },
+
+        "best_practices": [
+            "Screen all sexually active women under 25 annually per USPSTF Grade B",
+            "Offer chlamydia test at all reproductive health visits",
+            "Co-screen for gonorrhea with chlamydia",
+            "Treat positive results with appropriate antibiotics; notify partners",
+            "Document test date and result in structured format",
+            "Telehealth order + lab visit combination is acceptable"
         ]
     }
 }

@@ -3,6 +3,9 @@ import './AddMember.css';
 
 const API_BASE = 'http://localhost:5001/api/v1';
 
+// HEDIS MY2025 chronic condition options — maps to ICD-10 codes in CHRONIC_CONDITION_ICD_MAP.
+// Measure triggers: Hypertension→CBP | Diabetes(E08-E13)→GSD/EED/KED/BPD
+// Hospice/Palliative→global exclusion all measures | Schizophrenia→SMC/SMD/SSD (future)
 const CHRONIC_OPTIONS = [
   'Diabetes (Type 1)',
   'Diabetes (Type 2)',
@@ -14,7 +17,10 @@ const CHRONIC_OPTIONS = [
   'Chronic Kidney Disease (CKD)',
   'End-Stage Renal Disease (ESRD)',
   'Depression / Anxiety',
+  'Schizophrenia / Psychosis',
   'Cancer (Active)',
+  'Acute Myocardial Infarction',
+  'Substance Use Disorder (SUD)',
   'Hospice / Palliative Care',
   'Pregnancy',
 ];

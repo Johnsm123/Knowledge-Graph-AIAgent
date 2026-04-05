@@ -55,6 +55,10 @@ AGENT_ORDER = [
 # Used to synthesise ICD evidence for newly added members who have no claims yet.
 # This ensures diabetes/chronic disease measures are evaluated even before any
 # claim history exists.
+# NOTE: CKD maps to stages 1-4 only (N18.1-N18.4, N18.9). Stage 5 (N18.5) is
+# pre-dialysis ESRD and belongs to the ESRD bucket — do NOT include N18.5 in
+# the generic CKD mapping or KED ESRD exclusion will incorrectly fire for
+# non-terminal CKD patients.
 CHRONIC_CONDITION_ICD_MAP = {
     "Diabetes (Type 1)":              ["E10.9", "E10.65", "E10.8", "E10.40"],
     "Diabetes (Type 2)":              ["E11.9", "E11.65", "E11.8", "E11.40"],
@@ -63,12 +67,58 @@ CHRONIC_CONDITION_ICD_MAP = {
     "Congestive Heart Failure (CHF)": ["I50.9", "I50.32"],
     "COPD":                           ["J44.9", "J44.1"],
     "Asthma":                         ["J45.909", "J45.20"],
-    "Chronic Kidney Disease (CKD)":   ["N18.9", "N18.3", "N18.4", "N18.5"],
-    "End-Stage Renal Disease (ESRD)": ["N18.6", "Z99.2"],
+    # CKD stages 1-4 only — N18.5 (stage 5 / pre-dialysis ESRD) is in the ESRD bucket
+    "Chronic Kidney Disease (CKD)":   ["N18.9", "N18.1", "N18.2", "N18.3", "N18.4"],
+    # ESRD includes stage 5 (N18.5), dialysis-dependent (N18.6), and dialysis status (Z99.2)
+    "End-Stage Renal Disease (ESRD)": ["N18.5", "N18.6", "Z99.2"],
     "Depression / Anxiety":           ["F32.9", "F41.9", "F33.0"],
     "Cancer (Active)":                ["C80.1", "C78.9"],
     "Hospice / Palliative Care":      ["Z51.5", "Z51.89"],
     "Pregnancy":                      ["Z34.90", "Z34.00"],
+    # Added for CBP trigger (hypertension already present as "Hypertension" above)
+    # Schizophrenia / Schizoaffective — triggers SMC, SMD, SSD (future measures)
+    "Schizophrenia / Psychosis":      ["F20.9", "F20.0", "F20.1", "F20.2", "F20.3",
+                                       "F20.5", "F20.81", "F20.89", "F25.0", "F25.1",
+                                       "F25.8", "F25.9"],
+    # Acute MI — triggers CRE, PBH (future measures)
+    "Acute Myocardial Infarction":    ["I21.9", "I21.01", "I21.09", "I21.11", "I21.19",
+                                       "I21.21", "I21.29", "I21.3", "I21.4"],
+    # Substance Use Disorder — triggers FUA, FUI, IET (future measures)
+    "Substance Use Disorder (SUD)":   ["F10.10", "F11.10", "F12.10", "F13.10",
+                                       "F14.10", "F15.10", "F16.10", "F19.10"],
+}
+
+# ── Fallback ICD codes for exclusion types that have no explicit codes in
+#    some HEDIS measure definitions (e.g. COL/CCS/EED/GSD/KED/BPD
+#    palliative_care/hospice entries only have a description, no icd10 list).
+# These are used by _is_member_excluded_golden() to close that gap.
+_EXCLUSION_TYPE_FALLBACK_ICD: Dict[str, List[str]] = {
+    # Global: palliative care / hospice — ICD Z51.5 + Z51.89 + HCPCS G9054/M1017
+    # HEDIS rulebook requires checking both ICD and HCPCS for these exclusions.
+    # HCPCS stored here as pseudo-ICD strings; _is_member_excluded_golden() also
+    # checks member CPT set so include in icd list for fallback matching.
+    "palliative_care":   ["Z51.5", "Z51.89", "G9054", "M1017"],
+    "hospice":           ["Z51.5", "Z51.89", "G9054", "M1017"],
+    "pregnancy":         [
+        "Z34.00", "Z34.01", "Z34.02", "Z34.09",
+        "Z34.10", "Z34.11", "Z34.12", "Z34.19",
+        "Z34.20", "Z34.21", "Z34.22", "Z34.29",
+        "Z34.30", "Z34.31", "Z34.32", "Z34.39",
+        "Z34.40", "Z34.41", "Z34.42", "Z34.43",
+        "Z34.90",
+    ],
+    # ESRD / dialysis exclusion (KED, BPD) — use N18.5+ only, not stages 1-4
+    "esrd":                   ["N18.5", "N18.6", "Z99.2"],
+    "esrd_dialysis_nephrectomy": ["N18.5", "N18.6", "Z99.2"],
+    "dialysis":               ["N18.6", "Z99.2"],
+    # Hysterectomy without cervix (CCS, CHL exclusion)
+    "hysterectomy_no_cervix": ["Q51.5", "Z90.710", "Z90.712"],
+    # CRC history (COL exclusion)
+    "colorectal_cancer":      [
+        "C18.0", "C18.1", "C18.2", "C18.3", "C18.4", "C18.5",
+        "C18.6", "C18.7", "C18.8", "C18.9", "C19", "C20",
+        "C21.2", "C21.8", "Z85.038", "Z85.048",
+    ],
 }
 
 
@@ -144,15 +194,28 @@ def _measure_applies(measure: Dict, age: int, gender: str, icd_codes: List[str])
     except Exception:
         pass
 
-    # Diabetes measures require Type 1 (E10.x), Type 2 (E11.x) or Other (E13.x)
-    # Covers GSD, EED, KED, BPD — golden reference states "E10.x, E11.x, E13.x"
     diag_req = str(measure.get("diagnosis_requirement", "")).lower()
-    if "diabetes" in diag_req or "e10" in diag_req or "e11" in diag_req or "e13" in diag_req:
+
+    # ── Diabetes measures: GSD, EED, KED, BPD ────────────────────────────────
+    # HEDIS MY2025 rulebook specifies E08–E13 (covers secondary diabetes E08,
+    # drug-induced E09, type 1 E10, type 2 E11, other unspecified E12, other
+    # specified E13). All require an active diabetes diagnosis.
+    if "diabetes" in diag_req or any(f"e{n:02d}" in diag_req for n in range(8, 14)):
         has_diabetes_icd = any(
-            str(icd).upper().startswith(("E10", "E11", "E13"))
+            str(icd).upper().startswith(("E08", "E09", "E10", "E11", "E12", "E13"))
             for icd in icd_codes
         )
         if not has_diabetes_icd:
+            return False
+
+    # ── Hypertension measure: CBP ─────────────────────────────────────────────
+    # Requires active hypertension (ICD I10).
+    if "hypertension" in diag_req or "i10" in diag_req:
+        has_htn_icd = any(
+            str(icd).upper().startswith("I10")
+            for icd in icd_codes
+        )
+        if not has_htn_icd:
             return False
 
     return True
@@ -253,12 +316,168 @@ def _format_gaps_for_prompt(gaps: List[Dict]) -> str:
     return "\n".join(lines)
 
 
+# ── Golden-reference helpers (bypass Neo4j for eligibility / exclusion) ────────
+
+def _is_member_excluded_golden(
+    measure: Dict, member_icd_codes: List[str], member_cpt_codes: List[str]
+) -> bool:
+    """
+    Check if a member is excluded from a HEDIS measure using the Python
+    HEDIS_MEASURES golden reference (not Neo4j ExclusionCriteria nodes).
+
+    Handles two cases:
+      1. Exclusion has explicit icd10 / cpt / hcpcs lists → match directly.
+      2. Exclusion only has a description (no codes) → look up canonical codes
+         from _EXCLUSION_TYPE_FALLBACK_ICD by exclusion type name.
+
+    Only "required" exclusions are evaluated (optional ones do not disqualify).
+    """
+    required_exclusions = measure.get("exclusions", {}).get("required", [])
+    member_icd_set = set(str(icd).strip() for icd in member_icd_codes if icd)
+    member_cpt_set = set(str(c).strip() for c in member_cpt_codes if c)
+
+    # Combined lookup set: ICD codes + CPT/HCPCS codes (HCPCS codes like G9054
+    # may arrive as either ICD or CPT claims depending on the source system).
+    member_all_codes = member_icd_set | member_cpt_set
+
+    for excl in required_exclusions:
+        excl_type = excl.get("type", "")
+
+        # Collect explicit code lists from the exclusion definition
+        excl_icd = list(excl.get("icd10", []))
+        excl_cpt = list(excl.get("cpt", [])) + list(excl.get("hcpcs", []))
+
+        # If no explicit codes defined, fall back to type-based canonical codes.
+        # Fallback may include HCPCS codes (G9054/M1017) for palliative/hospice —
+        # check them against the combined set so they match regardless of how
+        # the claim was stored.
+        if not excl_icd and not excl_cpt:
+            fallback = list(_EXCLUSION_TYPE_FALLBACK_ICD.get(excl_type, []))
+            if fallback and any(code in member_all_codes for code in fallback):
+                return True
+            continue
+
+        if excl_icd and any(code in member_icd_set for code in excl_icd):
+            return True
+        if excl_cpt and any(code in member_cpt_set for code in excl_cpt):
+            return True
+        # Also check HCPCS-style exclusion codes (G9054/M1017) from explicit hcpcs list
+        # against the ICD set in case the payer stored them as diagnosis codes
+        excl_hcpcs = list(excl.get("hcpcs", []))
+        if excl_hcpcs and any(code in member_icd_set for code in excl_hcpcs):
+            return True
+
+    return False
+
+
+def _get_flat_cpt_for_measure(measure: Dict) -> str:
+    """
+    Extract all CPT / HCPCS codes from a HEDIS_MEASURES measure dict as a
+    comma-separated string suitable for _gap_already_satisfied().
+
+    Collects codes from:
+      - measure["codes"]  (keys containing 'cpt' or 'hcpcs')
+      - measure["screening_options"][*]["cpt"] and ["hcpcs"]
+    """
+    seen: set = set()
+    result: List[str] = []
+
+    for key, codes in measure.get("codes", {}).items():
+        if not isinstance(codes, list):
+            continue
+        kl = key.lower()
+        if "cpt" in kl or "hcpcs" in kl:
+            for c in codes:
+                if c and c not in seen:
+                    seen.add(c)
+                    result.append(c)
+
+    for opt in measure.get("screening_options", []):
+        for c in list(opt.get("cpt", [])) + list(opt.get("hcpcs", [])):
+            if c and c not in seen:
+                seen.add(c)
+                result.append(c)
+
+    return ",".join(result)
+
+
+def _get_screening_options_for_gap_check(measure: Dict) -> List[Dict]:
+    """
+    Convert HEDIS_MEASURES screening_options into the flat
+    {type, lookback_months, cpt_codes} format expected by
+    _gap_satisfied_multi_option().
+    """
+    options = []
+    for opt in measure.get("screening_options", []):
+        all_cpt = list(opt.get("cpt", [])) + list(opt.get("hcpcs", []))
+        if all_cpt:
+            options.append({
+                "type": opt.get("type", ""),
+                "lookback_months": int(opt.get("lookback_months") or 12),
+                "cpt_codes": ",".join(all_cpt),
+            })
+    return options
+
+
+def _get_primary_icd_for_gap(measure: Dict, member_icd_codes: List[str]) -> str:
+    """
+    Return the single most relevant ICD-10 code to store on the CareGap node.
+
+    Logic:
+      - Condition-triggered measures (diabetes, hypertension): use the member's
+        actual matching ICD from their condition list so the gap reflects their
+        specific diagnosis code.
+      - Preventive / age-gender measures (BCS, COL, CCS, AAP, CHL): use the
+        measure's static primary_icd10 (standard screening encounter Z-code).
+    """
+    diag_req = str(measure.get("diagnosis_requirement", "")).lower()
+
+    # Diabetes measures — pick member's first matching E08–E13 code
+    if "diabetes" in diag_req or any(f"e{n:02d}" in diag_req for n in range(8, 14)):
+        for icd in member_icd_codes:
+            if str(icd).upper().startswith(("E08", "E09", "E10", "E11", "E12", "E13")):
+                return icd
+
+    # Hypertension measure — use I10 directly
+    if "hypertension" in diag_req or "i10" in diag_req:
+        return "I10"
+
+    # Preventive / screening measures — use the measure's static Z-code
+    return measure.get("primary_icd10", "")
+
+
+def _measure_to_flat_dict(measure_id: str, measure: Dict) -> Dict:
+    """
+    Build the flat dict (measure_id, name, age_range, lookback_months,
+    cpt_codes, screening_options, …) used by agent prompt formatters and
+    gap detection — sourced entirely from the Python HEDIS_MEASURES dict.
+    """
+    return {
+        "measure_id":           measure_id,
+        "name":                 measure.get("name", ""),
+        "age_range":            measure.get("age_range", ""),
+        "min_age":              measure.get("min_age", 0),
+        "max_age":              measure.get("max_age", 999),
+        "gender_requirement":   measure.get("gender_requirement", "Any"),
+        "lookback_months":      measure.get("lookback_months", 12),
+        "description":          measure.get("description", ""),
+        "diagnosis_requirement": measure.get("diagnosis_requirement", ""),
+        "cpt_codes":            _get_flat_cpt_for_measure(measure),
+        "screening_options":    _get_screening_options_for_gap_check(measure),
+    }
+
+
 # ── Standalone Python-only gap detection (no LLM) ────────────────────────────
 
 def detect_care_gaps(member_id: str) -> Dict[str, Any]:
     """
     Run pure-Python HEDIS gap detection for a member and write CareGap nodes
     to Neo4j.  No LLM involved — safe to call on every member add/update.
+
+    Uses HEDIS_MEASURES Python dict (golden reference) directly for eligibility
+    and exclusion logic — bypasses Neo4j QualityMeasure / ExclusionCriteria
+    nodes entirely, avoiding stale-data problems (e.g. missing
+    diagnosis_requirement, empty exclusion ICD lists).
 
     Returns a summary dict:
       {
@@ -269,6 +488,8 @@ def detect_care_gaps(member_id: str) -> Dict[str, Any]:
         "not_applicable": int,               # measures filtered by age/gender/dx
       }
     """
+    from src.hedis_golden_reference import HEDIS_MEASURES
+
     profile = get_member_profile(member_id)
     if not profile:
         return {"error": f"Member {member_id} not found"}
@@ -276,60 +497,78 @@ def detect_care_gaps(member_id: str) -> Dict[str, Any]:
     age    = _parse_age(profile.get("age_str", "0"))
     gender = str(profile.get("gender", ""))
 
-    claims          = get_member_claims_cpt_codes(member_id)
-    claim_icd_codes = [c.get("icd_code", "") for c in claims if c.get("icd_code")]
+    claims              = get_member_claims_cpt_codes(member_id)
+    claim_icd_codes     = [c.get("icd_code", "") for c in claims if c.get("icd_code")]
+    claim_cpt_codes     = [c.get("cpt_code", "") for c in claims if c.get("cpt_code")]
     condition_icd_codes = _icd_codes_from_conditions(
         profile.get("chronic_conditions") or []
     )
+    # Combined ICD evidence: claims + conditions (deduped)
     icd_codes = list(set(claim_icd_codes + condition_icd_codes))
 
-    all_measures = get_applicable_measures(age, gender)
-    applicable   = [m for m in all_measures if _measure_applies(m, age, gender, icd_codes)]
+    gaps_created:     List[str] = []
+    compliant:        List[str] = []
+    excluded:         List[str] = []
+    not_applicable_n: int       = 0
 
-    gaps_created: List[str] = []
-    compliant:    List[str] = []
-    excluded:     List[str] = []
+    from src.neo4j_connection import get_knowledge_graph as _get_kg
+    _kg = _get_kg()
+    today = datetime.now().strftime("%Y-%m-%d")
 
-    for measure in applicable:
-        exclusions = check_member_exclusions(
-            member_id, measure["measure_id"],
-            extra_icd_codes=condition_icd_codes,
-        )
-        if exclusions:
-            excluded.append(measure["measure_id"])
+    for measure_id, measure in HEDIS_MEASURES.items():
+        # ── 1. Eligibility: age / gender / diagnosis ──────────────────────────
+        if not _measure_applies(measure, age, gender, icd_codes):
+            not_applicable_n += 1
             continue
 
-        options   = measure.get("screening_options", [])
+        # ── 2. Exclusions (golden reference + fallback codes) ─────────────────
+        if _is_member_excluded_golden(measure, icd_codes, claim_cpt_codes):
+            excluded.append(measure_id)
+            continue
+
+        # ── 3. Compliance: CPT code within lookback window ────────────────────
+        options   = _get_screening_options_for_gap_check(measure)
         satisfied = (
             _gap_satisfied_multi_option(claims, options) if options
             else _gap_already_satisfied(
                 claims,
-                measure.get("cpt_codes", ""),
+                _get_flat_cpt_for_measure(measure),
                 int(measure.get("lookback_months") or 12),
             )
         )
 
         if not satisfied:
-            gap_id = f"AUTO-{member_id}-{measure['measure_id']}"
+            gap_id = f"AUTO-{member_id}-{measure_id}"
             merge_care_gap(
                 care_gap_id=gap_id,
                 member_id=member_id,
-                measure_id=measure["measure_id"],
+                measure_id=measure_id,
                 gap_status="Open",
                 is_open=True,
-                created_on=datetime.now().strftime("%Y-%m-%d"),
+                created_on=today,
                 closed_on="",
+                primary_cpt_code=measure.get("primary_cpt", ""),
+                primary_icd10=_get_primary_icd_for_gap(measure, icd_codes),
             )
-            gaps_created.append(measure["measure_id"])
+            gaps_created.append(measure_id)
         else:
-            compliant.append(measure["measure_id"])
+            # Close any stale open gap for this measure (Excel-loaded or prior run)
+            _kg.execute_write("""
+                MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+                      -[:RELATES_TO]->(q:QualityMeasure {measure_id: $meas})
+                WHERE g.is_open = true
+                SET g.is_open = false,
+                    g.gap_status = 'Closed',
+                    g.closed_on  = $today
+            """, {"mid": member_id, "meas": measure_id, "today": today})
+            compliant.append(measure_id)
 
     return {
         "member_id":      member_id,
         "gaps_created":   gaps_created,
         "compliant":      compliant,
         "excluded":       excluded,
-        "not_applicable": len(all_measures) - len(applicable),
+        "not_applicable": not_applicable_n,
     }
 
 
@@ -491,83 +730,88 @@ RECOMMENDED NEXT ACTION: [specific action for top gap]""",
         Pure-Python validation (no LLM): exclusions + CPT lookback checks.
         Writes CareGap nodes to Neo4j for newly detected gaps.
         Returns a structured dict; sets 'error' key if member not found.
+
+        Uses HEDIS_MEASURES golden reference (Python dict) for all eligibility
+        and exclusion logic — no dependency on Neo4j measure/exclusion nodes.
         """
+        from src.hedis_golden_reference import HEDIS_MEASURES
+
         profile = get_member_profile(member_id)
         if not profile:
             return {"error": f"Member {member_id} not found in knowledge graph"}
 
-        age = _parse_age(profile.get("age_str", "0"))
+        age    = _parse_age(profile.get("age_str", "0"))
         gender = str(profile.get("gender", ""))
 
-        claims = get_member_claims_cpt_codes(member_id)
-        # ICD codes from actual claims
-        claim_icd_codes = [c.get("icd_code", "") for c in claims if c.get("icd_code")]
-
-        # Supplement with ICD codes derived from stored chronic_conditions.
-        # This ensures newly added members (zero claims) still have diabetes /
-        # chronic disease measures evaluated correctly.
+        claims              = get_member_claims_cpt_codes(member_id)
+        claim_icd_codes     = [c.get("icd_code", "") for c in claims if c.get("icd_code")]
+        claim_cpt_codes     = [c.get("cpt_code", "") for c in claims if c.get("cpt_code")]
         condition_icd_codes = _icd_codes_from_conditions(
             profile.get("chronic_conditions") or []
         )
         icd_codes = list(set(claim_icd_codes + condition_icd_codes))
 
-        all_measures = get_applicable_measures(age, gender)
-        applicable = [m for m in all_measures if _measure_applies(m, age, gender, icd_codes)]
+        # Build applicable list using golden reference directly
+        applicable: List[Dict] = []
+        for mid, m in HEDIS_MEASURES.items():
+            if _measure_applies(m, age, gender, icd_codes):
+                applicable.append(_measure_to_flat_dict(mid, m))
 
-        detected_gaps: List[Dict] = []
+        detected_gaps:     List[Dict] = []
         satisfied_measures: List[str] = []
-        excluded_measures: List[str] = []
+        excluded_measures:  List[str] = []
 
-        for measure in applicable:
-            # Pass condition-derived ICD codes so exclusion checks also work
-            # for members who have conditions recorded but no claims yet.
-            exclusions = check_member_exclusions(
-                member_id, measure["measure_id"],
-                extra_icd_codes=condition_icd_codes,
-            )
-            if exclusions:
-                reason = exclusions[0].get("type", "excluded")
-                excluded_measures.append(f"{measure['measure_id']} ({reason})")
+        for flat in applicable:
+            raw_measure = HEDIS_MEASURES[flat["measure_id"]]
+
+            # Exclusion check (golden reference + fallback codes)
+            if _is_member_excluded_golden(raw_measure, icd_codes, claim_cpt_codes):
+                excl_types = [
+                    e.get("type", "excluded")
+                    for e in raw_measure.get("exclusions", {}).get("required", [])
+                ]
+                reason = excl_types[0] if excl_types else "excluded"
+                excluded_measures.append(f"{flat['measure_id']} ({reason})")
                 continue
 
-            options = measure.get("screening_options", [])
-            if options:
-                satisfied = _gap_satisfied_multi_option(claims, options)
-            else:
-                satisfied = _gap_already_satisfied(
+            options   = flat.get("screening_options", [])
+            satisfied = (
+                _gap_satisfied_multi_option(claims, options) if options
+                else _gap_already_satisfied(
                     claims,
-                    measure.get("cpt_codes", ""),
-                    int(measure.get("lookback_months") or 12),
+                    flat.get("cpt_codes", ""),
+                    int(flat.get("lookback_months") or 12),
                 )
+            )
 
             if not satisfied:
-                detected_gaps.append(measure)
-                gap_id = f"AUTO-{member_id}-{measure['measure_id']}"
+                detected_gaps.append(flat)
+                gap_id = f"AUTO-{member_id}-{flat['measure_id']}"
                 merge_care_gap(
                     care_gap_id=gap_id,
                     member_id=member_id,
-                    measure_id=measure["measure_id"],
+                    measure_id=flat["measure_id"],
                     gap_status="Open",
                     is_open=True,
                     created_on=datetime.now().strftime("%Y-%m-%d"),
                     closed_on="",
                 )
             else:
-                satisfied_measures.append(measure["measure_id"])
+                satisfied_measures.append(flat["measure_id"])
 
         existing_gaps = get_member_open_gaps(member_id)
 
         return {
-            "profile": profile,
-            "age": age,
-            "gender": gender,
-            "claims": claims,
-            "icd_codes": icd_codes,
-            "applicable": applicable,
-            "detected_gaps": detected_gaps,
+            "profile":            profile,
+            "age":                age,
+            "gender":             gender,
+            "claims":             claims,
+            "icd_codes":          icd_codes,
+            "applicable":         applicable,
+            "detected_gaps":      detected_gaps,
             "satisfied_measures": satisfied_measures,
-            "excluded_measures": excluded_measures,
-            "existing_gaps": existing_gaps,
+            "excluded_measures":  excluded_measures,
+            "existing_gaps":      existing_gaps,
         }
 
     def _build_task(self, v: Dict, member_id: str) -> str:

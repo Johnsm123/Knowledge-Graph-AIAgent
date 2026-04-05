@@ -389,10 +389,13 @@ def merge_claim(claim_id, member_id, provider_id, cpt_code, icd_code,
 
 
 def merge_care_gap(care_gap_id, member_id, measure_id, gap_status, is_open,
-                   created_on, closed_on):
+                   created_on, closed_on, primary_cpt_code="", primary_icd10=""):
     """
-    FIX: gap_status (Open/Closed) is read directly from the sheet's CareManagerID column.
-    is_open is passed in explicitly — not inferred from closed_on being blank.
+    Write or update a CareGap node.
+    - gap_status: "Open" or "Closed"
+    - is_open: bool
+    - primary_cpt_code: single CPT to display/order to close this gap
+    - primary_icd10: single ICD-10 code (member's diagnosis or screening encounter code)
     """
     kg = get_knowledge_graph()
     kg.execute_write("""
@@ -400,9 +403,14 @@ def merge_care_gap(care_gap_id, member_id, measure_id, gap_status, is_open,
         SET g.gap_status = $gap_status,
             g.is_open = $is_open,
             g.created_on = $created_on,
-            g.closed_on = $closed_on
+            g.closed_on = $closed_on,
+            g.measure_id = $measure_id,
+            g.primary_cpt_code = $primary_cpt_code,
+            g.primary_icd10 = $primary_icd10
     """, {"care_gap_id": care_gap_id, "gap_status": gap_status,
-          "is_open": is_open, "created_on": created_on, "closed_on": closed_on})
+          "is_open": is_open, "created_on": created_on, "closed_on": closed_on,
+          "measure_id": measure_id, "primary_cpt_code": primary_cpt_code,
+          "primary_icd10": primary_icd10})
 
     kg.execute_write("""
         MATCH (m:Member {member_id: $member_id})
@@ -410,11 +418,35 @@ def merge_care_gap(care_gap_id, member_id, measure_id, gap_status, is_open,
         MERGE (m)-[:HAS_CARE_GAP]->(g)
     """, {"member_id": member_id, "care_gap_id": care_gap_id})
 
+    # MERGE (not MATCH) the QualityMeasure node so it is always created if
+    # the golden-reference measure_id (e.g. "KED") doesn't yet have a node
+    # in the graph. A silent MATCH failure would leave the RELATES_TO link
+    # missing, causing get_all_members to count zero open gaps.
+    # Also populate name/description/lookback from the Python golden reference
+    # so the member panel shows correct measure names even before load_all() runs.
+    try:
+        from src.hedis_golden_reference import HEDIS_MEASURES as _HM
+        _mdata = _HM.get(measure_id, {})
+    except Exception:
+        _mdata = {}
     kg.execute_write("""
         MATCH (g:CareGap {care_gap_id: $care_gap_id})
-        MATCH (q:QualityMeasure {measure_id: $measure_id})
+        MERGE (q:QualityMeasure {measure_id: $measure_id})
+        SET q.name               = $name,
+            q.description        = $description,
+            q.lookback_months    = $lookback_months,
+            q.age_range          = $age_range,
+            q.gender_requirement = $gender_requirement
         MERGE (g)-[:RELATES_TO]->(q)
-    """, {"care_gap_id": care_gap_id, "measure_id": measure_id})
+    """, {
+        "care_gap_id":        care_gap_id,
+        "measure_id":         measure_id,
+        "name":               _mdata.get("name", measure_id),
+        "description":        _mdata.get("description", ""),
+        "lookback_months":    _mdata.get("lookback_months"),
+        "age_range":          _mdata.get("age_range", ""),
+        "gender_requirement": _mdata.get("gender_requirement", "Any"),
+    })
 
 
 def merge_outreach(outreach_id, care_gap_id, member_id, care_manager_id,
@@ -449,27 +481,21 @@ def get_member_open_gaps(member_id: str):
     results = kg.run_query("""
         MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
         WHERE g.is_open = true
-        OPTIONAL MATCH (q)-[:REQUIRES_CODES]->(cs:CodeSet)
-        WITH g, q,
-             [x IN collect({type: cs.code_type, codes: cs.codes})
-              WHERE x.type IS NOT NULL AND toLower(x.type) CONTAINS 'cpt'] AS cpt_sets
-        RETURN g.care_gap_id AS care_gap_id,
-               g.created_on AS created_on,
-               g.gap_status AS gap_status,
-               q.measure_id AS measure_id,
-               q.name AS measure_name,
-               q.description AS resolution_guide,
-               q.lookback_months AS lookback_months,
-               cpt_sets
+        RETURN g.care_gap_id       AS care_gap_id,
+               g.created_on        AS created_on,
+               g.gap_status        AS gap_status,
+               g.primary_cpt_code  AS primary_cpt_code,
+               g.primary_icd10     AS primary_icd10,
+               q.measure_id        AS measure_id,
+               q.name              AS measure_name,
+               q.description       AS resolution_guide,
+               q.lookback_months   AS lookback_months
     """, {"member_id": member_id})
 
+    # Normalise: expose primary_cpt_code also as required_cpt_codes for
+    # backward compatibility with any frontend field that still reads that key.
     for gap in results:
-        all_cpt: list = []
-        for cs in (gap.pop("cpt_sets", []) or []):
-            codes = cs.get("codes", [])
-            if isinstance(codes, list):
-                all_cpt.extend(str(c).strip() for c in codes if c)
-        gap["required_cpt_codes"] = ", ".join(all_cpt)
+        gap["required_cpt_codes"] = gap.get("primary_cpt_code") or ""
 
     return results
 
@@ -549,9 +575,12 @@ def get_member_claims_cpt_codes(member_id: str):
     kg = get_knowledge_graph()
     return kg.run_query("""
         MATCH (m:Member {member_id: $member_id})-[:HAS_CLAIM]->(c:Claim)
-        RETURN c.cpt_code AS cpt_code,
+        RETURN c.claim_id    AS claim_id,
+               c.measure_id  AS measure_id,
+               c.cpt_code    AS cpt_code,
                c.service_date AS service_date,
-               c.icd_code AS icd_code
+               c.icd_code    AS icd_code,
+               c.status      AS status
         ORDER BY c.service_date DESC
     """, {"member_id": member_id})
 

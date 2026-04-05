@@ -72,9 +72,9 @@ def get_all_members():
         members = kg.run_query("""
             MATCH (m:Member)
             OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
-            WITH m, 
-                 count(CASE WHEN g.is_open = true THEN 1 END) as open_gaps,
-                 count(CASE WHEN g.is_open = false THEN 1 END) as closed_gaps
+            WITH m,
+                 count(DISTINCT CASE WHEN g.is_open = true  THEN g.care_gap_id ELSE null END) AS open_gaps,
+                 count(DISTINCT CASE WHEN g.is_open = false THEN g.care_gap_id ELSE null END) AS closed_gaps
             OPTIONAL MATCH (m)-[:ASSIGNED_TO]->(p:Provider)
             RETURN m.member_id as member_id,
                    m.name as name,
@@ -96,8 +96,14 @@ def get_all_members():
 def get_member_details(member_id):
     """Get comprehensive member details including profile, gaps, claims, and outreach."""
     try:
+        from src.care_gap_agents import detect_care_gaps
         kg = get_knowledge_graph()
-        
+
+        # Run pure-Python gap detection first so the panel always reflects
+        # the same agent-computed CPT/ICD codes without requiring a separate
+        # "AI Suggestions" click.  This is fast (no LLM) and idempotent.
+        detect_care_gaps(member_id)
+
         # Get member profile
         profile = get_member_profile(member_id)
         
@@ -122,14 +128,19 @@ def get_member_details(member_id):
             ORDER BY o.date DESC
         """, {"member_id": member_id})
         
-        # Get closed gaps
+        # Get closed gaps — include claim info so the UI can show claim_id and codes
         closed_gaps = kg.run_query("""
             MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
             WHERE g.is_open = false
-            RETURN g.care_gap_id as care_gap_id,
-                   g.closed_on as closed_on,
-                   q.measure_id as measure_id,
-                   q.name as measure_name
+            OPTIONAL MATCH (c:Claim {claim_id: g.claim_id})
+            RETURN g.care_gap_id  as care_gap_id,
+                   g.closed_on    as closed_on,
+                   g.claim_id     as claim_id,
+                   q.measure_id   as measure_id,
+                   q.name         as measure_name,
+                   c.cpt_code     as cpt_code,
+                   c.icd_code     as icd_code,
+                   c.service_date as service_date
             ORDER BY g.closed_on DESC
         """, {"member_id": member_id})
         
@@ -164,20 +175,27 @@ def get_dashboard_stats():
         # Members without gaps (compliant)
         compliant_members = total_members - members_with_gaps
         
-        # Total open gaps
+        # Total open gaps — count distinct (member, measure) pairs to avoid
+        # double-counting when both an Excel-loaded gap and an AUTO- gap exist
+        # for the same member+measure.  Use g.measure_id (stored on the node)
+        # so this works even when the RELATES_TO→QualityMeasure link is absent.
         total_open_gaps = kg.run_query("""
-            MATCH (g:CareGap)
+            MATCH (m:Member)-[:HAS_CARE_GAP]->(g:CareGap)
             WHERE g.is_open = true
-            RETURN count(g) as count
+            RETURN count(DISTINCT m.member_id + '|' + coalesce(g.measure_id, g.care_gap_id)) as count
         """, {})[0]["count"]
-        
-        # Gaps by measure
+
+        # Gaps by measure — count distinct members per measure.
+        # Prefer RELATES_TO for name; fall back to g.measure_id for the ID.
         gaps_by_measure = kg.run_query("""
-            MATCH (g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
+            MATCH (m:Member)-[:HAS_CARE_GAP]->(g:CareGap)
             WHERE g.is_open = true
-            RETURN q.measure_id as measure_id,
-                   q.name as measure_name,
-                   count(g) as gap_count
+            OPTIONAL MATCH (g)-[:RELATES_TO]->(q:QualityMeasure)
+            WITH coalesce(g.measure_id, q.measure_id, 'UNKNOWN') AS measure_id,
+                 coalesce(q.name, g.measure_id, 'Unknown Measure')  AS measure_name,
+                 m.member_id AS member_id
+            RETURN measure_id, measure_name,
+                   count(DISTINCT member_id) as gap_count
             ORDER BY gap_count DESC
         """, {})
         
@@ -221,6 +239,42 @@ def send_chat_message():
         })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
+
+
+def _get_hedis_codes(measure_id: str):
+    """
+    Extract CPT and ICD-10 codes for a HEDIS measure directly from the Python
+    golden reference dict (ground truth).  Handles top-level 'codes' dict AND
+    per-option codes inside 'screening_options' (COL/CCS).
+    Returns (cpt_codes_str, icd_codes_str).
+    """
+    from src.hedis_golden_reference import HEDIS_MEASURES
+    mdata = HEDIS_MEASURES.get(measure_id, {})
+    cpt_list: list = []
+    icd_list: list = []
+
+    # ── top-level codes dict ─────────────────────────────────────────────────
+    for k, v in mdata.get("codes", {}).items():
+        if not isinstance(v, list):
+            continue
+        kl = k.lower()
+        if "cpt" in kl or "hcpcs" in kl:
+            cpt_list.extend(v)
+        elif "icd" in kl:
+            icd_list.extend(v)
+
+    # ── screening options (COL has 5 options, CCS has 3) ────────────────────
+    for opt in mdata.get("screening_options", []):
+        cpt_list.extend(opt.get("cpt", []))
+        cpt_list.extend(opt.get("hcpcs", []))
+        # screening options don't carry ICD codes — diagnosis_requirement handles those
+
+    # ── deduplicate preserving order ─────────────────────────────────────────
+    seen: set = set()
+    cpt_codes = ", ".join(c for c in cpt_list if c and not (c in seen or seen.add(c)))
+    seen = set()
+    icd_codes = ", ".join(c for c in icd_list if c and not (c in seen or seen.add(c)))
+    return cpt_codes, icd_codes
 
 
 @app.route("/api/v1/appointments/book", methods=["POST"])
@@ -280,39 +334,11 @@ def book_appointment():
             "specialty": "General Medicine",
         })
 
-        # ── CPT / ICD codes from golden reference ────────────────────────
-        # code_sets uses descriptive keys (e.g. 'hba1c_cpt', 'retinal_eye_exam_cpt',
-        # 'diabetes_icd10') — collect all codes whose key contains 'cpt' for CPT
-        # and 'icd' for ICD-10, excluding category-II / result codes (Cat-II CPTs
-        # start with digits 0-9 but are 5-char ending in F — keep them too).
-        measure_detail = get_measure_comprehensive(measure_id) or {}
-        code_sets = measure_detail.get("code_sets", {}) or {}
-
-        cpt_set, icd_set = [], []
-        for key, codes in code_sets.items():
-            key_lower = key.lower()
-            values = codes if isinstance(codes, list) else [codes]
-            if "icd" in key_lower:
-                icd_set.extend(str(c) for c in values if c)
-            elif "cpt" in key_lower or "hcpcs" in key_lower:
-                cpt_set.extend(str(c) for c in values if c)
-
-        # De-duplicate while preserving order
-        seen = set()
-        cpt_unique = []
-        for c in cpt_set:
-            if c not in seen:
-                seen.add(c)
-                cpt_unique.append(c)
-        seen = set()
-        icd_unique = []
-        for c in icd_set:
-            if c not in seen:
-                seen.add(c)
-                icd_unique.append(c)
-
-        cpt_codes = ", ".join(cpt_unique)
-        icd_codes = ", ".join(icd_unique)
+        # ── CPT / ICD codes from HEDIS golden reference (Python dict) ───────
+        # _get_hedis_codes reads directly from HEDIS_MEASURES (ground truth),
+        # covering both top-level 'codes' dict and screening_options for
+        # multi-path measures (COL, CCS).  No Neo4j round-trip needed.
+        cpt_codes, icd_codes = _get_hedis_codes(measure_id)
 
         # ── Persist to Neo4j ─────────────────────────────────────────────
         appointment_id = f"APT-{member_id}-{measure_id}-{uuid.uuid4().hex[:6].upper()}"
@@ -490,13 +516,23 @@ def complete_appointment(appointment_id):
         service_date = appt.get("appointment_date", str(date.today()))
         claim_id = f"CLM-{appt['member_id']}-{appt['measure_id']}-{uuid.uuid4().hex[:8].upper()}"
 
+        # Use codes already on the appointment; fall back to golden reference
+        # extraction so claims created from old (pre-fix) appointments still
+        # have correct CPT/ICD codes.
+        cpt_code = appt.get("cpt_codes") or ""
+        icd_code = appt.get("icd_codes") or ""
+        if not cpt_code or not icd_code:
+            gr_cpt, gr_icd = _get_hedis_codes(appt["measure_id"])
+            cpt_code = cpt_code or gr_cpt
+            icd_code = icd_code or gr_icd
+
         close_care_gap_with_claim(
             care_gap_id=care_gap_id,
             member_id=appt["member_id"],
             measure_id=appt["measure_id"],
             provider_id=appt.get("provider_id", ""),
-            cpt_code=appt.get("cpt_codes", ""),
-            icd_code=appt.get("icd_codes", ""),
+            cpt_code=cpt_code,
+            icd_code=icd_code,
             service_date=service_date,
             claim_id=claim_id,
             plan_id=appt.get("plan_id", ""),
@@ -504,17 +540,45 @@ def complete_appointment(appointment_id):
 
         # Mark appointment as completed
         from src.neo4j_connection import get_knowledge_graph
+        from src.care_gap_neo4j import merge_outreach
+        import uuid as _uuid
         kg = get_knowledge_graph()
         kg.execute_write("""
             MATCH (a:Appointment {appointment_id: $appt_id})
             SET a.status = 'Completed'
         """, {"appt_id": appointment_id})
 
+        # Create an Outreach record for this completed screening so the
+        # dashboard "Outreach Activity" count increases when a gap is closed.
+        outreach_id = f"OUT-{appt['member_id']}-{appt['measure_id']}-{_uuid.uuid4().hex[:6].upper()}"
+        merge_outreach(
+            outreach_id=outreach_id,
+            care_gap_id=care_gap_id,
+            member_id=appt["member_id"],
+            care_manager_id="SYSTEM",
+            channel="Appointment",
+            date=service_date,
+            status="Completed",
+        )
+
+        # Check if the member is now fully compliant (no more open gaps)
+        remaining = kg.run_query("""
+            MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+            WHERE g.is_open = true
+            RETURN count(g) AS cnt
+        """, {"mid": appt["member_id"]})[0]["cnt"]
+        is_now_compliant = (remaining == 0)
+
         return jsonify({
-            "status": "success",
-            "claim_id": claim_id,
-            "care_gap_id": care_gap_id,
-            "message": "Screening completed and care gap closed",
+            "status":           "success",
+            "claim_id":         claim_id,
+            "care_gap_id":      care_gap_id,
+            "cpt_codes":        cpt_code,
+            "icd_codes":        icd_code,
+            "is_now_compliant": is_now_compliant,
+            "message":          "Screening completed and care gap closed" + (
+                " — Member is now fully compliant!" if is_now_compliant else ""
+            ),
         })
     except Exception as e:
         logger.error(f"complete_appointment error: {e}", exc_info=True)
@@ -625,133 +689,212 @@ def get_providers():
 
 @app.route("/api/v1/members/<member_id>/compare", methods=["GET"])
 def compare_member(member_id):
-    """Compare member with similar members and provide improvement recommendations."""
+    """
+    Compare a member with similar members and provide improvement recommendations.
+
+    Similarity is determined by:
+      1. Same gender
+      2. Age within ±5 years
+      3. Shared open QualityMeasure gap nodes (graph traversal)
+    CPT codes come from the Python HEDIS_MEASURES golden reference to avoid
+    stale Neo4j CodeSet data.
+    """
     try:
+        from src.hedis_golden_reference import HEDIS_MEASURES
         kg = get_knowledge_graph()
-        
-        # Get current member details
+
+        # ── Current member summary ────────────────────────────────────────────
         current_member = kg.run_query("""
             MATCH (m:Member {member_id: $member_id})
             OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
-            WITH m, 
-                 count(CASE WHEN g.is_open = true THEN 1 END) as open_gaps,
-                 count(CASE WHEN g.is_open = false THEN 1 END) as closed_gaps
-            RETURN m.member_id as member_id,
-                   m.name as name,
-                   m.age_str as age,
-                   m.gender as gender,
-                   m.dob as dob,
+            WITH m,
+                 count(CASE WHEN g.is_open = true  THEN 1 END) AS open_gaps,
+                 count(CASE WHEN g.is_open = false THEN 1 END) AS closed_gaps
+            RETURN m.member_id          AS member_id,
+                   m.name               AS name,
+                   m.age_str            AS age,
+                   m.gender             AS gender,
+                   m.dob                AS dob,
+                   m.chronic_conditions AS chronic_conditions,
                    open_gaps,
                    closed_gaps
         """, {"member_id": member_id})
-        
+
         if not current_member:
             return jsonify({"status": "error", "error": "Member not found"}), 404
-        
+
         current = current_member[0]
-        
-        # Parse age from "35 Years, 5 Months" format
-        age_str = current["age"]
+
         try:
-            age = int(age_str.split()[0]) if age_str else 0
+            age = int(current["age"].split()[0]) if current["age"] else 0
         except (ValueError, AttributeError, IndexError):
             age = 0
-        
-        # Find similar members (same gender, similar age range ±5 years)
-        similar_members = kg.run_query("""
-            MATCH (m:Member)
-            WHERE m.member_id <> $member_id
-              AND m.gender = $gender
-            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
-            WITH m,
-                 count(CASE WHEN g.is_open = true THEN 1 END) as open_gaps,
-                 count(CASE WHEN g.is_open = false THEN 1 END) as closed_gaps,
-                 count(g) as total_gaps
-            OPTIONAL MATCH (m)-[:HAS_CLAIM]->(c:Claim)
-            WITH m, open_gaps, closed_gaps, total_gaps, count(c) as total_claims
-            RETURN m.member_id as member_id,
-                   m.name as name,
-                   m.age_str as age,
-                   m.gender as gender,
+
+        # ── Current member's open gaps (IDs of QualityMeasures) ─────────────
+        current_open_measure_ids = [
+            row["measure_id"] for row in kg.run_query("""
+                MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)
+                      -[:RELATES_TO]->(q:QualityMeasure)
+                WHERE g.is_open = true
+                RETURN q.measure_id AS measure_id
+            """, {"member_id": member_id})
+        ]
+
+        # ── Similar members via shared open QualityMeasure nodes ─────────────
+        # Primary path: traverse the graph — Member → CareGap → QualityMeasure
+        # ← CareGap ← Member to find members sharing at least one open gap.
+        graph_similar = kg.run_query("""
+            MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)
+                  -[:RELATES_TO]->(q:QualityMeasure)
+                  <-[:RELATES_TO]-(g2:CareGap)<-[:HAS_CARE_GAP]-(m2:Member)
+            WHERE g.is_open = true
+              AND g2.is_open = true
+              AND m2.member_id <> $member_id
+              AND m2.gender = $gender
+            WITH m2, count(DISTINCT q) AS shared_gaps
+            OPTIONAL MATCH (m2)-[:HAS_CARE_GAP]->(allg:CareGap)
+            WITH m2, shared_gaps,
+                 count(CASE WHEN allg.is_open = true  THEN 1 END) AS open_gaps,
+                 count(CASE WHEN allg.is_open = false THEN 1 END) AS closed_gaps,
+                 count(allg) AS total_gaps
+            OPTIONAL MATCH (m2)-[:HAS_CLAIM]->(c:Claim)
+            WITH m2, shared_gaps, open_gaps, closed_gaps, total_gaps,
+                 count(c) AS total_claims
+            RETURN m2.member_id  AS member_id,
+                   m2.name        AS name,
+                   m2.age_str     AS age,
+                   m2.gender      AS gender,
+                   shared_gaps,
                    open_gaps,
                    closed_gaps,
                    total_gaps,
                    total_claims
-            ORDER BY open_gaps ASC, closed_gaps DESC
-            LIMIT 10
-        """, {
-            "member_id": member_id,
-            "gender": current["gender"]
-        })
-        
-        # Filter similar members by age range in Python
+            ORDER BY shared_gaps DESC, open_gaps ASC
+            LIMIT 20
+        """, {"member_id": member_id, "gender": current["gender"]})
+
+        # Fallback: gender + age cohort (no shared gap found or result empty)
+        if not graph_similar:
+            graph_similar = kg.run_query("""
+                MATCH (m2:Member)
+                WHERE m2.member_id <> $member_id
+                  AND m2.gender = $gender
+                OPTIONAL MATCH (m2)-[:HAS_CARE_GAP]->(g:CareGap)
+                WITH m2,
+                     0 AS shared_gaps,
+                     count(CASE WHEN g.is_open = true  THEN 1 END) AS open_gaps,
+                     count(CASE WHEN g.is_open = false THEN 1 END) AS closed_gaps,
+                     count(g) AS total_gaps
+                OPTIONAL MATCH (m2)-[:HAS_CLAIM]->(c:Claim)
+                WITH m2, shared_gaps, open_gaps, closed_gaps, total_gaps,
+                     count(c) AS total_claims
+                RETURN m2.member_id  AS member_id,
+                       m2.name        AS name,
+                       m2.age_str     AS age,
+                       m2.gender      AS gender,
+                       shared_gaps,
+                       open_gaps,
+                       closed_gaps,
+                       total_gaps,
+                       total_claims
+                ORDER BY open_gaps ASC, closed_gaps DESC
+                LIMIT 20
+            """, {"member_id": member_id, "gender": current["gender"]})
+
+        # Filter by age ±5 years
         filtered_similar = []
-        for member in similar_members:
+        for m in graph_similar:
             try:
-                member_age = int(member["age"].split()[0]) if member["age"] else 0
-                if abs(member_age - age) <= 5:
-                    filtered_similar.append(member)
+                m_age = int(m["age"].split()[0]) if m.get("age") else 0
+                if abs(m_age - age) <= 5:
+                    filtered_similar.append(m)
             except (ValueError, AttributeError, IndexError):
                 continue
-        
-        # Get current member's open gaps with details
+
+        # ── Current member's open gaps with HEDIS golden reference codes ─────
         current_gaps = kg.run_query("""
-            MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
+            MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)
+                  -[:RELATES_TO]->(q:QualityMeasure)
             WHERE g.is_open = true
-            RETURN g.care_gap_id as care_gap_id,
-                   q.measure_id as measure_id,
-                   q.name as measure_name,
-                   q.description as description,
-                   q.lookback_months as lookback_months,
-                   g.created_on as created_on
+            RETURN g.care_gap_id   AS care_gap_id,
+                   q.measure_id    AS measure_id,
+                   q.name          AS measure_name,
+                   q.description   AS description,
+                   q.lookback_months AS lookback_months,
+                   g.created_on    AS created_on
         """, {"member_id": member_id})
-        
-        # Get CPT codes from CodeSet nodes
+
+        # Attach CPT codes from Python golden reference (not Neo4j CodeSet)
         for gap in current_gaps:
-            cpt_codes = kg.run_query("""
-                MATCH (q:QualityMeasure {measure_id: $measure_id})-[:REQUIRES_CODES]->(cs:CodeSet)
-                WHERE cs.code_type = 'CPT'
-                RETURN cs.codes as codes
-            """, {"measure_id": gap["measure_id"]})
-            gap["cpt_codes"] = ", ".join(cpt_codes[0]["codes"]) if cpt_codes and cpt_codes[0]["codes"] else "N/A"
-        
-        # Get best practices from quality measures
-        improvement_guidelines = kg.run_query("""
-            MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
-            WHERE g.is_open = true
-            OPTIONAL MATCH (q)-[:HAS_BEST_PRACTICES]->(bp:BestPractices)
-            OPTIONAL MATCH (q)-[:FOLLOWS_GUIDELINE]->(cg:ClinicalGuideline)
-            RETURN q.measure_id as measure_id,
-                   q.name as measure_name,
-                   bp.practices as best_practices,
-                   cg.acceptable as acceptable_documentation,
-                   q.numerator_criteria as numerator_criteria
-        """, {"member_id": member_id})
-        
-        # Calculate comparison metrics (only consider open gaps for performance)
-        better_performers = [m for m in filtered_similar if m["open_gaps"] < current["open_gaps"]]
-        avg_open_gaps = sum(m["open_gaps"] for m in filtered_similar) / len(filtered_similar) if filtered_similar else 0
-        avg_closed_gaps = sum(m["closed_gaps"] for m in filtered_similar) / len(filtered_similar) if filtered_similar else 0
-        
-        # Percentile rank: lower open gaps = better performance (higher percentile)
-        # If member has 0 open gaps, they're in top percentile
-        percentile = calculate_percentile(current["open_gaps"], [m["open_gaps"] for m in filtered_similar])
-        
+            m_data = HEDIS_MEASURES.get(gap["measure_id"], {})
+            from src.care_gap_agents import _get_flat_cpt_for_measure
+            flat_cpt = _get_flat_cpt_for_measure(m_data)
+            # Show first 5 representative codes to keep UI compact
+            cpt_list = [c for c in flat_cpt.split(",") if c][:5]
+            gap["cpt_codes"] = ", ".join(cpt_list) if cpt_list else "N/A"
+            # Include best practices inline from golden reference
+            gap["best_practices"] = m_data.get("best_practices", [])
+            gap["numerator_criteria"] = m_data.get("numerator_criteria", "")
+
+        # ── Improvement guidelines from golden reference ──────────────────────
+        improvement_guidelines = []
+        for gp in current_gaps:
+            m_data = HEDIS_MEASURES.get(gp["measure_id"], {})
+            improvement_guidelines.append({
+                "measure_id":              gp["measure_id"],
+                "measure_name":            gp["measure_name"],
+                "best_practices":          m_data.get("best_practices", []),
+                "acceptable_documentation": m_data.get("clinical_guidelines", {})
+                                               .get("acceptable", []),
+                "numerator_criteria":      m_data.get("numerator_criteria", ""),
+            })
+
+        # ── Metrics ──────────────────────────────────────────────────────────
+        better_performers = [
+            m for m in filtered_similar if m["open_gaps"] < current["open_gaps"]
+        ]
+        avg_open   = (sum(m["open_gaps"]   for m in filtered_similar) / len(filtered_similar)
+                      if filtered_similar else 0)
+        avg_closed = (sum(m["closed_gaps"] for m in filtered_similar) / len(filtered_similar)
+                      if filtered_similar else 0)
+        percentile = calculate_percentile(
+            current["open_gaps"],
+            [m["open_gaps"] for m in filtered_similar],
+        )
+
+        # Shared measures summary: which measures this member shares with peers
+        shared_measure_summary = []
+        if current_open_measure_ids:
+            shared_rows = kg.run_query("""
+                MATCH (q:QualityMeasure)
+                WHERE q.measure_id IN $measure_ids
+                OPTIONAL MATCH (m2:Member)-[:HAS_CARE_GAP]->(g2:CareGap)
+                              -[:RELATES_TO]->(q)
+                WHERE g2.is_open = true
+                  AND m2.member_id <> $member_id
+                RETURN q.measure_id AS measure_id,
+                       q.name       AS measure_name,
+                       count(DISTINCT m2) AS peer_count
+                ORDER BY peer_count DESC
+            """, {"measure_ids": current_open_measure_ids, "member_id": member_id})
+            shared_measure_summary = shared_rows
+
         return jsonify({
-            "current_member": current,
-            "similar_members": filtered_similar,
-            "better_performers": better_performers,
-            "current_gaps": current_gaps,
+            "current_member":        current,
+            "similar_members":       filtered_similar,
+            "better_performers":     better_performers,
+            "current_gaps":          current_gaps,
             "improvement_guidelines": improvement_guidelines,
+            "shared_measure_summary": shared_measure_summary,
             "comparison_metrics": {
-                "current_open_gaps": current["open_gaps"],
-                "current_closed_gaps": current["closed_gaps"],
-                "avg_open_gaps_similar": round(avg_open_gaps, 1),
-                "avg_closed_gaps_similar": round(avg_closed_gaps, 1),
-                "percentile_rank": percentile,
-                "total_similar_members": len(filtered_similar),
-                "better_performers_count": len(better_performers)
-            }
+                "current_open_gaps":       current["open_gaps"],
+                "current_closed_gaps":     current["closed_gaps"],
+                "avg_open_gaps_similar":   round(avg_open,   1),
+                "avg_closed_gaps_similar": round(avg_closed, 1),
+                "percentile_rank":         percentile,
+                "total_similar_members":   len(filtered_similar),
+                "better_performers_count": len(better_performers),
+            },
         })
     except Exception as e:
         import traceback
