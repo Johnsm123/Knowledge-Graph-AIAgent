@@ -1174,5 +1174,126 @@ def mark_email_read_endpoint(email_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/v1/appointments/<appointment_id>/force-close", methods=["POST"])
+def force_close_appointment(appointment_id):
+    """
+    Force-close a booked appointment for demo purposes.
+    Immediately: creates claim, closes care gap, creates outreach, marks appointment completed.
+    Same logic as complete_appointment but callable on any appointment regardless of date.
+    """
+    try:
+        from src.care_gap_neo4j import get_appointment, close_care_gap_with_claim, merge_outreach
+        import uuid as _uuid
+        from datetime import date as _date
+
+        data = request.json or {}
+        care_gap_id = data.get("care_gap_id", "")
+
+        appt = get_appointment(appointment_id)
+        if not appt:
+            return jsonify({"status": "error", "error": "Appointment not found"}), 404
+
+        service_date = str(_date.today())
+        claim_id = f"CLM-{appt['member_id']}-{appt['measure_id']}-{_uuid.uuid4().hex[:8].upper()}"
+
+        cpt_code, icd_code = _get_hedis_codes(appt["measure_id"])
+        # Use member's actual ICD from gap node if available
+        if care_gap_id:
+            kg = get_knowledge_graph()
+            gap_rows = kg.run_query(
+                "MATCH (g:CareGap {care_gap_id: $gid}) RETURN g.primary_icd10 AS icd",
+                {"gid": care_gap_id},
+            )
+            if gap_rows and gap_rows[0].get("icd"):
+                icd_code = gap_rows[0]["icd"]
+
+        close_care_gap_with_claim(
+            care_gap_id=care_gap_id,
+            member_id=appt["member_id"],
+            measure_id=appt["measure_id"],
+            provider_id=appt.get("provider_id", ""),
+            cpt_code=cpt_code,
+            icd_code=icd_code,
+            service_date=service_date,
+            claim_id=claim_id,
+            plan_id=appt.get("plan_id", ""),
+        )
+
+        # Mark appointment completed
+        kg = get_knowledge_graph()
+        kg.execute_write(
+            "MATCH (a:Appointment {appointment_id: $appt_id}) SET a.status = 'Completed'",
+            {"appt_id": appointment_id},
+        )
+
+        # Create outreach record
+        outreach_id = f"OUT-{appt['member_id']}-{appt['measure_id']}-{_uuid.uuid4().hex[:6].upper()}"
+        merge_outreach(
+            outreach_id=outreach_id,
+            care_gap_id=care_gap_id,
+            member_id=appt["member_id"],
+            care_manager_id="SYSTEM",
+            channel="Force Close",
+            date=service_date,
+            status="Completed",
+        )
+
+        # Check compliance
+        remaining = kg.run_query("""
+            MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+            WHERE g.is_open = true
+            RETURN count(g) AS cnt
+        """, {"mid": appt["member_id"]})[0]["cnt"]
+        is_now_compliant = (remaining == 0)
+
+        return jsonify({
+            "status":           "success",
+            "claim_id":         claim_id,
+            "care_gap_id":      care_gap_id,
+            "cpt_codes":        cpt_code,
+            "icd_codes":        icd_code,
+            "is_now_compliant": is_now_compliant,
+            "message":          "Force closed — care gap closed and claim generated" + (
+                " — Member is now fully compliant!" if is_now_compliant else ""
+            ),
+        })
+    except Exception as e:
+        logger.error(f"force_close_appointment error: {e}", exc_info=True)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/members/set-default-email", methods=["POST"])
+def set_default_email():
+    """Add default email to all existing members that don't have one."""
+    try:
+        kg = get_knowledge_graph()
+        default_email = "ajohnsm2020@gmail.com"
+        # Count first, then update
+        count_res = kg.run_query("""
+            MATCH (m:Member)
+            WHERE m.email IS NULL OR m.email = ''
+            RETURN count(m) AS cnt
+        """, {})
+        count = count_res[0]["cnt"] if count_res else 0
+        if count > 0:
+            kg.execute_write("""
+                MATCH (m:Member)
+                WHERE m.email IS NULL OR m.email = ''
+                SET m.email = $email
+            """, {"email": default_email})
+        return jsonify({
+            "status": "success",
+            "message": f"Updated {count} members with email {default_email}",
+            "updated_count": count,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# Register member portal Blueprint
+from src.member_portal import portal_bp
+app.register_blueprint(portal_bp)
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5001, use_reloader=False)

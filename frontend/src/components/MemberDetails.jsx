@@ -213,6 +213,7 @@ function MemberDetails({ member, onBack }) {
   const [completingGap, setCompletingGap]     = useState(false);
   const [completedGaps, setCompletedGaps]     = useState(new Set()); // care_gap_ids closed this session
   const [completeError, setCompleteError]     = useState('');
+  const [forceClosing, setForceClosing]       = useState(false);
 
   useEffect(() => {
     if (member) fetchMemberDetails();
@@ -526,6 +527,38 @@ function MemberDetails({ member, onBack }) {
       setCompleteError(err.response?.data?.error || 'Network error. Please try again.');
     } finally {
       setCompletingGap(false);
+    }
+  };
+
+  const handleForceClose = async (booking) => {
+    setForceClosing(true);
+    setCompleteError('');
+    try {
+      const res = await axios.post(
+        `${API_BASE}/appointments/${booking.appointment_id}/force-close`,
+        { care_gap_id: booking.care_gap_id }
+      );
+      if (res.data.status === 'success') {
+        const claimId = res.data.claim_id;
+        setViewBooking(prev => ({ ...prev, claim_id: claimId, cpt_codes: res.data.cpt_codes || prev.cpt_codes, icd_codes: res.data.icd_codes || prev.icd_codes, status: 'Completed' }));
+        setBookings(prev => ({
+          ...prev,
+          [booking.care_gap_id]: { ...prev[booking.care_gap_id], claim_id: claimId, status: 'Completed' },
+        }));
+        setCompletedGaps(prev => new Set([...prev, booking.care_gap_id]));
+        await fetchMemberDetails();
+        if (res.data.is_now_compliant) {
+          setCompliantToast(true);
+          setTimeout(() => setCompliantToast(false), 6000);
+        }
+      } else {
+        setCompleteError(res.data.error || 'Force close failed.');
+      }
+    } catch (err) {
+      console.error('Force close error:', err);
+      setCompleteError(err.response?.data?.error || 'Network error.');
+    } finally {
+      setForceClosing(false);
     }
   };
 
@@ -1213,16 +1246,29 @@ function MemberDetails({ member, onBack }) {
               <div className="vb-footer-btns">
                 <button className="btn-secondary" onClick={() => { setViewBooking(null); setCompleteError(''); }}>Close</button>
                 {viewBooking.status !== 'Completed' && !completedGaps.has(viewBooking.care_gap_id) && (
-                  <button
-                    className="btn-complete-screening"
-                    onClick={() => handleCompleteScreening(viewBooking)}
-                    disabled={completingGap}
-                  >
-                    {completingGap
-                      ? <><span className="appt-spinner" /> Processing…</>
-                      : <>✅ Mark Screening Complete &amp; Close Gap</>
-                    }
-                  </button>
+                  <>
+                    <button
+                      className="btn-complete-screening"
+                      onClick={() => handleCompleteScreening(viewBooking)}
+                      disabled={completingGap || forceClosing}
+                    >
+                      {completingGap
+                        ? <><span className="appt-spinner" /> Processing…</>
+                        : <>✅ Mark Screening Complete &amp; Close Gap</>
+                      }
+                    </button>
+                    <button
+                      className="btn-force-close"
+                      onClick={() => handleForceClose(viewBooking)}
+                      disabled={completingGap || forceClosing}
+                      title="Force close for demo — immediately generates claim and closes gap"
+                    >
+                      {forceClosing
+                        ? <><span className="appt-spinner" /> Force Closing…</>
+                        : <>⚡ Force Close (Demo)</>
+                      }
+                    </button>
+                  </>
                 )}
               </div>
             </div>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Users, AlertCircle, CheckCircle, TrendingUp, Activity, UserPlus,
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  SortAsc, SortDesc, Filter,
+  SortAsc, SortDesc, Filter, Zap, Loader, Mail,
 } from 'lucide-react';
 import axios from 'axios';
 import AddMember from './AddMember';
@@ -98,6 +98,8 @@ function Dashboard({ onMemberSelect }) {
   const [sortBy,        setSortBy]        = useState('gaps_desc');
   const [page,          setPage]          = useState(1);
   const [showAddMember, setShowAddMember] = useState(false);
+  // Auto-process state: { [member_id]: { status, message, step } }
+  const [processing, setProcessing]       = useState({});
 
   useEffect(() => { fetchDashboardData(); }, []);
   useEffect(() => { setPage(1); }, [category, search, sortBy]);
@@ -115,6 +117,93 @@ function Dashboard({ onMemberSelect }) {
       console.error('Dashboard fetch error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Auto-process handler (SSE) ──────────────────────────────────────────
+  const handleAutoProcess = (e, memberId) => {
+    e.stopPropagation(); // don't navigate to member details
+
+    setProcessing(prev => ({
+      ...prev,
+      [memberId]: { status: 'running', step: 'detect_gaps', message: 'Starting...' },
+    }));
+
+    const es = new EventSource(`${API_BASE}/members/${memberId}/auto-process`);
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const step = data.step || '';
+        const status = data.status || '';
+
+        if (step === 'error') {
+          setProcessing(prev => ({
+            ...prev,
+            [memberId]: { status: 'error', step: 'error', message: data.message || 'Error' },
+          }));
+          es.close();
+          return;
+        }
+
+        if (step === 'complete') {
+          setProcessing(prev => ({
+            ...prev,
+            [memberId]: {
+              status: 'done',
+              step: 'complete',
+              message: data.email_sent ? 'Email Sent' : (data.status === 'compliant' ? 'Compliant' : 'Done'),
+              gapsCount: data.gaps_count || 0,
+              emailSent: data.email_sent || false,
+            },
+          }));
+          es.close();
+          // Refresh dashboard data after a short delay
+          setTimeout(() => fetchDashboardData(), 1500);
+          return;
+        }
+
+        // Progress updates
+        let msg = data.message || '';
+        if (step === 'detect_gaps' && status === 'running') msg = 'Detecting gaps...';
+        else if (step === 'detect_gaps' && status === 'done') msg = 'Gaps detected';
+        else if (step === 'agent_analysis' && status === 'running') msg = `Agent: ${data.agent || '...'}`;
+        else if (step === 'agent_analysis' && status === 'done' && data.agent) msg = `Agent done: ${data.agent}`;
+        else if (step === 'agent_analysis' && status === 'done') msg = 'Analysis complete';
+        else if (step === 'email' && status === 'running') msg = 'Sending email...';
+        else if (step === 'email' && status === 'done') msg = 'Email sent!';
+        else if (step === 'email' && status === 'skipped') msg = 'No email on file';
+
+        setProcessing(prev => ({
+          ...prev,
+          [memberId]: { status: 'running', step, message: msg },
+        }));
+      } catch (err) {
+        console.error('Auto-process SSE parse error:', err);
+      }
+    };
+
+    es.onerror = () => {
+      setProcessing(prev => ({
+        ...prev,
+        [memberId]: prev[memberId]?.status === 'done'
+          ? prev[memberId]
+          : { status: 'error', step: 'error', message: 'Connection lost' },
+      }));
+      es.close();
+    };
+  };
+
+  // ── Set default email for members without one ─────────────────────────────
+  const handleSetDefaultEmails = async () => {
+    try {
+      const res = await axios.post(`${API_BASE}/members/set-default-email`);
+      if (res.data.status === 'success') {
+        alert(`Updated ${res.data.updated_count} members with default email.`);
+        fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Set default email error:', err);
     }
   };
 
@@ -230,9 +319,14 @@ function Dashboard({ onMemberSelect }) {
         {/* Header row */}
         <div className="members-header-row">
           <h2 className="members-title">Members</h2>
-          <button className="add-member-btn" onClick={() => setShowAddMember(true)}>
-            <UserPlus size={17} /> Add Member
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="set-email-btn" onClick={handleSetDefaultEmails} title="Add default test email to members without one">
+              <Mail size={15} /> Set Default Emails
+            </button>
+            <button className="add-member-btn" onClick={() => setShowAddMember(true)}>
+              <UserPlus size={17} /> Add Member
+            </button>
+          </div>
         </div>
 
         {/* Search + Sort */}
@@ -284,7 +378,6 @@ function Dashboard({ onMemberSelect }) {
                   <div
                     key={member.member_id}
                     className={`member-tile member-tile--${cat}`}
-                    onClick={() => onMemberSelect(member)}
                   >
                     <div className="tile-header">
                       <Avatar name={member.name} category={cat} />
@@ -319,7 +412,32 @@ function Dashboard({ onMemberSelect }) {
                     </div>
 
                     <div className="tile-footer">
-                      View Details →
+                      {/* Auto-process status or button */}
+                      {processing[member.member_id]?.status === 'running' ? (
+                        <button className="btn-auto-process running" disabled>
+                          <Loader size={14} className="spinning" />
+                          {processing[member.member_id].message}
+                        </button>
+                      ) : processing[member.member_id]?.status === 'done' ? (
+                        <span className="auto-process-done">
+                          <CheckCircle size={14} />
+                          {processing[member.member_id].message}
+                          {processing[member.member_id].emailSent && ' ✉'}
+                        </span>
+                      ) : processing[member.member_id]?.status === 'error' ? (
+                        <button className="btn-auto-process error" onClick={(e) => handleAutoProcess(e, member.member_id)}>
+                          <Zap size={14} />
+                          Retry
+                        </button>
+                      ) : member.open_gaps > 0 ? (
+                        <button className="btn-auto-process" onClick={(e) => handleAutoProcess(e, member.member_id)}>
+                          <Zap size={14} />
+                          Auto Process
+                        </button>
+                      ) : null}
+                      <span className="tile-view-details" onClick={() => onMemberSelect(member)}>
+                        View Details →
+                      </span>
                     </div>
                   </div>
                 );

@@ -252,11 +252,47 @@
 /* ── Tile footer ── */
 .tile-footer {
   margin-top: .2rem;
-  padding: .55rem; background: #f8fafc; border-radius: 7px;
-  text-align: center; font-size: .82rem; font-weight: 600;
-  color: #0033A1; transition: background .2s;
+  padding: .5rem; background: #f8fafc; border-radius: 7px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem; font-size: .82rem; font-weight: 600;
 }
-.member-tile:hover .tile-footer { background: #0033A1; color: white; }
+.tile-view-details {
+  color: #0033A1; cursor: pointer; transition: color .15s;
+  padding: 4px 8px; border-radius: 5px;
+}
+.tile-view-details:hover { color: white; background: #0033A1; }
+
+/* Auto Process button */
+.btn-auto-process {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 6px; border: none;
+  font-size: .78rem; font-weight: 600; cursor: pointer;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: white; transition: all .2s; white-space: nowrap;
+}
+.btn-auto-process:hover:not(:disabled) { background: linear-gradient(135deg, #6d28d9, #5b21b6); transform: scale(1.03); }
+.btn-auto-process:disabled { opacity: .7; cursor: not-allowed; }
+.btn-auto-process.running { background: #4f46e5; }
+.btn-auto-process.error { background: #dc2626; }
+
+.auto-process-done {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: .78rem; font-weight: 600; color: #059669;
+  padding: 5px 10px; background: #d1fae5; border-radius: 6px;
+}
+
+/* spinning icon */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinning { animation: spin 1s linear infinite; }
+
+/* Set Default Emails button */
+.set-email-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 8px; border: 1.5px solid #e2e8f0;
+  background: white; color: #475569; cursor: pointer;
+  font-size: .82rem; font-weight: 500; transition: all .15s;
+}
+.set-email-btn:hover { border-color: #0033A1; color: #0033A1; }
 
 /* ── Pagination ────────────────────────────────────────────────────────────── */
 .pagination {

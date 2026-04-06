@@ -1945,6 +1945,24 @@
 .btn-complete-screening:hover:not(:disabled) { background: #166534; }
 .btn-complete-screening:disabled { background: #a7f3d0; cursor: not-allowed; }
 
+/* ── Force Close Button ──────────────────────────────────────────────────── */
+.btn-force-close {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #d97706, #b45309);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-force-close:hover:not(:disabled) { background: linear-gradient(135deg, #b45309, #92400e); }
+.btn-force-close:disabled { opacity: 0.6; cursor: not-allowed; }
+
 /* ── Compliance Toast ────────────────────────────────────────────────────── */
 .compliant-toast {
   position: fixed;
