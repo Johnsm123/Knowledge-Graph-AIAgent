@@ -3,8 +3,9 @@ Member-facing Portal — Flask Blueprint.
 
 Serves HTML pages linked from automated outreach emails so members can:
   1. Review their care gap analysis and respond Yes / No per gap
-  2. Pick available appointment time slots for accepted gaps
-  3. Receive a booking confirmation (also sent via email)
+  2. Find nearby labs/physicians via Google Places + Leaflet map
+  3. Pick available appointment time slots for accepted gaps
+  4. Receive a booking confirmation (also sent via email)
 
 Security: every portal URL contains an HMAC token derived from the member_id
 and a server-side secret.  No login required — the link *is* the credential.
@@ -12,9 +13,12 @@ and a server-side secret.  No login required — the link *is* the credential.
 
 import hashlib
 import hmac
+import json as _json
+import logging
 import uuid
 from datetime import datetime, timedelta
 
+import requests as http_requests
 from flask import Blueprint, request, jsonify
 
 from src.neo4j_connection import get_knowledge_graph
@@ -27,6 +31,7 @@ from src.care_gap_neo4j import (
 )
 
 portal_bp = Blueprint("member_portal", __name__)
+_logger = logging.getLogger(__name__)
 
 _PORTAL_SECRET = "hedis-care-gap-portal-2025"  # demo secret
 
@@ -82,6 +87,159 @@ def _get_booked_slots():
         RETURN a.appointment_date AS d, a.appointment_time AS t
     """, {})
     return {(r["d"], r["t"]) for r in rows if r["d"] and r["t"]}
+
+
+# ── Google Places API proxy ─────────────────────────────────────────────────
+
+# Map HEDIS measure IDs to Google Places search keywords
+_MEASURE_PLACE_KEYWORDS = {
+    "BCS": "mammography radiology breast screening",
+    "CCS": "gynecology cervical screening pap smear",
+    "COL": "gastroenterology colonoscopy endoscopy",
+    "CBP": "cardiology blood pressure clinic",
+    "GSD": "diabetes endocrinology HbA1c lab",
+    "EED": "ophthalmology diabetic eye exam retinal screening",
+    "KED": "nephrology kidney screening renal lab",
+    "BPD": "diabetes endocrinology blood glucose lab",
+    "AAP": "primary care screening lab",
+    "CHL": "STD testing chlamydia screening lab",
+}
+
+
+@portal_bp.route("/portal/api/nearby-labs", methods=["GET"])
+def nearby_labs_api():
+    """Proxy for Google Places Nearby Search.
+
+    Query params: lat, lng, radius (metres, default 5000),
+                  measure_id (optional — refines search keywords).
+    Returns JSON list of places with name, address, lat, lng, rating, place_id.
+    """
+    from config.settings import settings as cfg
+
+    api_key = cfg.google_maps_api_key
+    if not api_key:
+        return jsonify({"error": "Google Maps API key not configured"}), 500
+
+    lat = request.args.get("lat")
+    lng = request.args.get("lng")
+    if not lat or not lng:
+        return jsonify({"error": "lat and lng are required"}), 400
+
+    radius = request.args.get("radius", "5000")
+    measure_id = request.args.get("measure_id", "")
+
+    # Build keyword — combine measure-specific + generic medical terms
+    keyword = _MEASURE_PLACE_KEYWORDS.get(measure_id, "medical lab diagnostic center")
+
+    url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+    params = {
+        "location": f"{lat},{lng}",
+        "radius": radius,
+        "keyword": keyword,
+        "type": "health",
+        "key": api_key,
+    }
+
+    try:
+        resp = http_requests.get(url, params=params, timeout=10)
+        data = resp.json()
+    except Exception as exc:
+        _logger.warning(f"Google Places API error: {exc}")
+        return jsonify({"error": "Places API request failed"}), 502
+
+    results = []
+    for place in data.get("results", [])[:15]:
+        loc = place.get("geometry", {}).get("location", {})
+        results.append({
+            "place_id": place.get("place_id", ""),
+            "name": place.get("name", ""),
+            "address": place.get("vicinity", ""),
+            "lat": loc.get("lat"),
+            "lng": loc.get("lng"),
+            "rating": place.get("rating"),
+            "total_ratings": place.get("user_ratings_total", 0),
+            "open_now": place.get("opening_hours", {}).get("open_now"),
+            "types": place.get("types", []),
+        })
+
+    return jsonify({"results": results, "status": data.get("status", "UNKNOWN")})
+
+
+@portal_bp.route("/portal/api/geocode", methods=["GET"])
+def geocode_api():
+    """Proxy for Google Geocoding API — convert address text to lat/lng."""
+    from config.settings import settings as cfg
+
+    api_key = cfg.google_maps_api_key
+    if not api_key:
+        return jsonify({"error": "Google Maps API key not configured"}), 500
+
+    address = request.args.get("address", "").strip()
+    if not address:
+        return jsonify({"error": "address is required"}), 400
+
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {"address": address, "key": api_key}
+
+    try:
+        resp = http_requests.get(url, params=params, timeout=10)
+        data = resp.json()
+    except Exception as exc:
+        _logger.warning(f"Geocoding error: {exc}")
+        return jsonify({"error": "Geocoding request failed"}), 502
+
+    results = data.get("results", [])
+    if not results:
+        return jsonify({"error": "No results", "lat": None, "lng": None})
+
+    loc = results[0].get("geometry", {}).get("location", {})
+    return jsonify({
+        "lat": loc.get("lat"),
+        "lng": loc.get("lng"),
+        "formatted_address": results[0].get("formatted_address", ""),
+    })
+
+
+@portal_bp.route("/portal/api/place-details", methods=["GET"])
+def place_details_api():
+    """Proxy for Google Places Details — returns phone, website, hours."""
+    from config.settings import settings as cfg
+
+    api_key = cfg.google_maps_api_key
+    if not api_key:
+        return jsonify({"error": "Google Maps API key not configured"}), 500
+
+    place_id = request.args.get("place_id")
+    if not place_id:
+        return jsonify({"error": "place_id is required"}), 400
+
+    url = "https://maps.googleapis.com/maps/api/place/details/json"
+    params = {
+        "place_id": place_id,
+        "fields": "name,formatted_address,formatted_phone_number,website,opening_hours,geometry,rating,user_ratings_total",
+        "key": api_key,
+    }
+
+    try:
+        resp = http_requests.get(url, params=params, timeout=10)
+        data = resp.json()
+    except Exception as exc:
+        _logger.warning(f"Google Place Details error: {exc}")
+        return jsonify({"error": "Place Details request failed"}), 502
+
+    r = data.get("result", {})
+    loc = r.get("geometry", {}).get("location", {})
+    return jsonify({
+        "name": r.get("name", ""),
+        "address": r.get("formatted_address", ""),
+        "phone": r.get("formatted_phone_number", ""),
+        "website": r.get("website", ""),
+        "rating": r.get("rating"),
+        "total_ratings": r.get("user_ratings_total", 0),
+        "hours": r.get("opening_hours", {}).get("weekday_text", []),
+        "lat": loc.get("lat"),
+        "lng": loc.get("lng"),
+    })
 
 
 # ── 1. Gap response page — member reviews gaps and clicks Yes / No ───────────
@@ -168,7 +326,7 @@ def portal_gap_respond(member_id, token):
     return f"""<html><head><meta http-equiv="refresh" content="0;url=/portal/{member_id}/{token}/schedule?{gap_params}" /></head></html>"""
 
 
-# ── 3. Scheduling page — pick time slots ─────────────────────────────────────
+# ── 3. Scheduling page — find lab + pick time slots ────────────────────────────
 
 @portal_bp.route("/portal/<member_id>/<token>/schedule", methods=["GET"])
 def portal_schedule(member_id, token):
@@ -193,30 +351,16 @@ def portal_schedule(member_id, token):
     all_slots = _generate_slots(7)
     booked = _get_booked_slots()
 
-    # Lab assignment map (same as care_gap_api.py)
-    LAB_MAP = {
-        "BCS": "Radiology & Mammography Unit, 2nd Floor",
-        "CCS": "Cytology & Gynecology Lab, 1st Floor",
-        "COL": "Gastroenterology & Endoscopy Suite, 3rd Floor",
-        "CBP": "Cardiology Clinic, 4th Floor",
-        "GSD": "Diabetes & Endocrinology Center, 2nd Floor",
-        "EED": "Diabetes & Endocrinology Center, 2nd Floor",
-        "KED": "Renal & Nephrology Lab, 2nd Floor",
-        "BPD": "Diabetes & Endocrinology Center, 2nd Floor",
-        "AAP": "General Screening Lab, 1st Floor",
-        "CHL": "General Screening Lab, 1st Floor",
-    }
-
-    # Group slots by date for display
+    # Group slots by date
     from collections import OrderedDict
     slots_by_date = OrderedDict()
     for s in all_slots:
         slots_by_date.setdefault(s["date"], []).append(s)
 
+    # Build per-gap slot HTML
     gap_sections = ""
+    gaps_json_arr = []
     for g in selected_gaps:
-        location = LAB_MAP.get(g["measure_id"], "General Screening Lab, 1st Floor")
-
         slot_html = ""
         for date_key, day_slots in slots_by_date.items():
             display_date = day_slots[0]["display_date"]
@@ -233,31 +377,91 @@ def portal_schedule(member_id, token):
             slot_html += "</div>"
 
         gap_sections += f"""
-        <div class="schedule-gap">
+        <div class="schedule-gap" id="gap-section-{g['care_gap_id']}">
           <div class="gap-title">{g['measure_name']} <span class="badge">{g['measure_id']}</span></div>
-          <p class="gap-location">Location: {location}</p>
-          <p>Select a date and time for your appointment:</p>
+
+          <!-- Lab selection area -->
+          <div class="lab-selection" id="lab-sel-{g['care_gap_id']}">
+            <div class="lab-selected-banner" id="lab-banner-{g['care_gap_id']}" style="display:none;">
+              <strong>Selected Lab:</strong>
+              <span id="lab-name-{g['care_gap_id']}"></span> —
+              <span id="lab-addr-{g['care_gap_id']}"></span>
+              <button type="button" class="btn-change-lab" onclick="openLabFinder('{g['care_gap_id']}', '{g['measure_id']}')">Change Lab</button>
+            </div>
+            <div id="lab-prompt-{g['care_gap_id']}">
+              <button type="button" class="btn-find-lab" onclick="openLabFinder('{g['care_gap_id']}', '{g['measure_id']}')">
+                &#128205; Find Nearby Labs &amp; Physicians
+              </button>
+            </div>
+          </div>
+
+          <!-- Hidden fields for selected lab data -->
           <input type="hidden" name="gap_ids" value="{g['care_gap_id']}" />
           <input type="hidden" name="measure_{g['care_gap_id']}" value="{g['measure_id']}" />
           <input type="hidden" name="measure_name_{g['care_gap_id']}" value="{g['measure_name']}" />
+          <input type="hidden" name="lab_name_{g['care_gap_id']}" id="hid-lab-name-{g['care_gap_id']}" value="" />
+          <input type="hidden" name="lab_address_{g['care_gap_id']}" id="hid-lab-addr-{g['care_gap_id']}" value="" />
+          <input type="hidden" name="lab_place_id_{g['care_gap_id']}" id="hid-lab-pid-{g['care_gap_id']}" value="" />
+          <input type="hidden" name="lab_phone_{g['care_gap_id']}" id="hid-lab-phone-{g['care_gap_id']}" value="" />
+          <input type="hidden" name="lab_rating_{g['care_gap_id']}" id="hid-lab-rating-{g['care_gap_id']}" value="" />
+
+          <p style="margin-top:14px;">Select a date and time for your appointment:</p>
           <div class="slots-container">{slot_html}</div>
         </div>
         """
+        gaps_json_arr.append({
+            "care_gap_id": g["care_gap_id"],
+            "measure_id": g["measure_id"],
+            "measure_name": g["measure_name"],
+        })
 
-    return _html_page(f"Schedule Appointments — {name}", f"""
+    gaps_json = _json.dumps(gaps_json_arr)
+
+    # Google Maps API key for Leaflet tile layer (tiles are free, no key needed)
+    from config.settings import settings as cfg
+    maps_key = cfg.google_maps_api_key
+
+    return _html_page_with_map(f"Schedule Appointments — {name}", f"""
         <div class="header-banner">
           <h1>HealthCare Management Portal</h1>
           <p>Schedule Your Appointments — <strong>{name}</strong></p>
         </div>
         <div class="card">
-          <h2>Choose Your Preferred Time Slots</h2>
-          <p>Select one time slot per screening. Greyed-out slots are already booked.</p>
-          <form method="POST" action="/portal/{member_id}/{token}/book">
+          <h2>Choose Lab &amp; Preferred Time Slots</h2>
+          <p>For each screening, find a nearby lab or physician, then select a time slot.
+             Greyed-out slots are already booked.</p>
+          <form method="POST" action="/portal/{member_id}/{token}/book" id="booking-form">
             {gap_sections}
             <button type="submit" class="primary-btn">Confirm &amp; Book Appointments</button>
           </form>
         </div>
-    """)
+
+        <!-- ── Lab Finder Modal ──────────────────────────────────────────── -->
+        <div id="lab-modal" class="modal-overlay" style="display:none;">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>&#128205; Find Nearby Labs &amp; Physicians</h3>
+              <button type="button" class="modal-close" onclick="closeLabModal()">&times;</button>
+            </div>
+
+            <div class="modal-body">
+              <!-- Search bar -->
+              <div class="lab-search-bar">
+                <input type="text" id="lab-location-input" placeholder="Enter city, address, or zip code..." />
+                <button type="button" class="btn-search-loc" onclick="searchByAddress()">Search</button>
+                <button type="button" class="btn-my-loc" onclick="useMyLocation()">&#128204; My Location</button>
+              </div>
+              <div id="lab-status" class="lab-status">Detecting your location...</div>
+
+              <!-- Map -->
+              <div id="lab-map" style="height:350px;border-radius:10px;margin:12px 0;"></div>
+
+              <!-- Results list -->
+              <div id="lab-results" class="lab-results"></div>
+            </div>
+          </div>
+        </div>
+    """, maps_key, gaps_json)
 
 
 # ── 4. Book appointments and show confirmation ──────────────────────────────
@@ -276,7 +480,8 @@ def portal_book(member_id, token):
 
     from src.care_gap_api import _get_hedis_codes
 
-    LAB_MAP = {
+    # Fallback lab map (used when member didn't select a lab from the map)
+    _FALLBACK_LAB = {
         "BCS": {"lab_number": "LAB-02", "lab_specialist": "Dr. Sarah Mitchell",
                 "lab_location": "Radiology & Mammography Unit, 2nd Floor"},
         "CCS": {"lab_number": "LAB-01", "lab_specialist": "Dr. James Rodriguez",
@@ -308,7 +513,21 @@ def portal_book(member_id, token):
         appt_date, appt_time = slot_val.split("|", 1)
         measure_id = request.form.get(f"measure_{gid}", "")
         measure_name = request.form.get(f"measure_name_{gid}", measure_id)
-        lab = LAB_MAP.get(measure_id, DEFAULT_LAB)
+
+        # Use member-selected lab from Google Places if available, else fallback
+        selected_lab_name = request.form.get(f"lab_name_{gid}", "").strip()
+        selected_lab_addr = request.form.get(f"lab_address_{gid}", "").strip()
+        selected_lab_phone = request.form.get(f"lab_phone_{gid}", "").strip()
+
+        if selected_lab_name:
+            lab = {
+                "lab_number": request.form.get(f"lab_place_id_{gid}", "GPLACE"),
+                "lab_specialist": selected_lab_name,
+                "lab_location": selected_lab_addr or selected_lab_name,
+            }
+        else:
+            lab = _FALLBACK_LAB.get(measure_id, DEFAULT_LAB)
+
         cpt_codes, icd_codes = _get_hedis_codes(measure_id)
 
         appointment_id = f"APT-{member_id}-{measure_id}-{uuid.uuid4().hex[:6].upper()}"
@@ -542,6 +761,378 @@ def _html_page(title: str, body: str) -> str:
 </head>
 <body>
 {body}
+</body>
+</html>"""
+
+
+def _html_page_with_map(title: str, body: str, maps_key: str, gaps_json: str) -> str:
+    """Extended HTML page template that includes Leaflet.js map + lab finder JavaScript."""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{title}</title>
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  * {{ margin:0; padding:0; box-sizing:border-box; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#f0f4f8; color:#1a1a2e; line-height:1.6; }}
+  .header-banner {{ background:#0033A1; color:white; padding:32px; text-align:center; }}
+  .header-banner.success {{ background:#059669; }}
+  .header-banner h1 {{ font-size:24px; margin-bottom:4px; }}
+  .header-banner p {{ color:#b3c7f7; font-size:15px; }}
+  .header-banner.success p {{ color:#b3f5d9; }}
+  .card {{ max-width:780px; margin:32px auto; background:white; border-radius:12px; padding:32px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }}
+  h2 {{ font-size:20px; margin-bottom:16px; color:#0033A1; }}
+  .gap-card, .schedule-gap, .booking-card {{ border:1px solid #e2e8f0; border-radius:10px; padding:20px; margin:16px 0; }}
+  .gap-title {{ font-size:17px; font-weight:600; color:#1a1a2e; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }}
+  .badge {{ background:#0033A1; color:white; font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; }}
+  .primary-btn {{ display:inline-block; background:#0033A1; color:white; border:none; padding:14px 32px; border-radius:8px; font-size:16px; font-weight:600; cursor:pointer; margin-top:20px; text-decoration:none; }}
+  .primary-btn:hover {{ background:#002880; }}
+  .date-header {{ font-weight:600; color:#0033A1; margin:16px 0 8px; font-size:15px; border-bottom:1px solid #e2e8f0; padding-bottom:6px; }}
+  .slot-grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; margin-bottom:12px; }}
+  .slot-label {{ display:flex; align-items:center; gap:6px; padding:8px 12px; border:1px solid #e2e8f0; border-radius:6px; cursor:pointer; font-size:13px; transition:all .15s; }}
+  .slot-label:hover {{ border-color:#0033A1; background:#f0f4ff; }}
+  .slot-label input:checked + span {{ color:#0033A1; font-weight:600; }}
+  .slot-disabled {{ opacity:0.4; cursor:not-allowed; background:#f8f8f8; text-decoration:line-through; }}
+  .slot-disabled input {{ pointer-events:none; }}
+  .slots-container {{ max-height:400px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin:12px 0; }}
+
+  /* Lab finder styles */
+  .lab-selection {{ margin:12px 0; }}
+  .btn-find-lab {{
+    background:linear-gradient(135deg,#7c3aed,#a855f7);
+    color:white; border:none; padding:12px 24px; border-radius:8px;
+    font-size:14px; font-weight:600; cursor:pointer; transition:all .2s;
+  }}
+  .btn-find-lab:hover {{ transform:translateY(-1px); box-shadow:0 4px 12px rgba(124,58,237,0.3); }}
+  .lab-selected-banner {{
+    background:#f0fdf4; border:1px solid #059669; border-radius:8px;
+    padding:12px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px;
+  }}
+  .lab-selected-banner strong {{ color:#059669; }}
+  .btn-change-lab {{
+    background:#e2e8f0; border:none; padding:4px 12px; border-radius:4px;
+    font-size:12px; cursor:pointer; margin-left:8px;
+  }}
+  .btn-change-lab:hover {{ background:#cbd5e1; }}
+
+  /* Modal */
+  .modal-overlay {{
+    position:fixed; top:0; left:0; right:0; bottom:0;
+    background:rgba(0,0,0,0.6); z-index:9999;
+    display:flex; align-items:center; justify-content:center;
+  }}
+  .modal-content {{
+    background:white; border-radius:16px; width:95%; max-width:900px;
+    max-height:90vh; overflow:hidden; display:flex; flex-direction:column;
+    box-shadow:0 20px 60px rgba(0,0,0,0.3);
+  }}
+  .modal-header {{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:20px 24px; border-bottom:1px solid #e2e8f0; background:#f8fafc;
+  }}
+  .modal-header h3 {{ font-size:18px; color:#1a1a2e; margin:0; }}
+  .modal-close {{
+    background:none; border:none; font-size:28px; cursor:pointer;
+    color:#64748b; padding:0 4px; line-height:1;
+  }}
+  .modal-close:hover {{ color:#1a1a2e; }}
+  .modal-body {{ padding:20px 24px; overflow-y:auto; flex:1; }}
+
+  .lab-search-bar {{
+    display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;
+  }}
+  .lab-search-bar input {{
+    flex:1; min-width:200px; padding:10px 14px; border:1px solid #d1d5db;
+    border-radius:8px; font-size:14px; outline:none;
+  }}
+  .lab-search-bar input:focus {{ border-color:#7c3aed; box-shadow:0 0 0 3px rgba(124,58,237,0.1); }}
+  .btn-search-loc, .btn-my-loc {{
+    padding:10px 18px; border:none; border-radius:8px; font-size:13px;
+    font-weight:600; cursor:pointer; white-space:nowrap;
+  }}
+  .btn-search-loc {{ background:#0033A1; color:white; }}
+  .btn-search-loc:hover {{ background:#002880; }}
+  .btn-my-loc {{ background:#059669; color:white; }}
+  .btn-my-loc:hover {{ background:#047857; }}
+  .lab-status {{
+    font-size:13px; color:#64748b; margin-bottom:8px; min-height:20px;
+  }}
+
+  .lab-results {{ margin-top:12px; }}
+  .lab-card {{
+    border:1px solid #e2e8f0; border-radius:10px; padding:14px 18px;
+    margin:8px 0; display:flex; justify-content:space-between;
+    align-items:center; gap:12px; transition:all .15s; cursor:pointer;
+  }}
+  .lab-card:hover {{ border-color:#7c3aed; background:#faf5ff; }}
+  .lab-card-info {{ flex:1; }}
+  .lab-card-name {{ font-weight:600; font-size:15px; color:#1a1a2e; }}
+  .lab-card-addr {{ font-size:13px; color:#64748b; margin:2px 0; }}
+  .lab-card-meta {{ font-size:12px; color:#94a3b8; display:flex; gap:12px; margin-top:4px; }}
+  .lab-card-meta .star {{ color:#f59e0b; }}
+  .btn-select-lab {{
+    background:#059669; color:white; border:none; padding:8px 20px;
+    border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;
+    white-space:nowrap;
+  }}
+  .btn-select-lab:hover {{ background:#047857; }}
+</style>
+</head>
+<body>
+{body}
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function() {{
+  // ── State ──
+  var currentGapId = null;
+  var currentMeasureId = null;
+  var map = null;
+  var markers = [];
+  var userMarker = null;
+  var userLat = null, userLng = null;
+  var labResults = [];
+
+  // Make functions globally accessible for onclick handlers
+  window.openLabFinder = openLabFinder;
+  window.closeLabModal = closeLabModal;
+  window.searchByAddress = searchByAddress;
+  window.useMyLocation = useMyLocation;
+  window.selectLab = selectLab;
+
+  // ── Open the lab finder modal for a specific gap ──
+  function openLabFinder(gapId, measureId) {{
+    currentGapId = gapId;
+    currentMeasureId = measureId;
+    document.getElementById('lab-modal').style.display = 'flex';
+    document.getElementById('lab-results').innerHTML = '';
+    document.getElementById('lab-status').textContent = 'Detecting your location...';
+    document.getElementById('lab-location-input').value = '';
+
+    // Init map if needed
+    setTimeout(function() {{
+      if (!map) {{
+        map = L.map('lab-map').setView([37.7749, -122.4194], 12);
+        L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 19
+        }}).addTo(map);
+      }}
+      map.invalidateSize();
+
+      // Try geolocation
+      if (userLat && userLng) {{
+        setMapCenter(userLat, userLng);
+        fetchNearbyLabs(userLat, userLng, measureId);
+      }} else {{
+        requestGeolocation();
+      }}
+    }}, 100);
+  }}
+
+  function closeLabModal() {{
+    document.getElementById('lab-modal').style.display = 'none';
+  }}
+
+  // ── Geolocation ──
+  function requestGeolocation() {{
+    if (!navigator.geolocation) {{
+      document.getElementById('lab-status').textContent =
+        'Geolocation not supported. Please enter a location manually.';
+      return;
+    }}
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {{
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+        setMapCenter(userLat, userLng);
+        fetchNearbyLabs(userLat, userLng, currentMeasureId);
+      }},
+      function(err) {{
+        document.getElementById('lab-status').textContent =
+          'Location access denied. Please enter a location manually.';
+      }},
+      {{ enableHighAccuracy: true, timeout: 10000 }}
+    );
+  }}
+
+  function useMyLocation() {{
+    document.getElementById('lab-status').textContent = 'Detecting your location...';
+    userLat = null;
+    userLng = null;
+    requestGeolocation();
+  }}
+
+  function setMapCenter(lat, lng) {{
+    map.setView([lat, lng], 13);
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.marker([lat, lng], {{
+      icon: L.divIcon({{
+        className: '',
+        html: '<div style="background:#0033A1;color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);">&#128100;</div>',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+      }})
+    }}).addTo(map).bindPopup('<strong>Your Location</strong>');
+  }}
+
+  // ── Search by typed address using Google Geocoding via Places proxy ──
+  function searchByAddress() {{
+    var addr = document.getElementById('lab-location-input').value.trim();
+    if (!addr) return;
+    document.getElementById('lab-status').textContent = 'Searching location: ' + addr + '...';
+
+    // Use Google Geocoding API through a fetch to our backend
+    // We'll geocode on the server side — add a simple geocode endpoint
+    fetch('/portal/api/geocode?address=' + encodeURIComponent(addr))
+      .then(function(r) {{ return r.json(); }})
+      .then(function(data) {{
+        if (data.lat && data.lng) {{
+          userLat = data.lat;
+          userLng = data.lng;
+          setMapCenter(userLat, userLng);
+          fetchNearbyLabs(userLat, userLng, currentMeasureId);
+        }} else {{
+          document.getElementById('lab-status').textContent =
+            'Could not find that location. Try a different address.';
+        }}
+      }})
+      .catch(function() {{
+        document.getElementById('lab-status').textContent = 'Geocoding failed. Try again.';
+      }});
+  }}
+
+  // ── Fetch nearby labs from backend proxy ──
+  function fetchNearbyLabs(lat, lng, measureId) {{
+    document.getElementById('lab-status').textContent = 'Finding nearby labs and physicians...';
+    clearMarkers();
+
+    var url = '/portal/api/nearby-labs?lat=' + lat + '&lng=' + lng +
+              '&measure_id=' + (measureId || '');
+
+    fetch(url)
+      .then(function(r) {{ return r.json(); }})
+      .then(function(data) {{
+        if (data.error) {{
+          document.getElementById('lab-status').textContent = 'Error: ' + data.error;
+          return;
+        }}
+        labResults = data.results || [];
+        if (labResults.length === 0) {{
+          document.getElementById('lab-status').textContent =
+            'No labs found nearby. Try a different location or wider search.';
+          document.getElementById('lab-results').innerHTML = '';
+          return;
+        }}
+        document.getElementById('lab-status').textContent =
+          'Found ' + labResults.length + ' nearby lab(s) and physician(s).';
+        renderLabResults(labResults);
+      }})
+      .catch(function() {{
+        document.getElementById('lab-status').textContent = 'Failed to fetch labs. Try again.';
+      }});
+  }}
+
+  function clearMarkers() {{
+    markers.forEach(function(m) {{ map.removeLayer(m); }});
+    markers = [];
+  }}
+
+  // ── Render lab results as cards + map markers ──
+  function renderLabResults(labs) {{
+    var html = '';
+    labs.forEach(function(lab, idx) {{
+      // Add marker
+      if (lab.lat && lab.lng) {{
+        var marker = L.marker([lab.lat, lab.lng], {{
+          icon: L.divIcon({{
+            className: '',
+            html: '<div style="background:#059669;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);">' + (idx + 1) + '</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          }})
+        }}).addTo(map).bindPopup(
+          '<strong>' + lab.name + '</strong><br>' + (lab.address || '') +
+          (lab.rating ? '<br>Rating: ' + lab.rating + ' &#11088;' : '')
+        );
+        markers.push(marker);
+      }}
+
+      var ratingHtml = lab.rating
+        ? '<span class="star">&#11088; ' + lab.rating + '</span><span>(' + (lab.total_ratings || 0) + ' reviews)</span>'
+        : '<span>No ratings</span>';
+      var openHtml = lab.open_now === true
+        ? '<span style="color:#059669;">Open Now</span>'
+        : lab.open_now === false
+          ? '<span style="color:#dc2626;">Closed</span>'
+          : '';
+
+      html += '<div class="lab-card" onclick="selectLab(' + idx + ')">' +
+        '<div class="lab-card-info">' +
+          '<div class="lab-card-name">' + (idx + 1) + '. ' + lab.name + '</div>' +
+          '<div class="lab-card-addr">' + (lab.address || 'Address not available') + '</div>' +
+          '<div class="lab-card-meta">' + ratingHtml + openHtml + '</div>' +
+        '</div>' +
+        '<button type="button" class="btn-select-lab" onclick="event.stopPropagation(); selectLab(' + idx + ')">Select</button>' +
+      '</div>';
+    }});
+    document.getElementById('lab-results').innerHTML = html;
+
+    // Fit map bounds to include all markers + user location
+    if (markers.length > 0) {{
+      var group = L.featureGroup(markers);
+      if (userMarker) group.addLayer(userMarker);
+      map.fitBounds(group.getBounds().pad(0.1));
+    }}
+  }}
+
+  // ── Select a lab and populate hidden fields ──
+  function selectLab(idx) {{
+    var lab = labResults[idx];
+    if (!lab || !currentGapId) return;
+
+    // Populate hidden form fields
+    document.getElementById('hid-lab-name-' + currentGapId).value = lab.name;
+    document.getElementById('hid-lab-addr-' + currentGapId).value = lab.address || '';
+    document.getElementById('hid-lab-pid-' + currentGapId).value = lab.place_id || '';
+    document.getElementById('hid-lab-rating-' + currentGapId).value = lab.rating || '';
+
+    // Fetch details (phone) in background
+    if (lab.place_id) {{
+      fetch('/portal/api/place-details?place_id=' + lab.place_id)
+        .then(function(r) {{ return r.json(); }})
+        .then(function(d) {{
+          if (d.phone) {{
+            document.getElementById('hid-lab-phone-' + currentGapId).value = d.phone;
+          }}
+        }}).catch(function() {{}});
+    }}
+
+    // Update the UI banner
+    document.getElementById('lab-banner-' + currentGapId).style.display = 'flex';
+    document.getElementById('lab-name-' + currentGapId).textContent = lab.name;
+    document.getElementById('lab-addr-' + currentGapId).textContent = lab.address || '';
+    document.getElementById('lab-prompt-' + currentGapId).style.display = 'none';
+
+    // Close modal
+    closeLabModal();
+  }}
+
+  // Allow Enter key in address input
+  document.addEventListener('DOMContentLoaded', function() {{
+    var inp = document.getElementById('lab-location-input');
+    if (inp) {{
+      inp.addEventListener('keydown', function(e) {{
+        if (e.key === 'Enter') {{ e.preventDefault(); searchByAddress(); }}
+      }});
+    }}
+  }});
+}})();
+</script>
 </body>
 </html>"""
 

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     azure_communication_connection_string: str = ""
     azure_communication_sender: str = ""
 
+    # Google Maps / Places API
+    google_maps_api_key: str = ""
+
     # Application Configuration
     debug: bool = False
     log_level: str = "INFO"
