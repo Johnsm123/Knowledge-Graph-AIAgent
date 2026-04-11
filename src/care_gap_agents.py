@@ -27,7 +27,7 @@ from typing import Any, Dict, Generator, List, Tuple
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_agentchat.conditions import MaxMessageTermination
-from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+from src.bedrock_client import BedrockChatCompletionClient
 from config.settings import settings
 from src.care_gap_neo4j import (
     get_member_open_gaps,
@@ -584,21 +584,13 @@ class CareGapAgentSystem:
     """
 
     def __init__(self):
-        from autogen_core.models import ModelInfo
-        self.model_client = AzureOpenAIChatCompletionClient(
-            azure_deployment=settings.openai_model,          # Azure deployment name
-            azure_endpoint=settings.endpoint,
-            api_key=settings.openai_api_key,
-            api_version=settings.azure_openai_api_version,
-            model="gpt-5-chat-2025-10-03",                   # resolved model for token estimation
-            model_info=ModelInfo(
-                vision=True,
-                function_calling=True,
-                json_output=True,
-                family="gpt-5",
-                structured_output=True,
-                multiple_system_messages=True,
-            ),
+        self.model_client = BedrockChatCompletionClient(
+            model_id=settings.bedrock_model_id,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            region_name=settings.aws_region,
+            max_tokens=2048,
+            temperature=0.7,
         )
         self._build_agents()
 

@@ -15,11 +15,11 @@ class Settings(BaseSettings):
     neo4j_database: str = "neo4j"
     aura_instanceid: str = ""
     
-    # Azure OpenAI Configuration
-    openai_api_key: str
-    openai_model: str
-    endpoint: str
-    azure_openai_api_version: str = "2025-01-01-preview"
+    # AWS Bedrock Configuration
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "us-east-1"
+    bedrock_model_id: str = "amazon.nova-pro-v1:0"
 
     # Azure Communication Services
     azure_communication_connection_string: str = ""

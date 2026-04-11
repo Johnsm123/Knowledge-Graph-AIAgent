@@ -1016,7 +1016,7 @@ def chat_with_member(member_id):
     Body: { "message": str, "history": [{"role": "user"|"assistant", "content": str}] }
     """
     try:
-        from openai import AzureOpenAI
+        import boto3
         from config.settings import settings as cfg
 
         data = request.json or {}
@@ -1063,27 +1063,49 @@ Guidelines:
 - Keep responses under 200 words unless the care manager asks for detail.
 - Do not refuse clinical questions — you are assisting a licensed care manager."""
 
-        client = AzureOpenAI(
-            azure_endpoint=cfg.endpoint,
-            api_key=cfg.openai_api_key,
-            api_version=cfg.azure_openai_api_version,
+        bedrock = boto3.client(
+            "bedrock-runtime",
+            region_name=cfg.aws_region,
+            aws_access_key_id=cfg.aws_access_key_id,
+            aws_secret_access_key=cfg.aws_secret_access_key,
         )
 
-        messages = [{"role": "system", "content": system_msg}]
-        # Include up to last 10 turns of conversation history
+        # Build Bedrock Converse messages (system separate, then user/assistant)
+        converse_messages = []
         for h in history[-10:]:
             if h.get("role") in ("user", "assistant") and h.get("content"):
-                messages.append({"role": h["role"], "content": h["content"]})
-        messages.append({"role": "user", "content": message})
+                converse_messages.append({
+                    "role": h["role"],
+                    "content": [{"text": h["content"]}],
+                })
+        converse_messages.append({"role": "user", "content": [{"text": message}]})
 
-        completion = client.chat.completions.create(
-            model=cfg.openai_model,
-            messages=messages,
-            max_tokens=600,
-            temperature=0.7,
+        # Merge consecutive same-role messages (Bedrock requires alternating)
+        merged = []
+        for m in converse_messages:
+            if merged and merged[-1]["role"] == m["role"]:
+                merged[-1]["content"].extend(m["content"])
+            else:
+                merged.append(m)
+
+        # Ensure first message is user role
+        if merged and merged[0]["role"] != "user":
+            merged.insert(0, {"role": "user", "content": [{"text": "Hello."}]})
+
+        response = bedrock.converse(
+            modelId=cfg.bedrock_model_id,
+            system=[{"text": system_msg}],
+            messages=merged,
+            inferenceConfig={
+                "maxTokens": 600,
+                "temperature": 0.7,
+            },
         )
 
-        reply = completion.choices[0].message.content
+        output = response.get("output", {})
+        content_blocks = output.get("message", {}).get("content", [])
+        reply = " ".join(b.get("text", "") for b in content_blocks if "text" in b)
+
         return jsonify({"reply": reply, "member_id": member_id})
 
     except Exception as exc:
