@@ -634,11 +634,17 @@ function MemberDetails({ member, onBack }) {
         <button className={activeTab === 'gaps' ? 'active' : ''} onClick={() => setActiveTab('gaps')}>
           Care Gaps ({details?.open_gaps?.length || 0})
         </button>
+        <button className={activeTab === 'appointments' ? 'active' : ''} onClick={() => setActiveTab('appointments')}>
+          Appointments ({details?.appointments?.length || 0})
+        </button>
         <button className={activeTab === 'claims' ? 'active' : ''} onClick={() => setActiveTab('claims')}>
           Claims ({details?.claims?.length || 0})
         </button>
         <button className={activeTab === 'outreach' ? 'active' : ''} onClick={() => setActiveTab('outreach')}>
           Outreach History
+        </button>
+        <button className="refresh-btn" onClick={fetchMemberDetails} title="Refresh member data (shows portal-booked appointments)">
+          &#x21bb; Refresh
         </button>
       </div>
 
@@ -982,6 +988,101 @@ function MemberDetails({ member, onBack }) {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── APPOINTMENTS TAB ────────────────────────────────────────── */}
+        {activeTab === 'appointments' && (
+          <div className="appointments-tab">
+            <div className="appointments-tab-header">
+              <h3>All Appointments</h3>
+              <p className="appointments-tab-sub">
+                Appointments booked by the member via portal or by the care manager. Force close to generate claim, close the care gap, and mark the member compliant.
+              </p>
+            </div>
+            {details?.appointments?.length > 0 ? (
+              <div className="appointments-list">
+                {details.appointments.map(appt => {
+                  const isCompleted = appt.status === 'Completed';
+                  const booking = bookings[appt.care_gap_id] || {
+                    appointment_id:   appt.appointment_id,
+                    measure_name:     appt.screening_name || appt.measure_id,
+                    care_gap_id:      appt.care_gap_id,
+                    appointment_date: appt.appointment_date,
+                    appointment_time: appt.appointment_time,
+                    lab_number:       appt.lab_number,
+                    lab_location:     appt.lab_location,
+                    lab_specialist:   appt.lab_specialist,
+                    cpt_codes:        appt.cpt_codes,
+                    icd_codes:        appt.icd_codes,
+                    status:           appt.status,
+                    member_email:     appt.member_email,
+                    member_name:      appt.member_name,
+                    plan_id:          appt.plan_id,
+                    insurance_type:   appt.insurance_type,
+                    pcp_name:         appt.pcp_name,
+                    email_sent:       !!appt.member_email,
+                  };
+                  const friendlyTime = (() => {
+                    try {
+                      const [h, m] = (appt.appointment_time || '').split(':');
+                      const hr = parseInt(h);
+                      return `${hr > 12 ? hr - 12 : hr || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}`;
+                    } catch { return appt.appointment_time || ''; }
+                  })();
+                  return (
+                    <div key={appt.appointment_id} className={`appointment-card ${isCompleted ? 'appointment-card--completed' : 'appointment-card--scheduled'}`}>
+                      <div className="appointment-card-left">
+                        <div className="appointment-card-icon">
+                          {isCompleted ? '✅' : '📅'}
+                        </div>
+                        <div className="appointment-card-info">
+                          <div className="appointment-card-title">
+                            {appt.screening_name || appt.measure_id}
+                            <span className="appointment-card-measure">{appt.measure_id}</span>
+                          </div>
+                          <div className="appointment-card-meta">
+                            {appt.appointment_date} at {friendlyTime}
+                            &nbsp;&bull;&nbsp; {appt.lab_specialist || 'Specialist TBD'}
+                            &nbsp;&bull;&nbsp; {appt.lab_location || 'Location TBD'}
+                          </div>
+                          <div className="appointment-card-codes">
+                            <span>CPT: <code>{appt.cpt_codes || 'N/A'}</code></span>
+                            <span>ICD: <code>{appt.icd_codes || 'N/A'}</code></span>
+                            <span>ID: <code>{appt.appointment_id}</code></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="appointment-card-right">
+                        <span className={`appointment-status-badge ${isCompleted ? 'completed' : 'scheduled'}`}>
+                          {isCompleted ? 'Completed' : 'Scheduled'}
+                        </span>
+                        <div className="appointment-card-actions">
+                          <button className="btn-view-booking" onClick={() => setViewBooking(booking)}>
+                            View Details
+                          </button>
+                          {!isCompleted && !completedGaps.has(appt.care_gap_id) && (
+                            <button
+                              className="btn-force-close-inline"
+                              onClick={() => handleForceClose(booking)}
+                              disabled={forceClosing}
+                              title="Force close — generates claim, closes care gap, increases outreach count"
+                            >
+                              {forceClosing ? 'Closing...' : '⚡ Force Close'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="no-data">
+                <h3>No Appointments</h3>
+                <p>No appointments have been booked yet. Appointments will appear here when the member books through the portal or when you book from the Care Gaps tab.</p>
               </div>
             )}
           </div>
