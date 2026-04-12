@@ -18,7 +18,7 @@ from fpdf import FPDF
 
 def _safe(text: str) -> str:
     """Replace Unicode characters that latin-1 core fonts cannot render."""
-    return (
+    text = (
         text
         .replace("\u2014", "--")   # em dash
         .replace("\u2013", "-")    # en dash
@@ -29,7 +29,23 @@ def _safe(text: str) -> str:
         .replace("\u2026", "...")  # ellipsis
         .replace("\u2022", "-")    # bullet
         .replace("\u00a0", " ")    # non-breaking space
+        .replace("\u2190", "<-")   # left arrow
+        .replace("\u2192", "->")   # right arrow
+        .replace("\u2191", "^")    # up arrow
+        .replace("\u2193", "v")    # down arrow
+        .replace("\u2794", "->")   # heavy right arrow
+        .replace("\u27a4", "->")   # black right arrowhead
+        .replace("\u2023", ">")    # triangular bullet
+        .replace("\u25cf", "-")    # black circle
+        .replace("\u25cb", "o")    # white circle
+        .replace("\u2713", "[x]")  # check mark
+        .replace("\u2717", "[ ]")  # ballot x
+        .replace("\u2605", "*")    # black star
+        .replace("\u2606", "*")    # white star
+        .replace("\u00b7", "-")    # middle dot
     )
+    # Strip any remaining non-latin-1 characters
+    return text.encode("latin-1", errors="replace").decode("latin-1")
 
 
 # ── Human-readable treatment descriptions keyed by measure_id ─────────────

@@ -1,3 +1,7 @@
+/* ══════════════════════════════════════════════════════════════
+   App.css — Cognizant Brand Layout Shell
+   ══════════════════════════════════════════════════════════════ */
+
 * {
   margin: 0;
   padding: 0;
@@ -10,13 +14,11 @@ html {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f8fafc;
-  color: #1e293b;
+  background: var(--bg-page);
+  color: var(--text-primary);
   margin: 0;
   padding: 0;
   overflow-x: hidden;
@@ -37,11 +39,12 @@ body {
   padding: 0;
 }
 
+/* ── Header — Midnight Blue primary background ───────────── */
 .app-header {
-  background: linear-gradient(135deg, #0033A1 0%, #005EB8 100%);
-  color: white;
-  padding: 1rem 2rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--cog-primary);
+  color: var(--cog-white);
+  padding: 0.875rem 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 72, 0.15);
   width: 100%;
   position: sticky;
   top: 0;
@@ -60,19 +63,19 @@ body {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 
 .cognizant-logo {
-  height: 40px;
+  height: 36px;
   width: auto;
   object-fit: contain;
 }
 
 .header-divider {
   width: 1px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.3);
+  height: 36px;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .header-title-section {
@@ -80,16 +83,18 @@ body {
 }
 
 .header-content h1 {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 600;
-  margin-bottom: 0.25rem;
-  letter-spacing: -0.5px;
+  margin-bottom: 0.15rem;
+  letter-spacing: -0.3px;
+  color: var(--cog-white);
 }
 
 .header-subtitle {
-  font-size: 0.875rem;
-  opacity: 0.9;
+  font-size: 0.8rem;
+  opacity: 0.75;
   font-weight: 400;
+  color: var(--cog-accent3-light);
 }
 
 .app-main {
@@ -111,8 +116,8 @@ body {
 .spinner {
   width: 48px;
   height: 48px;
-  border: 4px solid #e2e8f0;
-  border-top-color: #0033A1;
+  border: 4px solid var(--cog-gray-lighter);
+  border-top-color: var(--cog-accent3-medium);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -122,38 +127,40 @@ body {
 }
 
 code {
-  font-family: 'Courier New', monospace;
-  background: #f1f5f9;
+  font-family: var(--mono);
+  background: var(--cog-gray-lightest);
   padding: 0.2rem 0.4rem;
   border-radius: 4px;
   font-size: 0.9em;
 }
 
-
+/* ── Header navigation — Teal accent buttons ─────────────── */
 .header-nav {
   display: flex;
   gap: 0.5rem;
 }
 
 .header-nav button {
-  padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
+  padding: 0.6rem 1.25rem;
+  background: transparent;
+  color: var(--cog-white);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-button);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
 }
 
 .header-nav button:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(38, 239, 233, 0.12);
+  border-color: var(--cog-accent3-light);
+  color: var(--cog-accent3-light);
 }
 
 .header-nav button.active {
-  background: white;
-  color: #0033A1;
-  border-color: white;
+  background: var(--cog-accent3-light);
+  color: var(--cog-primary);
+  border-color: var(--cog-accent3-light);
+  font-weight: 700;
 }

@@ -1,53 +1,75 @@
+/* ══════════════════════════════════════════════════════════════
+   Cognizant Brand Design System — Web & Digital Guidelines v2
+   ══════════════════════════════════════════════════════════════ */
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  /* ── Base colors ─────────────────────────────────────────── */
+  --cog-primary:        #000048;   /* Midnight Blue */
+  --cog-white:          #FFFFFF;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* ── Accent 1 — Plum ────────────────────────────────────── */
+  --cog-accent1-dark:   #2E308E;
+  --cog-accent1-medium: #7373D8;
+  --cog-accent1-light:  #85A0F9;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
+  /* ── Accent 2 — Blue ────────────────────────────────────── */
+  --cog-accent2-dark:   #2F78C4;
+  --cog-accent2-medium: #6AA2DC;
+  --cog-accent2-light:  #92BBE6;
+
+  /* ── Accent 3 — Teal ────────────────────────────────────── */
+  --cog-accent3-dark:   #05819B;
+  --cog-accent3-medium: #06C7CC;
+  --cog-accent3-light:  #26EFE9;
+
+  /* ── Neutral grays ──────────────────────────────────────── */
+  --cog-gray-dark:      #53565A;
+  --cog-gray-medium:    #97999B;
+  --cog-gray-light:     #D0D0CE;
+  --cog-gray-lighter:   #E8E8E6;
+  --cog-gray-lightest:  #F7F7F5;
+
+  /* ── Highlight colors ───────────────────────────────────── */
+  --cog-red:            #B81F2D;
+  --cog-yellow:         #E9C71D;
+  --cog-green:          #2DB81F;
+
+  /* ── Semantic aliases ───────────────────────────────────── */
+  --text-primary:       var(--cog-primary);
+  --text-secondary:     var(--cog-gray-dark);
+  --text-tertiary:      var(--cog-gray-medium);
+  --bg-page:            var(--cog-gray-lightest);
+  --bg-card:            var(--cog-white);
+  --bg-input:           var(--cog-gray-lightest);
+  --border-default:     var(--cog-gray-light);
+  --border-subtle:      var(--cog-gray-lighter);
+  --link-color:         var(--cog-accent2-dark);
+  --btn-primary-bg:     var(--cog-accent3-light);
+  --btn-primary-text:   var(--cog-primary);
+  --btn-hollow-border:  var(--cog-accent2-dark);
+
+  /* ── Radii (from guidelines) ────────────────────────────── */
+  --radius-global:      0.5em;        /* global-radius for most elements */
+  --radius-input:       0.5em;        /* inputs, dropdowns */
+  --radius-button:      999px;        /* pill buttons: $global-radius * 1000 */
+  --radius-checkbox:    0.2em;        /* radios, checkboxes */
+
+  /* ── Typography ─────────────────────────────────────────── */
+  --sans: 'Segoe UI', system-ui, Roboto, 'Helvetica Neue', sans-serif;
+  --mono: ui-monospace, Consolas, 'Courier New', monospace;
+
+  /* ── Shadows ────────────────────────────────────────────── */
+  --shadow-sm:  0 1px 3px rgba(0, 0, 72, 0.06);
+  --shadow-md:  0 4px 12px rgba(0, 0, 72, 0.10);
+  --shadow-lg:  0 10px 25px rgba(0, 0, 72, 0.14);
+
+  font: 16px/1.5 var(--sans);
+  color: var(--text-primary);
+  background: var(--bg-page);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
 }
 
 body {
@@ -55,44 +77,48 @@ body {
 }
 
 #root {
-  width: 1126px;
+  width: 100%;
   max-width: 100%;
   margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
+  text-align: left;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+/* ── Headings — Cognizant typographic scale (1.333 ratio) ── */
+h1, h2, h3 {
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--cog-primary);
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
+h4, h5, h6 {
+  font-family: var(--sans);
+  font-weight: 300;
+  color: var(--cog-accent2-dark);
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
+
+h1 { font-size: 2.5rem;  line-height: 1.1; }
+h2 { font-size: 1.875rem; line-height: 1.1; }
+h3 { font-size: 1.4rem;  line-height: 1.2; }
+h4 { font-size: 1.125rem; line-height: 1.2; }
+h5 { font-size: 1rem;    line-height: 1.2; }
+h6 { font-size: 0.875rem; line-height: 1.2; }
+
 p {
   margin: 0;
+  color: var(--text-primary);
+}
+
+a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
 }
 
 code,
@@ -100,12 +126,24 @@ code,
   font-family: var(--mono);
   display: inline-flex;
   border-radius: 4px;
-  color: var(--text-h);
+  color: var(--text-primary);
 }
 
 code {
-  font-size: 15px;
+  font-size: 0.85rem;
   line-height: 135%;
   padding: 4px 8px;
-  background: var(--code-bg);
+  background: var(--cog-gray-lightest);
 }
+
+/* ── Selection color ──────────────────────────────────────── */
+::selection {
+  background: var(--cog-accent2-light);
+  color: var(--cog-primary);
+}
+
+/* ── Scrollbar styling ────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--cog-gray-light); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--cog-gray-medium); }

@@ -130,14 +130,14 @@ function AgentContent({ agentName, text }) {
 
   // Agent-specific accent colors
   const accentMap = {
-    patient_analyst:     '#3b82f6',
-    hedis_measure_agent: '#8b5cf6',
-    exclusion_agent:     '#f59e0b',
-    code_validator:      '#06b6d4',
-    care_gap_agent:      '#ef4444',
-    recommendation_agent:'#10b981',
+    patient_analyst:     '#2F78C4',
+    hedis_measure_agent: '#7373D8',
+    exclusion_agent:     '#E9C71D',
+    code_validator:      '#05819B',
+    care_gap_agent:      '#B81F2D',
+    recommendation_agent:'#2DB81F',
   };
-  const accent = accentMap[agentName] || '#64748b';
+  const accent = accentMap[agentName] || '#53565A';
 
   return (
     <div className="ap-content">
@@ -162,12 +162,12 @@ function AgentContent({ agentName, text }) {
 
 // Agent panel configuration — order must match AGENT_ORDER in care_gap_agents.py
 const AGENT_CONFIG = {
-  patient_analyst:     { icon: '👤', label: 'Patient Profile Analysis',     color: '#3b82f6' },
-  hedis_measure_agent: { icon: '📏', label: 'HEDIS Measures Review',         color: '#8b5cf6' },
-  exclusion_agent:     { icon: '🚫', label: 'Exclusion Check',               color: '#f59e0b' },
-  code_validator:      { icon: '✅', label: 'CPT Code Validation',           color: '#06b6d4' },
-  care_gap_agent:      { icon: '📋', label: 'Care Gap Report',               color: '#ef4444' },
-  recommendation_agent:{ icon: '💡', label: 'Recommendations & Outreach',    color: '#10b981' },
+  patient_analyst:     { icon: '👤', label: 'Patient Profile Analysis',     color: '#2F78C4' },
+  hedis_measure_agent: { icon: '📏', label: 'HEDIS Measures Review',         color: '#7373D8' },
+  exclusion_agent:     { icon: '🚫', label: 'Exclusion Check',               color: '#E9C71D' },
+  code_validator:      { icon: '✅', label: 'CPT Code Validation',           color: '#05819B' },
+  care_gap_agent:      { icon: '📋', label: 'Care Gap Report',               color: '#B81F2D' },
+  recommendation_agent:{ icon: '💡', label: 'Recommendations & Outreach',    color: '#2DB81F' },
 };
 const AGENT_ORDER = Object.keys(AGENT_CONFIG);
 
@@ -426,7 +426,7 @@ function MemberDetails({ member, onBack }) {
               <span className="typing-dot" />
               <span className="typing-dot" />
               <span className="typing-dot" />
-              <span style={{ marginLeft: 6, fontSize: '0.75rem', color: '#64748b' }}>Analyzing…</span>
+              <span style={{ marginLeft: 6, fontSize: '0.75rem', color: '#53565A' }}>Analyzing…</span>
             </div>
           )}
         </div>
@@ -1120,7 +1120,7 @@ function MemberDetails({ member, onBack }) {
               </div>
             ) : (
               <div className="no-data">
-                <FileText size={48} color="#94a3b8" />
+                <FileText size={48} color="#97999B" />
                 <h3>No Claims Found</h3>
                 <p>No claims data available for this member.</p>
               </div>
@@ -1454,7 +1454,7 @@ function OutreachTimeline({ outreach, appointments, member }) {
   if (events.length === 0) {
     return (
       <div className="no-data">
-        <MessageCircle size={48} color="#94a3b8" />
+        <MessageCircle size={48} color="#97999B" />
         <h3>No Outreach History</h3>
         <p>No outreach or appointment activity recorded for this member.</p>
       </div>
@@ -1485,9 +1485,9 @@ function OutreachTimeline({ outreach, appointments, member }) {
 
   // Color per event type
   const typeColor = {
-    appointment: '#3b82f6',
-    completed:   '#10b981',
-    outreach:    '#8b5cf6',
+    appointment: '#2F78C4',
+    completed:   '#2DB81F',
+    outreach:    '#7373D8',
   };
   const typeIcon = {
     appointment: '📅',
@@ -1521,8 +1521,8 @@ function OutreachTimeline({ outreach, appointments, member }) {
           {/* Gradient fill under the wave */}
           <defs>
             <linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"  stopColor="#3b82f6" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.01" />
+              <stop offset="0%"  stopColor="#2F78C4" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#2F78C4" stopOpacity="0.01" />
             </linearGradient>
           </defs>
 
@@ -1535,18 +1535,18 @@ function OutreachTimeline({ outreach, appointments, member }) {
           )}
 
           {/* Wave line */}
-          <path d={pathD} fill="none" stroke="#3b82f6" strokeWidth="2.5"
+          <path d={pathD} fill="none" stroke="#2F78C4" strokeWidth="2.5"
             strokeLinecap="round" strokeLinejoin="round"
-            style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.3))' }}
+            style={{ filter: 'drop-shadow(0 2px 4px rgba(47,120,196,0.3))' }}
           />
 
           {/* Vertical drop lines + date labels */}
           {points.map((p, i) => (
             <g key={i}>
               <line x1={p.x} y1={p.y + 10} x2={p.x} y2={H - 18}
-                stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3,3" />
+                stroke="#E8E8E6" strokeWidth="1" strokeDasharray="3,3" />
               <text x={p.x} y={H - 4} textAnchor="middle"
-                fontSize="9" fill="#94a3b8" fontFamily="system-ui">
+                fontSize="9" fill="#97999B" fontFamily="system-ui">
                 {fmtDate(events[i].date)}
               </text>
             </g>
@@ -1555,7 +1555,7 @@ function OutreachTimeline({ outreach, appointments, member }) {
           {/* Event nodes */}
           {points.map((p, i) => {
             const ev = events[i];
-            const col = typeColor[ev.type] || '#64748b';
+            const col = typeColor[ev.type] || '#53565A';
             const isSelected = selectedEvent?.id === ev.id;
             return (
               <g key={ev.id} style={{ cursor: 'pointer' }}
@@ -1581,7 +1581,7 @@ function OutreachTimeline({ outreach, appointments, member }) {
                 </text>
                 {/* Label above icon */}
                 <text x={p.x} y={p.y - 34} textAnchor="middle"
-                  fontSize="8.5" fill="#475569" fontWeight="600" fontFamily="system-ui"
+                  fontSize="8.5" fill="#53565A" fontWeight="600" fontFamily="system-ui"
                   style={{ maxWidth: 80 }}>
                   {ev.label?.length > 14 ? ev.label.slice(0, 13) + '…' : ev.label}
                 </text>
@@ -1593,7 +1593,7 @@ function OutreachTimeline({ outreach, appointments, member }) {
 
       {/* ── Event detail card ─────────────────────────────────────────── */}
       {selectedEvent && (
-        <div className="ot-detail" style={{ borderColor: typeColor[selectedEvent.type] || '#e2e8f0' }}>
+        <div className="ot-detail" style={{ borderColor: typeColor[selectedEvent.type] || '#E8E8E6' }}>
           <div className="ot-detail-header">
             <span className="ot-detail-icon">{typeIcon[selectedEvent.type]}</span>
             <div>
@@ -1650,7 +1650,7 @@ function OutreachTimeline({ outreach, appointments, member }) {
         {events.map((ev, i) => (
           <div key={ev.id}
             className={`ot-list-item ${selectedEvent?.id === ev.id ? 'ot-list-item--active' : ''}`}
-            style={{ borderLeftColor: typeColor[ev.type] || '#e2e8f0' }}
+            style={{ borderLeftColor: typeColor[ev.type] || '#E8E8E6' }}
             onClick={() => setSelectedEvent(selectedEvent?.id === ev.id ? null : ev)}>
             <span className="ot-list-icon">{typeIcon[ev.type]}</span>
             <div className="ot-list-body">

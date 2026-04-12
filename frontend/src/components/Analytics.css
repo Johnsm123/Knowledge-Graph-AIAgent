@@ -1,3 +1,7 @@
+/* ══════════════════════════════════════════════════════════════
+   Analytics.css — Cognizant Brand
+   ══════════════════════════════════════════════════════════════ */
+
 .analytics-container {
   animation: fadeIn 0.3s ease-in;
 }
@@ -11,12 +15,12 @@
 
 .analytics-header h1 {
   font-size: 2rem;
-  color: #1e293b;
+  color: var(--cog-primary);
   margin-bottom: 0.5rem;
 }
 
 .analytics-header p {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 1rem;
 }
 
@@ -25,19 +29,19 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1.5rem;
-  background: #0033A1;
-  color: white;
+  background: var(--cog-accent3-light);
+  color: var(--cog-primary);
   border: none;
-  border-radius: 8px;
-  font-weight: 600;
+  border-radius: var(--radius-button);
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .export-btn:hover {
-  background: #002875;
+  background: var(--cog-accent3-medium);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 51, 161, 0.3);
+  box-shadow: 0 4px 12px rgba(6, 199, 204, 0.3);
 }
 
 .metrics-grid {
@@ -48,10 +52,10 @@
 }
 
 .metric-card {
-  background: white;
-  border-radius: 12px;
+  background: var(--bg-card);
+  border-radius: 0;
   padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
   display: flex;
   gap: 1.25rem;
   transition: transform 0.2s, box-shadow 0.2s;
@@ -59,13 +63,13 @@
 
 .metric-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .metric-icon {
   width: 56px;
   height: 56px;
-  border-radius: 12px;
+  border-radius: var(--radius-global);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -78,7 +82,7 @@
 
 .metric-label {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--text-secondary);
   margin-bottom: 0.5rem;
   font-weight: 500;
 }
@@ -86,7 +90,7 @@
 .metric-value {
   font-size: 2rem;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
@@ -96,11 +100,11 @@
 }
 
 .metric-change.positive {
-  color: #10b981;
+  color: var(--cog-green);
 }
 
 .metric-change.negative {
-  color: #ef4444;
+  color: var(--cog-red);
 }
 
 .charts-grid {
@@ -111,10 +115,10 @@
 }
 
 .chart-card {
-  background: white;
-  border-radius: 12px;
+  background: var(--bg-card);
+  border-radius: 0;
   padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .chart-card.large {
@@ -127,21 +131,21 @@
 
 .chart-header h3 {
   font-size: 1.125rem;
-  color: #1e293b;
+  color: var(--text-primary);
   margin-bottom: 0.25rem;
   font-weight: 600;
 }
 
 .chart-header p {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 .table-card {
-  background: white;
-  border-radius: 12px;
+  background: var(--bg-card);
+  border-radius: 0;
   padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .table-container {
@@ -155,8 +159,8 @@
 }
 
 .analytics-table thead {
-  background: linear-gradient(135deg, #0033A1 0%, #005EB8 100%);
-  color: white;
+  background: var(--cog-primary);
+  color: var(--cog-white);
 }
 
 .analytics-table th {
@@ -170,12 +174,12 @@
 
 .analytics-table td {
   padding: 1rem;
-  border-bottom: 1px solid #e2e8f0;
-  color: #1e293b;
+  border-bottom: 1px solid var(--cog-gray-lighter);
+  color: var(--text-primary);
 }
 
 .analytics-table tbody tr:hover {
-  background: #f8fafc;
+  background: var(--cog-gray-lightest);
 }
 
 .analytics-table tbody tr:last-child td {
@@ -185,24 +189,24 @@
 .rank-badge {
   display: inline-block;
   padding: 0.375rem 0.75rem;
-  background: #f1f5f9;
-  color: #64748b;
-  border-radius: 6px;
+  background: var(--cog-gray-lightest);
+  color: var(--text-secondary);
+  border-radius: var(--radius-button);
   font-weight: 600;
   font-size: 0.875rem;
 }
 
 .rank-badge.top {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  color: white;
+  background: var(--cog-yellow);
+  color: var(--cog-primary);
 }
 
 .gap-count-badge {
   display: inline-block;
   padding: 0.375rem 0.75rem;
-  background: #fee2e2;
-  color: #dc2626;
-  border-radius: 6px;
+  background: rgba(184,31,45,0.08);
+  color: var(--cog-red);
+  border-radius: var(--radius-button);
   font-weight: 600;
   font-size: 0.875rem;
 }

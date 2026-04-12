@@ -7,14 +7,14 @@ import './Analytics.css';
 const API_BASE = 'http://localhost:5001/api/v1';
 
 const COLORS = {
-  primary: '#0033A1',
-  secondary: '#005EB8',
-  success: '#10b981',
-  danger: '#ef4444',
-  warning: '#f59e0b',
-  info: '#3b82f6',
-  purple: '#8b5cf6',
-  pink: '#ec4899'
+  primary: '#000048',
+  secondary: '#2F78C4',
+  success: '#2DB81F',
+  danger: '#B81F2D',
+  warning: '#E9C71D',
+  info: '#05819B',
+  purple: '#7373D8',
+  pink: '#85A0F9'
 };
 
 function Analytics() {

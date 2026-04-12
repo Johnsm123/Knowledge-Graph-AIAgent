@@ -19,10 +19,10 @@ const getCategory = (openGaps) => {
 };
 
 const CATEGORY_META = {
-  all:       { label: 'All Members',      color: '#0033A1', bg: '#e8eeff' },
-  critical:  { label: 'Critical',         color: '#dc2626', bg: '#fee2e2' },
-  moderate:  { label: 'Needs Attention',  color: '#d97706', bg: '#fef3c7' },
-  compliant: { label: 'Compliant',        color: '#059669', bg: '#d1fae5' },
+  all:       { label: 'All Members',      color: '#000048', bg: 'rgba(47,120,196,0.08)' },
+  critical:  { label: 'Critical',         color: '#B81F2D', bg: 'rgba(184,31,45,0.08)' },
+  moderate:  { label: 'Needs Attention',  color: '#E9C71D', bg: 'rgba(233,199,29,0.12)' },
+  compliant: { label: 'Compliant',        color: '#2DB81F', bg: 'rgba(45,184,31,0.10)' },
 };
 
 // ── Gap badge ─────────────────────────────────────────────────────────────────
