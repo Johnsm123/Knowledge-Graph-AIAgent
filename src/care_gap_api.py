@@ -1142,8 +1142,13 @@ def send_member_email(member_id):
         if not to_email or not subject or not body:
             return jsonify({"error": "to, subject, and body are required"}), 400
 
-        sender     = cfg.azure_communication_sender
-        conn_str   = cfg.azure_communication_connection_string
+        sender   = cfg.azure_communication_sender
+        conn_str = cfg.azure_communication_connection_string
+
+        if not conn_str or not sender:
+            return jsonify({"error": "Azure email not configured on the server"}), 500
+
+        logger.info(f"[MANUAL-EMAIL] Sending to {to_email}, subject: {subject[:60]}")
 
         # Send via Azure Communication Services
         client  = EmailClient.from_connection_string(conn_str)
@@ -1164,6 +1169,16 @@ def send_member_email(member_id):
         poller = client.begin_send(message)
         result = poller.result()
 
+        # Check Azure result status
+        send_status = result.get("status") if isinstance(result, dict) else getattr(result, "status", None)
+        logger.info(f"[MANUAL-EMAIL] Azure status: {send_status}")
+
+        if send_status and str(send_status).lower() not in ("succeeded", "queued", "outfordelivery"):
+            error_detail = ""
+            if isinstance(result, dict) and result.get("error"):
+                error_detail = f" - {result['error']}"
+            return jsonify({"error": f"Email send failed with status: {send_status}{error_detail}"}), 500
+
         # Persist in Neo4j
         email_id  = f"EMAIL-{member_id}-{uuid.uuid4().hex[:8]}"
         timestamp = datetime.now().isoformat()
@@ -1174,15 +1189,71 @@ def send_member_email(member_id):
             timestamp=timestamp, direction="sent", is_read=True,
         )
 
+        msg_id = result.get("id", "") if isinstance(result, dict) else str(result)
+        logger.info(f"[MANUAL-EMAIL] Sent OK: email_id={email_id}, azure_id={msg_id}")
+
         return jsonify({
             "status": "sent",
             "email_id": email_id,
-            "message_id": result.get("id", "") if isinstance(result, dict) else str(result),
+            "message_id": msg_id,
         })
 
     except Exception as e:
         logger.exception("send_member_email error")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v1/email/test-send", methods=["GET"])
+def test_email_send():
+    """
+    Quick diagnostic: send a tiny test email to verify Azure config.
+    Usage: GET /api/v1/email/test-send?to=you@example.com
+    """
+    try:
+        from azure.communication.email import EmailClient
+        from config.settings import settings as cfg
+
+        to_addr = request.args.get("to", "").strip()
+        if not to_addr:
+            return jsonify({"error": "Pass ?to=email@example.com"}), 400
+
+        conn_str = cfg.azure_communication_connection_string
+        sender = cfg.azure_communication_sender
+
+        if not conn_str or not sender:
+            return jsonify({
+                "error": "Azure email not configured",
+                "connection_string_set": bool(conn_str),
+                "sender_set": bool(sender),
+            }), 500
+
+        client = EmailClient.from_connection_string(conn_str)
+        message = {
+            "senderAddress": sender,
+            "recipients": {"to": [{"address": to_addr}]},
+            "content": {
+                "subject": "HEDIS Portal - Email Test",
+                "plainText": "This is a test email from the HealthCare Management Portal. If you received this, email sending is working correctly.",
+                "html": "<html><body><h2>Email Test Successful</h2><p>Azure Communication Services is configured correctly.</p></body></html>",
+            },
+        }
+        poller = client.begin_send(message)
+        result = poller.result()
+
+        send_status = result.get("status") if isinstance(result, dict) else getattr(result, "status", None)
+        msg_id = result.get("id", "") if isinstance(result, dict) else str(result)
+
+        return jsonify({
+            "status": "ok",
+            "azure_status": str(send_status),
+            "message_id": msg_id,
+            "sender": sender,
+            "to": to_addr,
+            "full_result": str(result),
+        })
+    except Exception as e:
+        logger.exception("test_email_send error")
+        return jsonify({"error": str(e), "type": type(e).__name__}), 500
 
 
 @app.route("/api/v1/email/mark-read/<email_id>", methods=["PATCH"])
@@ -1473,39 +1544,75 @@ def bulk_process_members():
                     open_gaps = _get_gaps(mid)
                     if open_gaps:
                         portal_url = get_portal_url(mid)
-                        gap_rows = "".join(
-                            f"<tr><td style='padding:8px 12px;border-bottom:1px solid #e0e0e0;'>{g['measure_name']}</td>"
-                            f"<td style='padding:8px 12px;border-bottom:1px solid #e0e0e0;'>{g['measure_id']}</td>"
-                            f"<td style='padding:8px 12px;border-bottom:1px solid #e0e0e0;'>{g.get('primary_cpt_code','')}</td></tr>"
-                            for g in open_gaps
-                        )
-                        subject = f"Action Required: {len(open_gaps)} Preventive Screening(s) Due - {mname}"
+
+                        # Build human-readable treatment cards (NO codes)
+                        from src.pdf_report import generate_member_report, _friendly
+                        import base64 as _b64
+
+                        gap_cards = ""
+                        for g in open_gaps:
+                            what, why, action = _friendly(
+                                g.get("measure_id", ""),
+                                g.get("resolution_guide") or g.get("description", ""),
+                            )
+                            gap_cards += (
+                                f"<div style='background:#f8faff;border-left:4px solid #0033A1;"
+                                f"padding:14px 18px;margin:10px 0;border-radius:0 8px 8px 0;'>"
+                                f"<h3 style='color:#0033A1;margin:0 0 6px;font-size:15px;'>{what}</h3>"
+                                f"<p style='color:#555;font-size:12px;margin:0 0 4px;'>"
+                                f"<strong>Why:</strong> {why}</p>"
+                                f"<p style='color:#333;font-size:12px;margin:0;'>"
+                                f"<strong>What to do:</strong> {action}</p></div>"
+                            )
+
+                        subject = f"Your Preventive Care Report — {len(open_gaps)} Screening(s) Recommended - {mname}"
                         body_html = f"""
 <html><body style="font-family:Arial,sans-serif;color:#1a1a2e;max-width:680px;margin:auto;">
 <div style="background:#0033A1;padding:20px 32px;border-radius:8px 8px 0 0;">
   <h1 style="color:white;margin:0;font-size:22px;">HealthCare Management Portal</h1>
-  <p style="color:#b3c7f7;margin:4px 0 0;">Preventive Care Notification</p>
+  <p style="color:#b3c7f7;margin:4px 0 0;">Your Preventive Care Report</p>
 </div>
 <div style="border:1px solid #dce3f5;border-top:none;padding:32px;border-radius:0 0 8px 8px;">
   <p style="font-size:16px;">Dear <strong>{mname}</strong>,</p>
-  <p>Our records indicate that you have <strong>{len(open_gaps)} preventive screening(s)</strong> that are due. Completing these screenings is important for your health and well-being.</p>
-  <table style="width:100%;border-collapse:collapse;margin:20px 0;">
-    <tr style="background:#0033A1;color:white;">
-      <th style="padding:10px 12px;text-align:left;">Screening</th>
-      <th style="padding:10px 12px;text-align:left;">Code</th>
-      <th style="padding:10px 12px;text-align:left;">CPT</th>
-    </tr>
-    {gap_rows}
-  </table>
+  <p>Our care management team has identified <strong>{len(open_gaps)} preventive screening(s)</strong> that are recommended for you. Completing these screenings is important for your long-term health and well-being.</p>
+
+  <h2 style="color:#0033A1;margin:20px 0 8px;font-size:17px;">Your Recommended Screenings</h2>
+  {gap_cards}
+
+  <div style="background:#fff8e1;border-radius:8px;padding:14px;margin:20px 0;">
+    <p style="margin:0;font-size:12px;color:#7a5900;"><strong>Attached:</strong> Your complete Care Management Report (PDF) with full details about your health profile and recommended treatments.</p>
+  </div>
+
   <p>Please click the button below to review your screenings and schedule appointments at a convenient location near you:</p>
   <div style="text-align:center;margin:28px 0;">
-    <a href="{portal_url}" style="background:#0033A1;color:white;padding:14px 36px;text-decoration:none;border-radius:6px;font-size:16px;font-weight:600;">Review & Schedule Appointments</a>
+    <a href="{portal_url}" style="background:#059669;color:white;padding:14px 36px;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">Review & Schedule Appointments</a>
   </div>
   <p style="color:#666;font-size:13px;">If you have already completed these screenings, please disregard this message or contact your care manager.</p>
   <hr style="border:none;border-top:1px solid #dce3f5;margin:24px 0;">
   <p style="color:#888;font-size:12px;">This is an automated message from the HealthCare Management Portal.</p>
 </div>
 </body></html>"""
+
+                        # Generate PDF attachment
+                        from src.care_gap_neo4j import get_member_profile as _get_profile
+                        _prof = {}
+                        try:
+                            _prof = _get_profile(mid) or {}
+                        except Exception:
+                            pass
+
+                        _pdf_bytes = generate_member_report(
+                            member_id=mid,
+                            name=mname,
+                            dob=_prof.get("dob", ""),
+                            gender=_prof.get("gender", ""),
+                            pcp_name=_prof.get("pcp_name", ""),
+                            plan_id=_prof.get("plan_id", ""),
+                            insurance_type=_prof.get("insurance_type", ""),
+                            chronic_conditions=_prof.get("chronic_conditions", ""),
+                            open_gaps=open_gaps,
+                        )
+                        _pdf_b64 = _b64.b64encode(_pdf_bytes).decode("utf-8")
 
                         conn_str = cfg.azure_communication_connection_string
                         sender = cfg.azure_communication_sender
@@ -1515,6 +1622,13 @@ def bulk_process_members():
                                 "senderAddress": sender,
                                 "recipients": {"to": [{"address": memail}]},
                                 "content": {"subject": subject, "html": body_html},
+                                "attachments": [
+                                    {
+                                        "name": f"Care_Report_{mid}.pdf",
+                                        "contentType": "application/pdf",
+                                        "contentInBase64": _pdf_b64,
+                                    }
+                                ],
                             }
                             poller = client.begin_send(message)
                             poller.result()
@@ -1525,7 +1639,7 @@ def bulk_process_members():
                             merge_email(
                                 email_id=email_id, member_id=mid,
                                 subject=subject,
-                                body=f"Preventive care notification: {len(open_gaps)} screening(s) due",
+                                body=f"Preventive care report: {len(open_gaps)} screening(s) recommended. PDF attached.",
                                 from_email=sender, to_email=memail,
                                 timestamp=_dt.now().isoformat(),
                                 direction="sent", is_read=True,
@@ -1607,43 +1721,131 @@ def _landing_html():
 <title>HEDIS Care Gap Management</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;min-height:100vh;display:flex;align-items:center;justify-content:center}
-.landing{text-align:center;max-width:1200px;padding:40px}
-.landing h1{font-size:32px;color:#0033A1;margin-bottom:8px}
-.landing .subtitle{color:#555;font-size:16px;margin-bottom:48px}
-.cards{display:flex;gap:28px;justify-content:center;flex-wrap:wrap}
-.card{background:white;border-radius:16px;padding:36px 28px;width:340px;box-shadow:0 4px 24px rgba(0,51,161,0.10);transition:transform 0.2s,box-shadow 0.2s;cursor:pointer;text-decoration:none;color:inherit}
-.card:hover{transform:translateY(-6px);box-shadow:0 8px 36px rgba(0,51,161,0.18)}
-.card-icon{font-size:52px;margin-bottom:18px}
-.card h2{font-size:20px;color:#0033A1;margin-bottom:10px}
-.card p{color:#555;font-size:13px;line-height:1.6}
-.card .btn{display:inline-block;margin-top:20px;background:#0033A1;color:white;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;transition:background 0.2s}
-.card .btn:hover{background:#0050d0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(135deg,#f0f4f8 0%,#e0e8f5 100%);min-height:100vh}
+.top-bar{background:#0033A1;padding:16px 40px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,51,161,0.18)}
+.top-bar h1{color:white;font-size:20px;font-weight:700;letter-spacing:0.3px}
+.top-bar .badge{background:rgba(255,255,255,0.15);color:#b3c7f7;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.5px}
+.hero{text-align:center;padding:48px 20px 24px}
+.hero h2{font-size:30px;color:#0a1929;margin-bottom:8px;font-weight:700}
+.hero p{color:#555;font-size:15px;max-width:600px;margin:0 auto 12px}
+.stats-bar{display:flex;justify-content:center;gap:32px;margin:20px auto 36px;flex-wrap:wrap}
+.stat-pill{background:white;border-radius:12px;padding:12px 24px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,0.06)}
+.stat-pill .num{font-size:24px;font-weight:700}
+.stat-pill .lbl{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.5px}
+.stat-pill.blue .num{color:#0033A1}
+.stat-pill.red .num{color:#dc3545}
+.stat-pill.amber .num{color:#f59e0b}
+.stat-pill.green .num{color:#10b981}
+.cards{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;max-width:1100px;margin:0 auto;padding:0 20px 48px}
+.card{background:white;border-radius:16px;padding:0;width:330px;box-shadow:0 4px 24px rgba(0,51,161,0.08);transition:transform 0.25s,box-shadow 0.25s;cursor:pointer;text-decoration:none;color:inherit;overflow:hidden;border:1px solid #e8edf5}
+.card:hover{transform:translateY(-8px);box-shadow:0 12px 40px rgba(0,51,161,0.16)}
+.card-top{padding:28px 24px 20px;text-align:center}
+.card-icon{width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 16px}
+.card-icon.blue{background:#e8f0fe;color:#0033A1}
+.card-icon.purple{background:#f0e8fe;color:#6d28d9}
+.card-icon.teal{background:#e0f7f4;color:#0d9488}
+.card h2{font-size:18px;color:#0a1929;margin-bottom:8px;font-weight:700}
+.card p{color:#666;font-size:13px;line-height:1.55;padding:0 4px}
+.card-features{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:14px}
+.tag{background:#f0f4ff;color:#0033A1;font-size:10px;padding:4px 10px;border-radius:12px;font-weight:600}
+.tag.green{background:#ecfdf5;color:#059669}
+.tag.purple{background:#f5f0ff;color:#6d28d9}
+.card-bottom{background:#f8faff;padding:16px 24px;border-top:1px solid #edf0f7;text-align:center}
+.card-btn{display:inline-block;background:#0033A1;color:white;padding:10px 32px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;transition:background 0.2s,transform 0.15s}
+.card-btn:hover{background:#0050d0;transform:scale(1.03)}
+.card-btn.green-btn{background:#059669}
+.card-btn.green-btn:hover{background:#047857}
+.card-btn.purple-btn{background:#6d28d9}
+.card-btn.purple-btn:hover{background:#5b21b6}
+.footer{text-align:center;padding:20px;color:#999;font-size:12px}
 </style></head><body>
-<div class="landing">
-  <h1>HEDIS Care Gap Management System</h1>
-  <p class="subtitle">AI-Powered Preventive Care Compliance Platform</p>
-  <div class="cards">
-    <a class="card" href="http://localhost:3000" target="_blank">
-      <div class="card-icon">&#128187;</div>
-      <h2>Overall Dashboard</h2>
-      <p>Full interactive dashboard with individual member panels, AI-powered 6-agent analysis, appointment booking, force close, claims, outreach timeline, email, and chat.</p>
-      <span class="btn">Open Dashboard</span>
-    </a>
-    <a class="card" href="/api/v1/members/dashboard-page">
-      <div class="card-icon">&#128202;</div>
-      <h2>Members Dashboard</h2>
-      <p>View all members with their care gap status — critical, needs attention, and compliant. Quick overview of the entire member population at a glance.</p>
-      <span class="btn">View Members</span>
-    </a>
-    <a class="card" href="/api/v1/members/bulk-upload-page">
-      <div class="card-icon">&#128228;</div>
-      <h2>Bulk Upload Members</h2>
-      <p>Upload an Excel spreadsheet with patient details. The AI agent detects care gaps, shows a preview for approval, then analyzes and sends outreach emails simultaneously.</p>
-      <span class="btn">Upload Excel</span>
-    </a>
-  </div>
+<div class="top-bar">
+  <h1>HEDIS Care Gap Management</h1>
+  <span class="badge">AI-POWERED PLATFORM</span>
 </div>
+
+<div class="hero">
+  <h2>Care Management Dashboard</h2>
+  <p>Unified platform for preventive care compliance — manage members, track care gaps, and drive outreach from one place.</p>
+</div>
+
+<div class="stats-bar" id="statsBar">
+  <div class="stat-pill blue"><div><div class="num" id="statTotal">-</div><div class="lbl">Total Members</div></div></div>
+  <div class="stat-pill red"><div><div class="num" id="statCritical">-</div><div class="lbl">Critical</div></div></div>
+  <div class="stat-pill amber"><div><div class="num" id="statAttention">-</div><div class="lbl">Needs Attention</div></div></div>
+  <div class="stat-pill green"><div><div class="num" id="statCompliant">-</div><div class="lbl">Compliant</div></div></div>
+</div>
+
+<div class="cards">
+  <a class="card" href="http://localhost:3000" target="_blank">
+    <div class="card-top">
+      <div class="card-icon blue">&#9881;</div>
+      <h2>Overall Dashboard</h2>
+      <p>Full interactive dashboard with individual member panels, real-time AI analysis, and complete care gap lifecycle management.</p>
+      <div class="card-features">
+        <span class="tag">6-Agent AI Analysis</span>
+        <span class="tag">Force Close</span>
+        <span class="tag">Claims</span>
+        <span class="tag">Email & Chat</span>
+        <span class="tag">Appointments</span>
+        <span class="tag">Outreach</span>
+      </div>
+    </div>
+    <div class="card-bottom">
+      <span class="card-btn">Open Dashboard &rarr;</span>
+    </div>
+  </a>
+
+  <a class="card" href="/api/v1/members/dashboard-page">
+    <div class="card-top">
+      <div class="card-icon purple">&#128100;</div>
+      <h2>Members Overview</h2>
+      <p>Quick population-level view of all members — search, filter, and see care gap statuses at a glance.</p>
+      <div class="card-features">
+        <span class="tag purple">Search Members</span>
+        <span class="tag purple">Status Filters</span>
+        <span class="tag purple">Gap Counts</span>
+        <span class="tag purple">PCP Info</span>
+      </div>
+    </div>
+    <div class="card-bottom">
+      <span class="card-btn purple-btn">View Members &rarr;</span>
+    </div>
+  </a>
+
+  <a class="card" href="/api/v1/members/bulk-upload-page">
+    <div class="card-top">
+      <div class="card-icon teal">&#128196;</div>
+      <h2>Excel Upload & Outreach</h2>
+      <p>Upload a member spreadsheet — AI detects care gaps, previews results, then sends personalized email outreach with PDF reports.</p>
+      <div class="card-features">
+        <span class="tag green">Drag & Drop</span>
+        <span class="tag green">Auto-Detect Gaps</span>
+        <span class="tag green">Bulk Email</span>
+        <span class="tag green">PDF Reports</span>
+      </div>
+    </div>
+    <div class="card-bottom">
+      <span class="card-btn green-btn">Upload Excel &rarr;</span>
+    </div>
+  </a>
+</div>
+
+<div class="footer">HEDIS Care Gap Management System &mdash; Powered by AI Agents &amp; Knowledge Graph</div>
+
+<script>
+(async()=>{
+  try{
+    const [mRes,sRes]=await Promise.all([fetch('/api/v1/members'),fetch('/api/v1/dashboard/stats')]);
+    const mData=await mRes.json();const sData=await sRes.json();
+    const members=mData.members||[];
+    document.getElementById('statTotal').textContent=sData.total_members||members.length||0;
+    document.getElementById('statCritical').textContent=members.filter(m=>m.open_gaps>=3).length;
+    document.getElementById('statAttention').textContent=members.filter(m=>m.open_gaps>0&&m.open_gaps<3).length;
+    document.getElementById('statCompliant').textContent=sData.compliant_members||0;
+  }catch(e){console.warn('Stats load failed:',e)}
+})();
+</script>
 </body></html>"""
 
 

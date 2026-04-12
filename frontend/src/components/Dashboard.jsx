@@ -172,6 +172,7 @@ function Dashboard({ onMemberSelect }) {
         else if (step === 'agent_analysis' && status === 'done') msg = 'Analysis complete';
         else if (step === 'email' && status === 'running') msg = 'Sending email...';
         else if (step === 'email' && status === 'done') msg = 'Email sent!';
+        else if (step === 'email' && status === 'error') msg = data.message || 'Email failed';
         else if (step === 'email' && status === 'skipped') msg = 'No email on file';
 
         setProcessing(prev => ({

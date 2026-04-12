@@ -1198,6 +1198,7 @@ def auto_process_member(member_id):
                         "message": "All agents completed."})
 
             # Step 3: Compose and send email
+            email_actually_sent = False
             if not email:
                 yield _sse({"step": "email", "status": "skipped",
                             "message": "No email on file — skipping email."})
@@ -1211,16 +1212,21 @@ def auto_process_member(member_id):
                 rec_text = agent_responses.get("recommendation_agent", "")
                 care_gap_text = agent_responses.get("care_gap_agent", "")
 
-                _send_analysis_email(member_id, name, email, gaps, portal_url,
-                                     rec_text, care_gap_text)
-
-                yield _sse({"step": "email", "status": "done",
-                            "message": f"Email sent to {email}"})
+                try:
+                    _send_analysis_email(member_id, name, email, gaps, portal_url,
+                                         rec_text, care_gap_text)
+                    email_actually_sent = True
+                    yield _sse({"step": "email", "status": "done",
+                                "message": f"Email sent to {email}"})
+                except Exception as email_err:
+                    logger.error(f"Email send failed: {email_err}", exc_info=True)
+                    yield _sse({"step": "email", "status": "error",
+                                "message": f"Email failed: {email_err}"})
 
             yield _sse({"step": "complete", "status": "success",
                         "message": f"Auto-process complete for {name}",
                         "gaps_count": len(gaps),
-                        "email_sent": bool(email)})
+                        "email_sent": email_actually_sent})
 
         except Exception as exc:
             logger.exception("auto_process_member error")
@@ -1245,103 +1251,161 @@ def _sse(data: dict) -> str:
 
 def _send_analysis_email(member_id, name, email, gaps, portal_url,
                          recommendation_text, care_gap_text):
-    """Send the care gap analysis email with interactive portal link."""
-    try:
-        from azure.communication.email import EmailClient
-        from config.settings import settings as cfg
-        from src.care_gap_neo4j import merge_email
+    """Send the care gap analysis email with human-readable treatment summary + PDF attachment."""
+    import logging
+    logger = logging.getLogger(__name__)
 
-        if not cfg.azure_communication_connection_string:
-            return
+    from azure.communication.email import EmailClient
+    from config.settings import settings as cfg
+    from src.care_gap_neo4j import merge_email, get_member_profile
+    from src.pdf_report import generate_member_report, _friendly
+    import base64, re
 
-        gap_rows = ""
-        for g in gaps:
-            gap_rows += f"""
-            <tr>
-              <td style="padding:12px 16px;font-weight:600;">{g['measure_name']}</td>
-              <td style="padding:12px 16px;"><code>{g['measure_id']}</code></td>
-              <td style="padding:12px 16px;"><code>{g.get('primary_cpt_code','N/A')}</code></td>
-              <td style="padding:12px 16px;"><code>{g.get('primary_icd10','N/A')}</code></td>
-              <td style="padding:12px 16px;">{g.get('lookback_months','12')} mo</td>
-            </tr>"""
+    conn_str = cfg.azure_communication_connection_string
+    sender = cfg.azure_communication_sender
+    if not conn_str or not sender:
+        raise RuntimeError(
+            f"Azure email not configured: connection_string={'set' if conn_str else 'EMPTY'}, "
+            f"sender={'set' if sender else 'EMPTY'}"
+        )
 
-        # Clean up agent text for email display (strip markdown formatting)
-        import re
-        clean_rec = re.sub(r'[*#`]', '', recommendation_text[:1500]) if recommendation_text else ""
-        clean_gap = re.sub(r'[*#`]', '', care_gap_text[:1000]) if care_gap_text else ""
+    logger.info(f"[EMAIL] Starting email for member {member_id} to {email}")
 
-        html = f"""
+    # ── Build human-readable gap cards (NO CPT/ICD codes) ──────────
+    gap_cards_html = ""
+    for g in gaps:
+        what, why, action = _friendly(
+            g.get("measure_id", ""),
+            g.get("resolution_guide") or g.get("description", ""),
+        )
+        gap_cards_html += f"""
+        <div style="background:#f8faff;border-left:4px solid #0033A1;padding:16px 20px;margin:12px 0;border-radius:0 8px 8px 0;">
+          <h3 style="color:#0033A1;margin:0 0 8px;font-size:16px;">{what}</h3>
+          <p style="color:#555;font-size:13px;margin:0 0 6px;"><strong>Why this matters:</strong> {why}</p>
+          <p style="color:#333;font-size:13px;margin:0;"><strong>What to do:</strong> {action}</p>
+        </div>"""
+
+    # Clean up agent text for email display
+    clean_rec = re.sub(r'[*#`]', '', recommendation_text[:1500]) if recommendation_text else ""
+    clean_gap = re.sub(r'[*#`]', '', care_gap_text[:1000]) if care_gap_text else ""
+    # Strip codes from display text
+    for pattern in [r'CPT[\s:]*[\d,\s\-]+', r'ICD[\-10]*[\s:]*[\w\.\,\s]+']:
+        clean_rec = re.sub(pattern, '', clean_rec)
+        clean_gap = re.sub(pattern, '', clean_gap)
+
+    subject = f"Your Preventive Care Report - {len(gaps)} Recommended Screening(s)"
+
+    html = f"""
 <html><body style="font-family:Arial,sans-serif;color:#1a1a2e;max-width:700px;margin:auto;">
 <div style="background:#0033A1;padding:24px 32px;border-radius:8px 8px 0 0;">
-  <h1 style="color:white;margin:0;font-size:22px;">HealthCare Management Portal</h1>
-  <p style="color:#b3c7f7;margin:4px 0 0;">Preventive Care Gap Analysis Report</p>
+<h1 style="color:white;margin:0;font-size:22px;">HealthCare Management Portal</h1>
+<p style="color:#b3c7f7;margin:4px 0 0;">Your Preventive Care Report</p>
 </div>
 <div style="border:1px solid #dce3f5;border-top:none;padding:32px;border-radius:0 0 8px 8px;">
-  <p style="font-size:16px;">Dear <strong>{name}</strong>,</p>
-  <p>Our AI-powered care management system has completed a comprehensive analysis of your
-  preventive care status based on HEDIS quality measures. Below is a summary of recommended
-  screenings and actions.</p>
+<p style="font-size:16px;">Dear <strong>{name}</strong>,</p>
+<p>Our care management team has reviewed your preventive care status. Based on nationally
+recognized health guidelines, we recommend the following screenings to help keep you healthy.</p>
 
-  <h2 style="color:#0033A1;margin:24px 0 12px;font-size:18px;">Open Care Gaps</h2>
-  <table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:14px;">
-    <tr style="background:#0033A1;color:white;">
-      <th style="padding:10px 16px;text-align:left;">Screening</th>
-      <th style="padding:10px 16px;text-align:left;">Measure</th>
-      <th style="padding:10px 16px;text-align:left;">CPT</th>
-      <th style="padding:10px 16px;text-align:left;">ICD-10</th>
-      <th style="padding:10px 16px;text-align:left;">Lookback</th>
-    </tr>
-    {gap_rows}
-  </table>
+<h2 style="color:#0033A1;margin:24px 0 12px;font-size:18px;">Your Recommended Screenings</h2>
+<p style="color:#666;font-size:13px;margin-bottom:8px;">You have <strong>{len(gaps)}</strong> preventive screening(s) that are due:</p>
+{gap_cards_html}
 
-  {"<h2 style='color:#0033A1;margin:24px 0 12px;font-size:18px;'>AI Analysis Summary</h2><div style='background:#f0f4ff;padding:16px;border-radius:8px;font-size:14px;white-space:pre-wrap;'>" + clean_gap + "</div>" if clean_gap else ""}
+{"<h2 style='color:#0033A1;margin:24px 0 12px;font-size:18px;'>Care Summary</h2><div style='background:#f0f4ff;padding:16px;border-radius:8px;font-size:14px;line-height:1.6;'>" + clean_gap.strip() + "</div>" if clean_gap.strip() else ""}
 
-  {"<h2 style='color:#0033A1;margin:24px 0 12px;font-size:18px;'>Recommendations</h2><div style='background:#f0fdf4;padding:16px;border-radius:8px;font-size:14px;white-space:pre-wrap;'>" + clean_rec + "</div>" if clean_rec else ""}
+{"<h2 style='color:#0033A1;margin:24px 0 12px;font-size:18px;'>Our Recommendations</h2><div style='background:#f0fdf4;padding:16px;border-radius:8px;font-size:14px;line-height:1.6;'>" + clean_rec.strip() + "</div>" if clean_rec.strip() else ""}
 
-  <div style="text-align:center;margin:32px 0;">
-    <p style="font-size:16px;margin-bottom:16px;"><strong>Would you like to schedule these screenings?</strong></p>
-    <a href="{portal_url}" style="display:inline-block;background:#059669;color:white;padding:16px 40px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">
-      Yes — Review &amp; Schedule Appointments
-    </a>
-    <p style="margin-top:12px;font-size:13px;color:#888;">
-      Click the button above to review each screening and choose your preferred appointment times.
-    </p>
-  </div>
+<div style="background:#fff8e1;border-radius:8px;padding:16px;margin:24px 0;">
+  <p style="margin:0;font-size:13px;color:#7a5900;"><strong>Attached:</strong> Your complete Care Management Report (PDF) with full details about your health profile and recommended treatments.</p>
+</div>
 
-  <hr style="border:none;border-top:1px solid #dce3f5;margin:24px 0;">
-  <p style="color:#888;font-size:12px;">
-    This is an automated analysis from the HealthCare Management Portal AI Care Gap System.
-    If you have questions, please contact your care management team.
+<div style="text-align:center;margin:32px 0;">
+  <p style="font-size:16px;margin-bottom:16px;"><strong>Ready to schedule your screenings?</strong></p>
+  <a href="{portal_url}" style="display:inline-block;background:#059669;color:white;padding:16px 40px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">
+    Yes - Review &amp; Schedule Appointments
+  </a>
+  <p style="margin-top:12px;font-size:13px;color:#888;">
+    Click above to choose your preferred appointment times at a facility near you.
   </p>
+</div>
+
+<hr style="border:none;border-top:1px solid #dce3f5;margin:24px 0;">
+<p style="color:#888;font-size:12px;">
+  This is an automated message from the HealthCare Management Portal.
+  If you have questions, please contact your care management team.
+</p>
 </div>
 </body></html>"""
 
-        client = EmailClient.from_connection_string(cfg.azure_communication_connection_string)
-        message = {
-            "senderAddress": cfg.azure_communication_sender,
-            "recipients": {"to": [{"address": email}]},
-            "content": {
-                "subject": f"Care Gap Analysis Report — {len(gaps)} Recommended Screening(s)",
-                "html": html,
-            },
-        }
-        poller = client.begin_send(message)
-        poller.result()
+    # ── Generate PDF attachment ────────────────────────────────────
+    profile = {}
+    try:
+        profile = get_member_profile(member_id) or {}
+    except Exception:
+        logger.warning(f"[EMAIL] Could not fetch profile for {member_id}, continuing without")
 
-        # Persist email in Neo4j
-        email_id = f"AUTO-ANALYSIS-{member_id}-{uuid.uuid4().hex[:8]}"
-        merge_email(
-            email_id=email_id,
-            member_id=member_id,
-            subject=f"Care Gap Analysis Report — {len(gaps)} Recommended Screening(s)",
-            body=f"AI analysis report with {len(gaps)} open gaps. Portal link included.",
-            from_email=cfg.azure_communication_sender,
-            to_email=email,
-            timestamp=datetime.now().isoformat(),
-            direction="sent",
-            is_read=True,
-        )
+    logger.info(f"[EMAIL] Generating PDF for {member_id}")
+    pdf_bytes = generate_member_report(
+        member_id=member_id,
+        name=name,
+        dob=profile.get("dob", ""),
+        gender=profile.get("gender", ""),
+        pcp_name=profile.get("pcp_name", ""),
+        plan_id=profile.get("plan_id", ""),
+        insurance_type=profile.get("insurance_type", ""),
+        chronic_conditions=profile.get("chronic_conditions", ""),
+        open_gaps=gaps,
+        recommendation_text=recommendation_text,
+        care_gap_text=care_gap_text,
+    )
+    pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+    logger.info(f"[EMAIL] PDF generated ({len(pdf_bytes)} bytes)")
 
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Analysis email failed: {e}")
+    logger.info(f"[EMAIL] Sending via Azure: sender={sender}, to={email}")
+    client = EmailClient.from_connection_string(conn_str)
+    message = {
+        "senderAddress": sender,
+        "recipients": {"to": [{"address": email}]},
+        "content": {
+            "subject": subject,
+            "html": html,
+        },
+        "attachments": [
+            {
+                "name": f"Care_Report_{member_id}.pdf",
+                "contentType": "application/pdf",
+                "contentInBase64": pdf_b64,
+            }
+        ],
+    }
+    poller = client.begin_send(message)
+    result = poller.result()
+
+    # Check Azure result status
+    send_status = None
+    if isinstance(result, dict):
+        send_status = result.get("status")
+    else:
+        send_status = getattr(result, "status", None)
+
+    logger.info(f"[EMAIL] Azure result status: {send_status}, full result: {result}")
+
+    if send_status and str(send_status).lower() not in ("succeeded", "queued", "outfordelivery"):
+        error_detail = ""
+        if isinstance(result, dict) and result.get("error"):
+            error_detail = f" - {result['error']}"
+        raise RuntimeError(f"Azure email send status: {send_status}{error_detail}")
+
+    # Persist email in Neo4j
+    email_id = f"AUTO-ANALYSIS-{member_id}-{uuid.uuid4().hex[:8]}"
+    merge_email(
+        email_id=email_id,
+        member_id=member_id,
+        subject=subject,
+        body=f"AI care report with {len(gaps)} recommended screenings. PDF attached.",
+        from_email=sender,
+        to_email=email,
+        timestamp=datetime.now().isoformat(),
+        direction="sent",
+        is_read=True,
+    )
+    logger.info(f"[EMAIL] Email persisted in Neo4j: {email_id}")

@@ -131,7 +131,7 @@ export default function EmailPanel({ member, onClose }) {
         <div className="ep-toolbar">
           <button
             className="ep-toolbar-btn ep-toolbar-btn--primary"
-            onClick={() => { setCompose({ to: '', subject: '', body: '' }); setComposing(true); setSendError(''); setSendSuccess(false); }}
+            onClick={() => { setCompose({ to: member.email || '', subject: '', body: '' }); setComposing(true); setSendError(''); setSendSuccess(false); }}
           >
             <Plus size={14} /> New Email
           </button>
