@@ -1737,56 +1737,173 @@ def members_dashboard_page():
     return _members_dashboard_html()
 
 
+@app.route("/api/v1/login")
+def login_page():
+    """Common login page for the platform."""
+    return _login_html()
+
+
 @app.route("/api/v1/landing")
 def landing_page():
     """Main landing page with buttons for Members Dashboard and Bulk Upload."""
     return _landing_html()
 
 
+def _login_html():
+    return """<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Login — HEDIS Care Gap Management</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;background:#000048;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.login-wrapper{display:flex;flex-direction:column;align-items:center;width:100%;max-width:440px;padding:0 20px}
+.login-logo{margin-bottom:32px;text-align:center}
+.login-logo h1{color:#fff;font-size:22px;font-weight:700;margin-bottom:4px}
+.login-logo p{color:#26EFE9;font-size:13px;font-weight:600;letter-spacing:0.5px}
+.login-card{background:#fff;border-radius:0;width:100%;padding:40px 36px;box-shadow:0 8px 40px rgba(0,0,0,0.3)}
+.login-card h2{color:#000048;font-size:24px;font-weight:700;margin-bottom:6px}
+.login-card .subtitle{color:#53565A;font-size:14px;margin-bottom:28px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:13px;font-weight:600;color:#000048;margin-bottom:6px}
+.form-group input{width:100%;padding:12px 14px;border:1px solid #D0D0CE;border-radius:0.5em;font-size:14px;background:#F7F7F5;outline:none;transition:border-color 0.2s,box-shadow 0.2s;color:#000048}
+.form-group input:focus{border-color:#000048;box-shadow:0 0 0 3px rgba(0,0,72,0.1);background:#fff}
+.form-group input::placeholder{color:#97999B}
+.remember-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.remember-row label{display:flex;align-items:center;gap:6px;font-size:13px;color:#53565A;cursor:pointer}
+.remember-row input[type=checkbox]{width:16px;height:16px;accent-color:#2F78C4;cursor:pointer}
+.remember-row a{font-size:13px;color:#2F78C4;text-decoration:none;font-weight:600}
+.remember-row a:hover{text-decoration:underline}
+.login-btn{width:100%;padding:14px;background:#26EFE9;color:#000048;border:none;border-radius:999px;font-size:15px;font-weight:700;cursor:pointer;transition:background 0.2s,transform 0.15s}
+.login-btn:hover{background:#06C7CC;transform:translateY(-1px)}
+.login-btn:active{transform:translateY(0)}
+.login-error{display:none;background:rgba(184,31,45,0.08);color:#B81F2D;padding:10px 14px;border-radius:0.5em;font-size:13px;margin-bottom:16px;font-weight:500}
+.login-error.show{display:block}
+.login-footer{text-align:center;margin-top:24px;color:rgba(255,255,255,0.4);font-size:12px}
+.divider{display:flex;align-items:center;gap:12px;margin:24px 0}
+.divider hr{flex:1;border:none;border-top:1px solid #E8E8E6}
+.divider span{color:#97999B;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.dest-buttons{display:flex;gap:12px}
+.dest-btn{flex:1;padding:12px;border:1px solid #E8E8E6;border-radius:0.5em;background:#F7F7F5;text-align:center;cursor:pointer;text-decoration:none;transition:all 0.2s;font-size:13px;font-weight:600;color:#000048}
+.dest-btn:hover{background:#E8E8E6;border-color:#D0D0CE}
+.dest-btn .icon{font-size:20px;display:block;margin-bottom:4px}
+</style></head><body>
+<div class="login-wrapper">
+  <div class="login-logo">
+    <h1>HEDIS Care Gap Management</h1>
+    <p>AI-POWERED PLATFORM</p>
+  </div>
+  <div class="login-card">
+    <h2>Sign In</h2>
+    <p class="subtitle">Access the care management platform</p>
+    <div class="login-error" id="loginError">Invalid username or password. Please try again.</div>
+    <form id="loginForm" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" placeholder="Enter your username" autocomplete="username" required>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Enter your password" autocomplete="current-password" required>
+      </div>
+      <div class="remember-row">
+        <label><input type="checkbox" id="remember"> Remember me</label>
+        <a href="#">Forgot password?</a>
+      </div>
+      <button type="submit" class="login-btn">Sign In</button>
+    </form>
+    <div class="divider"><hr><span>Go to</span><hr></div>
+    <div class="dest-buttons">
+      <a class="dest-btn" href="http://localhost:5173" target="_blank">
+        <span class="icon">&#9881;</span>
+        Main Dashboard
+      </a>
+      <a class="dest-btn" href="/api/v1/landing">
+        <span class="icon">&#128202;</span>
+        Admin Portal
+      </a>
+    </div>
+  </div>
+  <div class="login-footer">HEDIS Care Gap Management &mdash; Powered by AI Agents & Knowledge Graph</div>
+</div>
+
+<script>
+function handleLogin(e){
+  e.preventDefault();
+  const user=document.getElementById('username').value.trim();
+  const pass=document.getElementById('password').value;
+  const errorEl=document.getElementById('loginError');
+
+  // Simple auth check — accepts admin/admin or any non-empty credentials
+  if(!user||!pass){
+    errorEl.classList.add('show');
+    return;
+  }
+
+  // Store login state
+  const remember=document.getElementById('remember').checked;
+  const storage=remember?localStorage:sessionStorage;
+  storage.setItem('hedis_logged_in','true');
+  storage.setItem('hedis_user',user);
+
+  // Redirect to landing page
+  window.location.href='/api/v1/landing';
+}
+
+// Auto-fill if remembered
+window.addEventListener('DOMContentLoaded',()=>{
+  if(localStorage.getItem('hedis_logged_in')==='true'){
+    document.getElementById('username').value=localStorage.getItem('hedis_user')||'';
+  }
+});
+</script>
+</body></html>"""
+
+
 def _landing_html():
     return """<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>HEDIS Care Gap Management</title>
+<title>HEDIS Care Gap Management — Cognizant</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(135deg,#f0f4f8 0%,#e0e8f5 100%);min-height:100vh}
-.top-bar{background:#0033A1;padding:16px 40px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,51,161,0.18)}
-.top-bar h1{color:white;font-size:20px;font-weight:700;letter-spacing:0.3px}
-.top-bar .badge{background:rgba(255,255,255,0.15);color:#b3c7f7;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.5px}
+body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;background:#F7F7F5;min-height:100vh}
+.top-bar{background:#000048;padding:16px 40px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,72,0.18)}
+.top-bar h1{color:#fff;font-size:20px;font-weight:700;letter-spacing:0.3px}
+.top-bar .badge{background:rgba(38,239,233,0.15);color:#26EFE9;padding:5px 14px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.5px}
 .hero{text-align:center;padding:48px 20px 24px}
-.hero h2{font-size:30px;color:#0a1929;margin-bottom:8px;font-weight:700}
-.hero p{color:#555;font-size:15px;max-width:600px;margin:0 auto 12px}
+.hero h2{font-size:30px;color:#000048;margin-bottom:8px;font-weight:700}
+.hero p{color:#53565A;font-size:15px;max-width:600px;margin:0 auto 12px}
 .stats-bar{display:flex;justify-content:center;gap:32px;margin:20px auto 36px;flex-wrap:wrap}
-.stat-pill{background:white;border-radius:12px;padding:12px 24px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,0.06)}
+.stat-pill{background:#fff;border-radius:0;padding:12px 24px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 10px rgba(0,0,0,0.06)}
 .stat-pill .num{font-size:24px;font-weight:700}
-.stat-pill .lbl{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.5px}
-.stat-pill.blue .num{color:#0033A1}
-.stat-pill.red .num{color:#dc3545}
-.stat-pill.amber .num{color:#f59e0b}
-.stat-pill.green .num{color:#10b981}
+.stat-pill .lbl{font-size:12px;color:#97999B;text-transform:uppercase;letter-spacing:0.5px}
+.stat-pill.blue .num{color:#000048}
+.stat-pill.red .num{color:#B81F2D}
+.stat-pill.amber .num{color:#E9C71D}
+.stat-pill.green .num{color:#2DB81F}
 .cards{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;max-width:1100px;margin:0 auto;padding:0 20px 48px}
-.card{background:white;border-radius:16px;padding:0;width:330px;box-shadow:0 4px 24px rgba(0,51,161,0.08);transition:transform 0.25s,box-shadow 0.25s;cursor:pointer;text-decoration:none;color:inherit;overflow:hidden;border:1px solid #e8edf5}
-.card:hover{transform:translateY(-8px);box-shadow:0 12px 40px rgba(0,51,161,0.16)}
+.card{background:#fff;border-radius:0;padding:0;width:330px;box-shadow:0 4px 24px rgba(0,0,72,0.08);transition:transform 0.25s,box-shadow 0.25s;cursor:pointer;text-decoration:none;color:inherit;overflow:hidden;border:1px solid #E8E8E6}
+.card:hover{transform:translateY(-8px);box-shadow:0 12px 40px rgba(0,0,72,0.16)}
 .card-top{padding:28px 24px 20px;text-align:center}
-.card-icon{width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 16px}
-.card-icon.blue{background:#e8f0fe;color:#0033A1}
-.card-icon.purple{background:#f0e8fe;color:#6d28d9}
-.card-icon.teal{background:#e0f7f4;color:#0d9488}
-.card h2{font-size:18px;color:#0a1929;margin-bottom:8px;font-weight:700}
-.card p{color:#666;font-size:13px;line-height:1.55;padding:0 4px}
+.card-icon{width:64px;height:64px;border-radius:0.5em;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 16px}
+.card-icon.blue{background:rgba(47,120,196,0.12);color:#000048}
+.card-icon.purple{background:rgba(115,115,216,0.12);color:#2E308E}
+.card-icon.teal{background:rgba(6,199,204,0.12);color:#05819B}
+.card h2{font-size:18px;color:#000048;margin-bottom:8px;font-weight:700}
+.card p{color:#53565A;font-size:13px;line-height:1.55;padding:0 4px}
 .card-features{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:14px}
-.tag{background:#f0f4ff;color:#0033A1;font-size:10px;padding:4px 10px;border-radius:12px;font-weight:600}
-.tag.green{background:#ecfdf5;color:#059669}
-.tag.purple{background:#f5f0ff;color:#6d28d9}
-.card-bottom{background:#f8faff;padding:16px 24px;border-top:1px solid #edf0f7;text-align:center}
-.card-btn{display:inline-block;background:#0033A1;color:white;padding:10px 32px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;transition:background 0.2s,transform 0.15s}
-.card-btn:hover{background:#0050d0;transform:scale(1.03)}
-.card-btn.green-btn{background:#059669}
-.card-btn.green-btn:hover{background:#047857}
-.card-btn.purple-btn{background:#6d28d9}
-.card-btn.purple-btn:hover{background:#5b21b6}
-.footer{text-align:center;padding:20px;color:#999;font-size:12px}
+.tag{background:rgba(47,120,196,0.08);color:#000048;font-size:10px;padding:4px 10px;border-radius:999px;font-weight:600}
+.tag.green{background:rgba(45,184,31,0.1);color:#2DB81F}
+.tag.purple{background:rgba(115,115,216,0.1);color:#2E308E}
+.card-bottom{background:#F7F7F5;padding:16px 24px;border-top:1px solid #E8E8E6;text-align:center}
+.card-btn{display:inline-block;background:#26EFE9;color:#000048;padding:10px 32px;border-radius:999px;font-size:13px;font-weight:700;text-decoration:none;transition:background 0.2s,transform 0.15s}
+.card-btn:hover{background:#06C7CC;transform:scale(1.03)}
+.card-btn.green-btn{background:#26EFE9;color:#000048}
+.card-btn.green-btn:hover{background:#06C7CC}
+.card-btn.purple-btn{background:#26EFE9;color:#000048}
+.card-btn.purple-btn:hover{background:#06C7CC}
+.footer{text-align:center;padding:20px;color:#97999B;font-size:12px}
 </style></head><body>
 <div class="top-bar">
   <h1>HEDIS Care Gap Management</h1>
@@ -1806,7 +1923,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(135deg,#
 </div>
 
 <div class="cards">
-  <a class="card" href="http://localhost:3000" target="_blank">
+  <a class="card" href="http://localhost:5173" target="_blank">
     <div class="card-top">
       <div class="card-icon blue">&#9881;</div>
       <h2>Overall Dashboard</h2>
@@ -1885,37 +2002,37 @@ def _members_dashboard_html():
 <title>Members Dashboard - HEDIS Care Gap</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;padding:24px}
+body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;background:#F7F7F5;padding:24px}
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
-.header h1{color:#0033A1;font-size:24px}
-.header a{color:#0033A1;text-decoration:none;font-weight:600;font-size:14px}
+.header h1{color:#000048;font-size:24px}
+.header a{color:#000048;text-decoration:none;font-weight:600;font-size:14px}
 .stats{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
-.stat-card{background:white;border-radius:12px;padding:20px 24px;flex:1;min-width:180px;box-shadow:0 2px 12px rgba(0,0,0,0.06)}
-.stat-card .label{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:0.5px}
+.stat-card{background:#fff;border-radius:0;padding:20px 24px;flex:1;min-width:180px;box-shadow:0 2px 12px rgba(0,0,0,0.06)}
+.stat-card .label{color:#97999B;font-size:12px;text-transform:uppercase;letter-spacing:0.5px}
 .stat-card .value{font-size:28px;font-weight:700;margin-top:4px}
-.stat-card.critical .value{color:#dc3545}
-.stat-card.attention .value{color:#f59e0b}
-.stat-card.compliant .value{color:#10b981}
-.stat-card.total .value{color:#0033A1}
+.stat-card.critical .value{color:#B81F2D}
+.stat-card.attention .value{color:#E9C71D}
+.stat-card.compliant .value{color:#2DB81F}
+.stat-card.total .value{color:#000048}
 .search-bar{margin-bottom:16px}
-.search-bar input{width:100%;padding:12px 16px;border:1px solid #dce3f5;border-radius:8px;font-size:14px;outline:none}
-.search-bar input:focus{border-color:#0033A1;box-shadow:0 0 0 3px rgba(0,51,161,0.1)}
-table{width:100%;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06)}
-th{background:#0033A1;color:white;padding:12px 16px;text-align:left;font-size:13px;text-transform:uppercase;letter-spacing:0.5px}
-td{padding:12px 16px;border-bottom:1px solid #f0f0f0;font-size:14px}
-tr:hover td{background:#f8faff}
-.badge{display:inline-block;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600}
-.badge.critical{background:#fee2e2;color:#dc3545}
-.badge.attention{background:#fef3c7;color:#92400e}
-.badge.compliant{background:#d1fae5;color:#065f46}
-.member-link{color:#0033A1;text-decoration:none;font-weight:600}
+.search-bar input{width:100%;padding:12px 16px;border:1px solid #D0D0CE;border-radius:0.5em;font-size:14px;outline:none;background:#F7F7F5}
+.search-bar input:focus{border-color:#000048;box-shadow:0 0 0 3px rgba(0,0,72,0.1)}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:0;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06)}
+th{background:#000048;color:#fff;padding:12px 16px;text-align:left;font-size:13px;text-transform:uppercase;letter-spacing:0.5px}
+td{padding:12px 16px;border-bottom:1px solid #E8E8E6;font-size:14px;color:#000048}
+tr:hover td{background:#F7F7F5}
+.badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600}
+.badge.critical{background:rgba(184,31,45,0.08);color:#B81F2D}
+.badge.attention{background:rgba(233,199,29,0.12);color:#92400e}
+.badge.compliant{background:rgba(45,184,31,0.1);color:#2DB81F}
+.member-link{color:#2F78C4;text-decoration:none;font-weight:600}
 .member-link:hover{text-decoration:underline}
-.loading{text-align:center;padding:60px;color:#888}
+.loading{text-align:center;padding:60px;color:#97999B}
 </style></head><body>
 <div class="header">
   <h1>&#128202; Members Dashboard</h1>
   <a href="/api/v1/landing">&larr; Back to Home</a>
-  <a href="http://localhost:3000" target="_blank" style="margin-left:16px;background:#0033A1;color:white;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Open Overall Dashboard &rarr;</a>
+  <a href="http://localhost:5173" target="_blank" style="margin-left:16px;background:#26EFE9;color:#000048;padding:8px 20px;border-radius:999px;font-size:13px;font-weight:700;text-decoration:none">Open Overall Dashboard &rarr;</a>
 </div>
 <div class="stats" id="stats"><div class="loading">Loading stats...</div></div>
 <div class="search-bar"><input type="text" id="searchInput" placeholder="Search members by name, ID, or status..." oninput="filterMembers()"></div>
@@ -1948,13 +2065,13 @@ function renderMembers(members){
     else if(m.open_gaps>0){status='Needs Attention';cls='attention';}
     else{status='Compliant';cls='compliant';}
     return `<tr>
-      <td><a class="member-link" href="http://localhost:3000" target="_blank">${m.member_id}</a></td>
+      <td><a class="member-link" href="http://localhost:5173" target="_blank">${m.member_id}</a></td>
       <td><strong>${m.name||'N/A'}</strong></td>
       <td>${m.age||'N/A'}</td>
       <td>${m.gender||'N/A'}</td>
       <td>${m.pcp_name||'N/A'}</td>
-      <td style="font-weight:700;color:${m.open_gaps>0?'#dc3545':'#10b981'}">${m.open_gaps}</td>
-      <td style="color:#10b981;font-weight:600">${m.closed_gaps}</td>
+      <td style="font-weight:700;color:${m.open_gaps>0?'#B81F2D':'#2DB81F'}">${m.open_gaps}</td>
+      <td style="color:#2DB81F;font-weight:600">${m.closed_gaps}</td>
       <td><span class="badge ${cls}">${status}</span></td>
     </tr>`;
   }).join('');
@@ -1979,85 +2096,85 @@ def _bulk_upload_html():
 <title>Bulk Upload Members - HEDIS Care Gap</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;padding:24px}
+body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;background:#F7F7F5;padding:24px}
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
-.header h1{color:#0033A1;font-size:24px}
-.header a{color:#0033A1;text-decoration:none;font-weight:600;font-size:14px}
-.upload-area{background:white;border:2px dashed #0033A1;border-radius:16px;padding:60px 40px;text-align:center;margin-bottom:24px;transition:background 0.2s}
-.upload-area.dragover{background:#e8f0fe}
-.upload-area h2{color:#0033A1;margin-bottom:8px}
-.upload-area p{color:#888;margin-bottom:20px;font-size:14px}
+.header h1{color:#000048;font-size:24px}
+.header a{color:#000048;text-decoration:none;font-weight:600;font-size:14px}
+.upload-area{background:#fff;border:2px dashed #000048;border-radius:0;padding:60px 40px;text-align:center;margin-bottom:24px;transition:background 0.2s}
+.upload-area.dragover{background:rgba(47,120,196,0.06)}
+.upload-area h2{color:#000048;margin-bottom:8px}
+.upload-area p{color:#53565A;margin-bottom:20px;font-size:14px}
 .upload-area input[type=file]{display:none}
-.upload-btn{display:inline-block;background:#0033A1;color:white;padding:14px 36px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;border:none;transition:background 0.2s}
-.upload-btn:hover{background:#0050d0}
-.upload-btn:disabled{background:#999;cursor:not-allowed}
-.template-link{display:inline-block;margin-top:16px;color:#0033A1;font-size:13px;text-decoration:underline;cursor:pointer}
-.progress-bar{display:none;margin:20px auto;width:80%;height:6px;background:#e0e0e0;border-radius:3px;overflow:hidden}
-.progress-bar .fill{height:100%;background:#0033A1;border-radius:3px;transition:width 0.5s}
-.status-msg{text-align:center;margin:12px 0;font-size:14px;color:#555}
+.upload-btn{display:inline-block;background:#26EFE9;color:#000048;padding:14px 36px;border-radius:999px;font-size:15px;font-weight:700;cursor:pointer;border:none;transition:background 0.2s}
+.upload-btn:hover{background:#06C7CC}
+.upload-btn:disabled{background:#97999B;color:#fff;cursor:not-allowed}
+.template-link{display:inline-block;margin-top:16px;color:#2F78C4;font-size:13px;text-decoration:underline;cursor:pointer}
+.progress-bar{display:none;margin:20px auto;width:80%;height:6px;background:#E8E8E6;border-radius:3px;overflow:hidden}
+.progress-bar .fill{height:100%;background:#000048;border-radius:3px;transition:width 0.5s}
+.status-msg{text-align:center;margin:12px 0;font-size:14px;color:#53565A}
 
 /* Preview popup (modal) */
-.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,72,0.5);z-index:1000;align-items:center;justify-content:center}
 .modal-overlay.show{display:flex}
-.modal{background:white;border-radius:16px;width:95%;max-width:1200px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 48px rgba(0,0,0,0.2)}
-.modal-header{background:#0033A1;color:white;padding:20px 28px;display:flex;justify-content:space-between;align-items:center}
+.modal{background:#fff;border-radius:0;width:95%;max-width:1200px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 48px rgba(0,0,72,0.2)}
+.modal-header{background:#000048;color:#fff;padding:20px 28px;display:flex;justify-content:space-between;align-items:center}
 .modal-header h2{font-size:20px}
-.modal-close{background:none;border:none;color:white;font-size:28px;cursor:pointer}
+.modal-close{background:none;border:none;color:#fff;font-size:28px;cursor:pointer}
 .modal-body{overflow-y:auto;padding:24px 28px;flex:1}
-.modal-footer{padding:16px 28px;border-top:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;background:#f8f9fa}
+.modal-footer{padding:16px 28px;border-top:1px solid #E8E8E6;display:flex;justify-content:space-between;align-items:center;background:#F7F7F5}
 
 .summary-bar{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
-.summary-item{background:#f0f4ff;padding:12px 20px;border-radius:10px;text-align:center;min-width:140px}
-.summary-item .num{font-size:24px;font-weight:700;color:#0033A1}
-.summary-item .lbl{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
+.summary-item{background:rgba(47,120,196,0.06);padding:12px 20px;border-radius:0;text-align:center;min-width:140px}
+.summary-item .num{font-size:24px;font-weight:700;color:#000048}
+.summary-item .lbl{font-size:11px;color:#53565A;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
 
 .select-all-row{margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.select-all-row input{width:18px;height:18px;cursor:pointer}
-.select-all-row label{font-size:14px;font-weight:600;color:#333;cursor:pointer}
+.select-all-row input{width:18px;height:18px;cursor:pointer;accent-color:#2F78C4}
+.select-all-row label{font-size:14px;font-weight:600;color:#000048;cursor:pointer}
 
-.member-card{background:#fafbff;border:1px solid #dce3f5;border-radius:12px;margin-bottom:16px;overflow:hidden;transition:box-shadow 0.2s}
-.member-card:hover{box-shadow:0 2px 12px rgba(0,51,161,0.08)}
+.member-card{background:#fff;border:1px solid #E8E8E6;border-radius:0;margin-bottom:16px;overflow:hidden;transition:box-shadow 0.2s}
+.member-card:hover{box-shadow:0 2px 12px rgba(0,0,72,0.08)}
 .member-card-header{display:flex;align-items:center;padding:14px 20px;gap:12px;cursor:pointer}
-.member-card-header input[type=checkbox]{width:18px;height:18px;cursor:pointer;flex-shrink:0}
+.member-card-header input[type=checkbox]{width:18px;height:18px;cursor:pointer;flex-shrink:0;accent-color:#2F78C4}
 .member-card-header .info{flex:1}
-.member-card-header .info .name{font-weight:700;color:#1a1a2e;font-size:15px}
-.member-card-header .info .meta{color:#888;font-size:12px;margin-top:2px}
-.member-card-header .gap-count{font-weight:700;font-size:18px;padding:6px 14px;border-radius:8px}
-.member-card-header .gap-count.has-gaps{background:#fee2e2;color:#dc3545}
-.member-card-header .gap-count.no-gaps{background:#d1fae5;color:#065f46}
+.member-card-header .info .name{font-weight:700;color:#000048;font-size:15px}
+.member-card-header .info .meta{color:#53565A;font-size:12px;margin-top:2px}
+.member-card-header .gap-count{font-weight:700;font-size:18px;padding:6px 14px;border-radius:0}
+.member-card-header .gap-count.has-gaps{background:rgba(184,31,45,0.08);color:#B81F2D}
+.member-card-header .gap-count.no-gaps{background:rgba(45,184,31,0.1);color:#2DB81F}
 .member-card-body{padding:0 20px 14px 50px;display:none}
 .member-card-body.show{display:block}
 .gap-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
-.gap-table th{background:#e8f0fe;color:#0033A1;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase}
-.gap-table td{padding:8px 10px;border-bottom:1px solid #f0f0f0}
+.gap-table th{background:rgba(47,120,196,0.08);color:#000048;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase}
+.gap-table td{padding:8px 10px;border-bottom:1px solid #E8E8E6;color:#000048}
 
-.approve-btn{background:#0033A1;color:white;padding:12px 36px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;border:none;transition:background 0.2s}
-.approve-btn:hover{background:#0050d0}
-.approve-btn:disabled{background:#999;cursor:not-allowed}
-.cancel-btn{background:#e0e0e0;color:#333;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none}
-.cancel-btn:hover{background:#d0d0d0}
-.selected-count{font-size:14px;color:#555}
+.approve-btn{background:#26EFE9;color:#000048;padding:12px 36px;border-radius:999px;font-size:15px;font-weight:700;cursor:pointer;border:none;transition:background 0.2s}
+.approve-btn:hover{background:#06C7CC}
+.approve-btn:disabled{background:#97999B;color:#fff;cursor:not-allowed}
+.cancel-btn{background:#E8E8E6;color:#000048;padding:12px 28px;border-radius:999px;font-size:14px;font-weight:600;cursor:pointer;border:none}
+.cancel-btn:hover{background:#D0D0CE}
+.selected-count{font-size:14px;color:#53565A}
 
 /* Processing overlay */
-.processing-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:2000;align-items:center;justify-content:center}
+.processing-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,72,0.6);z-index:2000;align-items:center;justify-content:center}
 .processing-overlay.show{display:flex}
-.processing-box{background:white;border-radius:16px;padding:48px;text-align:center;max-width:500px}
-.processing-box h2{color:#0033A1;margin-bottom:12px}
-.processing-box p{color:#555;font-size:14px;margin-bottom:24px}
-.spinner{width:48px;height:48px;border:4px solid #e0e0e0;border-top:4px solid #0033A1;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
+.processing-box{background:#fff;border-radius:0;padding:48px;text-align:center;max-width:500px}
+.processing-box h2{color:#000048;margin-bottom:12px}
+.processing-box p{color:#53565A;font-size:14px;margin-bottom:24px}
+.spinner{width:48px;height:48px;border:4px solid #E8E8E6;border-top:4px solid #000048;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* Results */
 .results-area{display:none;margin-top:24px}
 .results-area.show{display:block}
-.result-card{background:white;border-radius:12px;padding:16px 20px;margin-bottom:12px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.result-card{background:#fff;border-radius:0;padding:16px 20px;margin-bottom:12px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
 .result-card .icon{font-size:28px}
 .result-card .info{flex:1}
-.result-card .info .name{font-weight:700;font-size:15px}
-.result-card .info .detail{color:#888;font-size:12px;margin-top:2px}
-.result-card .status-badge{padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600}
-.result-card .status-badge.success{background:#d1fae5;color:#065f46}
-.result-card .status-badge.error{background:#fee2e2;color:#dc3545}
+.result-card .info .name{font-weight:700;font-size:15px;color:#000048}
+.result-card .info .detail{color:#53565A;font-size:12px;margin-top:2px}
+.result-card .status-badge{padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600}
+.result-card .status-badge.success{background:rgba(45,184,31,0.1);color:#2DB81F}
+.result-card .status-badge.error{background:rgba(184,31,45,0.08);color:#B81F2D}
 </style></head><body>
 <div class="header">
   <h1>&#128228; Bulk Upload Members</h1>
@@ -2105,11 +2222,11 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;padding:24px}
 
 <!-- Results Area -->
 <div class="results-area" id="resultsArea">
-  <h2 style="color:#0033A1;margin-bottom:16px">&#9989; Processing Complete</h2>
+  <h2 style="color:#000048;margin-bottom:16px">&#9989; Processing Complete</h2>
   <div id="resultsContainer"></div>
   <div style="text-align:center;margin-top:24px">
     <button class="upload-btn" onclick="location.reload()">Upload Another File</button>
-    <a href="/api/v1/members/dashboard-page" style="margin-left:16px;color:#0033A1;font-weight:600;text-decoration:none">View Members Dashboard &rarr;</a>
+    <a href="/api/v1/members/dashboard-page" style="margin-left:16px;color:#000048;font-weight:600;text-decoration:none">View Members Dashboard &rarr;</a>
   </div>
 </div>
 

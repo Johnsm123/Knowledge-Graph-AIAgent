@@ -1,0 +1,177 @@
+/* ══════════════════════════════════════════════════════════════
+   Login.css — Cognizant Brand
+   ══════════════════════════════════════════════════════════════ */
+
+.login-page {
+  min-height: 100vh;
+  background: var(--cog-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.login-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 440px;
+}
+
+.login-logo {
+  margin-bottom: 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-logo img {
+  height: 36px;
+  filter: brightness(0) invert(1);
+}
+
+.login-logo h1 {
+  color: var(--cog-white);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.login-logo p {
+  color: var(--cog-accent3-light);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.login-card {
+  background: var(--cog-white);
+  border-radius: 0;
+  width: 100%;
+  padding: 40px 36px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+}
+
+.login-card h2 {
+  color: var(--cog-primary);
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.login-card .subtitle {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 28px;
+}
+
+.login-form-group {
+  margin-bottom: 20px;
+}
+
+.login-form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cog-primary);
+  margin-bottom: 6px;
+}
+
+.login-form-group input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--cog-gray-light);
+  border-radius: var(--radius-input);
+  font-size: 14px;
+  background: var(--cog-gray-lightest);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  color: var(--cog-primary);
+}
+
+.login-form-group input:focus {
+  border-color: var(--cog-primary);
+  box-shadow: 0 0 0 3px rgba(0, 0, 72, 0.1);
+  background: var(--cog-white);
+}
+
+.login-form-group input::placeholder {
+  color: var(--cog-gray-medium);
+}
+
+.login-remember-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.login-remember-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.login-remember-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--cog-accent2-dark);
+  cursor: pointer;
+}
+
+.login-remember-row a {
+  font-size: 13px;
+  color: var(--cog-accent2-dark);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.login-remember-row a:hover {
+  text-decoration: underline;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 14px;
+  background: var(--cog-accent3-light);
+  color: var(--cog-primary);
+  border: none;
+  border-radius: var(--radius-button);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.login-btn:hover {
+  background: var(--cog-accent3-medium);
+  transform: translateY(-1px);
+}
+
+.login-btn:active {
+  transform: translateY(0);
+}
+
+.login-error {
+  background: rgba(184, 31, 45, 0.08);
+  color: var(--cog-red);
+  padding: 10px 14px;
+  border-radius: var(--radius-input);
+  font-size: 13px;
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 24px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+}
