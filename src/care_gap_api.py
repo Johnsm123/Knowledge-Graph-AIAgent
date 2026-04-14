@@ -510,6 +510,28 @@ def book_appointment():
                  "mid": measure_id, "cgid": care_gap_id}
             )
 
+        # ── Send WhatsApp appointment confirmation ─────────────────
+        whatsapp_sent = False
+        member_phone = (appt or {}).get("member_phone", "")
+        if member_phone:
+            try:
+                from src.whatsapp_service import send_appointment_confirmation
+                wa_result = send_appointment_confirmation(
+                    to_phone=member_phone,
+                    member_name=member_name,
+                    measure_name=measure_name,
+                    appointment_date=friendly_date,
+                    appointment_time=friendly_time,
+                    appointment_id=appointment_id,
+                    lab_location=lab_info["lab_location"],
+                    lab_specialist=lab_info["lab_specialist"],
+                )
+                whatsapp_sent = wa_result.get("success", False)
+                if whatsapp_sent:
+                    logger.info(f"WhatsApp appointment confirmation sent for {appointment_id}")
+            except Exception as wa_err:
+                logger.warning(f"WhatsApp send failed for {appointment_id}: {wa_err}")
+
         return jsonify({
             "status": "success",
             "appointment_id": appointment_id,
@@ -524,6 +546,7 @@ def book_appointment():
             "appointment_time": appt_time,
             "member_email": member_email,
             "email_sent": bool(member_email),
+            "whatsapp_sent": whatsapp_sent,
         })
     except Exception as e:
         logger.error(f"book_appointment error: {e}", exc_info=True)
@@ -1689,12 +1712,38 @@ def bulk_process_members():
                 except Exception as email_err:
                     logger.warning(f"Bulk email failed for {mid}: {email_err}")
 
+            # 3. Send WhatsApp notification
+            whatsapp_sent = False
+            try:
+                from src.care_gap_neo4j import get_member_profile as _get_prof_wa
+                from src.care_gap_neo4j import get_member_open_gaps as _get_gaps_wa
+                _wa_prof = _get_prof_wa(mid) or {}
+                mphone = _wa_prof.get("phone", "")
+                logger.info(f"[BULK-WA] {mid} phone from profile: '{mphone}'")
+                if mphone:
+                    from src.whatsapp_service import send_care_gap_report
+                    _wa_gaps = _get_gaps_wa(mid)
+                    _wa_portal = get_portal_url(mid)
+                    wa_result = send_care_gap_report(
+                        to_phone=mphone,
+                        member_name=mname,
+                        gaps=_wa_gaps,
+                        portal_url=_wa_portal,
+                    )
+                    whatsapp_sent = wa_result.get("success", False)
+                    logger.info(f"[BULK-WA] {mid} result: {wa_result}")
+                else:
+                    logger.warning(f"[BULK-WA] {mid} — no phone on file, skipping WhatsApp")
+            except Exception as wa_err:
+                logger.warning(f"Bulk WhatsApp failed for {mid}: {wa_err}", exc_info=True)
+
             with lock:
                 processing_results[mid] = {
                     "member_id": mid,
                     "name": mname,
                     "status": "completed",
                     "email_sent": email_sent,
+                    "whatsapp_sent": whatsapp_sent,
                     "analysis_summary": str(analysis.get("summary", ""))[:500] if isinstance(analysis, dict) else str(analysis)[:500],
                 }
         except Exception as exc:

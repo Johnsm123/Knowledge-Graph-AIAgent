@@ -187,7 +187,17 @@ class BedrockChatCompletionClient(ChatCompletionClient):
         self._actual_usage = usage
 
         stop_reason = response.get("stopReason", "end_turn")
-        finish = "stop" if stop_reason in ("end_turn", "stop_sequence") else stop_reason
+        # Map Bedrock stopReason → AutoGen CreateResult finish_reason
+        # Valid values: 'stop', 'length', 'function_calls', 'content_filter', 'unknown'
+        _FINISH_MAP = {
+            "end_turn": "stop",
+            "stop_sequence": "stop",
+            "max_tokens": "length",
+            "tool_use": "function_calls",
+            "content_filtered": "content_filter",
+            "guardrail_intervened": "content_filter",
+        }
+        finish = _FINISH_MAP.get(stop_reason, "unknown")
 
         return CreateResult(
             finish_reason=finish,

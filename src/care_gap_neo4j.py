@@ -602,7 +602,8 @@ def get_member_profile(member_id: str):
                m.insurance_type AS insurance_type,
                m.race AS race,
                m.language AS language,
-               m.email AS email
+               m.email AS email,
+               m.phone AS phone
     """, {"member_id": member_id})
     return results[0] if results else {}
 
@@ -859,6 +860,7 @@ def get_appointment(appointment_id: str):
                a.status           AS status,
                m.name             AS member_name,
                m.email            AS member_email,
+               m.phone            AS member_phone,
                m.insurance_type   AS insurance_type,
                b.plan_id          AS plan_id,
                b.copay            AS copay,

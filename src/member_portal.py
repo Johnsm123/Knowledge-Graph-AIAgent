@@ -1223,10 +1223,41 @@ def auto_process_member(member_id):
                     yield _sse({"step": "email", "status": "error",
                                 "message": f"Email failed: {email_err}"})
 
+            # Step 4: Send WhatsApp notification
+            whatsapp_sent = False
+            phone = profile.get("phone", "")
+            if not phone:
+                yield _sse({"step": "whatsapp", "status": "skipped",
+                            "message": "No phone on file — skipping WhatsApp."})
+            else:
+                yield _sse({"step": "whatsapp", "status": "running",
+                            "message": f"Sending WhatsApp to {phone}..."})
+                try:
+                    from src.whatsapp_service import send_care_gap_report
+                    from src.member_portal import get_portal_url as _gpu
+                    wa_result = send_care_gap_report(
+                        to_phone=phone,
+                        member_name=name,
+                        gaps=gaps,
+                        portal_url=_gpu(member_id),
+                    )
+                    whatsapp_sent = wa_result.get("success", False)
+                    if whatsapp_sent:
+                        yield _sse({"step": "whatsapp", "status": "done",
+                                    "message": f"WhatsApp sent to {phone}"})
+                    else:
+                        yield _sse({"step": "whatsapp", "status": "error",
+                                    "message": f"WhatsApp failed: {wa_result.get('error', 'unknown')}"})
+                except Exception as wa_err:
+                    logger.error(f"WhatsApp send failed: {wa_err}", exc_info=True)
+                    yield _sse({"step": "whatsapp", "status": "error",
+                                "message": f"WhatsApp failed: {wa_err}"})
+
             yield _sse({"step": "complete", "status": "success",
                         "message": f"Auto-process complete for {name}",
                         "gaps_count": len(gaps),
-                        "email_sent": email_actually_sent})
+                        "email_sent": email_actually_sent,
+                        "whatsapp_sent": whatsapp_sent})
 
         except Exception as exc:
             logger.exception("auto_process_member error")
