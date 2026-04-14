@@ -785,9 +785,9 @@ function MemberDetails({ member, onBack }) {
                       </div>
                     )}
 
-                    {/* Agent panels — appear as each agent finishes */}
+                    {/* Agent panels — only show recommendation agent output */}
                     <div className="agent-streams-container">
-                      {AGENT_ORDER.map(name => renderAgentPanel(name))}
+                      {renderAgentPanel('recommendation_agent')}
                     </div>
 
                     {/* Gap + compliant tables once we have metadata */}

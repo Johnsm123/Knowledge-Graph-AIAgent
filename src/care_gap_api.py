@@ -722,6 +722,35 @@ def add_member():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+@app.route("/api/v1/members/<member_id>", methods=["DELETE"])
+def delete_member(member_id):
+    """Delete a member and all their relationships from Neo4j."""
+    try:
+        kg = get_knowledge_graph()
+        # Check member exists
+        exists = kg.run_query(
+            "MATCH (m:Member {member_id: $mid}) RETURN m.name as name",
+            {"mid": member_id},
+        )
+        if not exists:
+            return jsonify({"status": "error", "error": f"Member {member_id} not found"}), 404
+
+        member_name = exists[0]["name"]
+
+        # Delete the member node and ALL relationships (DETACH DELETE)
+        kg.run_query(
+            "MATCH (m:Member {member_id: $mid}) DETACH DELETE m",
+            {"mid": member_id},
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": f"Member {member_name} ({member_id}) deleted successfully",
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 @app.route("/api/v1/providers/list", methods=["GET"])
 def get_providers():
     """Get all providers for dropdown selection."""

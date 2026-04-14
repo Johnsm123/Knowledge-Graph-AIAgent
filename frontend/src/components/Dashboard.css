@@ -271,6 +271,15 @@
 }
 .tile-view-details:hover { color: var(--cog-white); background: var(--cog-primary); }
 
+/* Delete member button */
+.btn-delete-member {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--radius-button); border: none;
+  background: transparent; color: var(--cog-gray-medium); cursor: pointer;
+  transition: all .2s; flex-shrink: 0;
+}
+.btn-delete-member:hover { background: rgba(184,31,45,0.1); color: var(--cog-red); }
+
 /* Auto Process button — teal accent */
 .btn-auto-process {
   display: inline-flex; align-items: center; gap: 5px;
