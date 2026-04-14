@@ -14,11 +14,11 @@ logger = logging.getLogger(__name__)
 class MedicalKnowledgeGraph:
     """Manages connections to Neo4j Aura via Bolt protocol."""
 
-    def __init__(self):
+    def __init__(self, uri=None, username=None, password=None):
         try:
             self.driver = GraphDatabase.driver(
-                settings.neo4j_uri,
-                auth=(settings.neo4j_username, settings.neo4j_password)
+                uri or settings.neo4j_uri,
+                auth=(username or settings.neo4j_username, password or settings.neo4j_password)
             )
             self.driver.verify_connectivity()
             logger.info("Successfully connected to Neo4j Aura via Bolt")
@@ -52,8 +52,9 @@ class MedicalKnowledgeGraph:
             return False
 
 
-# Global singleton
+# Global singletons
 _kg = None
+_ref_kg = None
 
 
 def get_knowledge_graph() -> MedicalKnowledgeGraph:
@@ -62,3 +63,17 @@ def get_knowledge_graph() -> MedicalKnowledgeGraph:
     if _kg is None:
         _kg = MedicalKnowledgeGraph()
     return _kg
+
+
+def get_reference_graph() -> MedicalKnowledgeGraph:
+    """Get or create the singleton reference database connection."""
+    global _ref_kg
+    if _ref_kg is None:
+        if not settings.neo4j_ref_uri:
+            raise RuntimeError("Reference DB not configured (NEO4J_REF_* env vars)")
+        _ref_kg = MedicalKnowledgeGraph(
+            uri=settings.neo4j_ref_uri,
+            username=settings.neo4j_ref_username,
+            password=settings.neo4j_ref_password,
+        )
+    return _ref_kg

@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     azure_communication_connection_string: str = ""
     azure_communication_sender: str = ""
 
+    # Neo4j Reference Database Configuration
+    neo4j_ref_uri: str = ""
+    neo4j_ref_username: str = ""
+    neo4j_ref_password: str = ""
+    neo4j_ref_database: str = "neo4j"
+
     # Google Maps / Places API
     google_maps_api_key: str = ""
 

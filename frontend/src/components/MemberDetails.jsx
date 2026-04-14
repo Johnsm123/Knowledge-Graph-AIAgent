@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import axios from 'axios';
 import MemberComparison from './MemberComparison';
 import EmailPanel from './EmailPanel';
+import Neo4jGraph from './Neo4jGraph';
 import './MemberDetails.css';
 
 const API_BASE = 'http://localhost:5001/api/v1';
@@ -215,8 +216,12 @@ function MemberDetails({ member, onBack }) {
   const [completeError, setCompleteError]     = useState('');
   const [forceClosing, setForceClosing]       = useState(false);
 
+  // Persona graph state (reference DB)
+  const [personaGraph, setPersonaGraph]       = useState(null);
+  const [personaLoading, setPersonaLoading]   = useState(false);
+
   useEffect(() => {
-    if (member) fetchMemberDetails();
+    if (member) { fetchMemberDetails(); fetchPersonaGraph(); }
     return () => {
       // Clean up any open SSE connection when unmounting
       if (eventSourceRef.current) {
@@ -294,6 +299,19 @@ function MemberDetails({ member, onBack }) {
       console.error('Error fetching member details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Fetch persona graph from reference DB ──────────────────────────────────
+  const fetchPersonaGraph = async () => {
+    try {
+      setPersonaLoading(true);
+      const res = await axios.get(`${API_BASE}/reference/member/${member.member_id}/personas`);
+      setPersonaGraph(res.data);
+    } catch (err) {
+      console.error('Persona graph fetch error:', err);
+    } finally {
+      setPersonaLoading(false);
     }
   };
 
@@ -1135,6 +1153,63 @@ function MemberDetails({ member, onBack }) {
             appointments={details?.appointments || []}
             member={member}
           />
+        )}
+      </div>
+
+      {/* ── PERSONA GRAPH — Reference DB ────────────────────────────────── */}
+      <div className="persona-graph-section">
+        <h4>
+          <GitCompare size={18} />
+          Neo4j Reference — Persona Relationships
+        </h4>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+          Graph projection from the reference database showing how this member connects to Personas, Measures, and Providers.
+        </p>
+
+        {personaLoading ? (
+          <div className="graph-loading">
+            <Loader size={16} className="spinning" /> Loading persona graph…
+          </div>
+        ) : personaGraph && personaGraph.nodes?.length > 0 ? (
+          <>
+            <Neo4jGraph
+              nodes={personaGraph.nodes}
+              edges={personaGraph.edges}
+              width={800}
+              height={420}
+            />
+            {/* Persona detail cards */}
+            {personaGraph.nodes.filter(n => n.label === 'Persona').length > 0 && (
+              <div className="persona-cards">
+                {personaGraph.nodes
+                  .filter(n => n.label === 'Persona')
+                  .map(p => (
+                    <div key={p.id} className="persona-card">
+                      <div className="persona-card-header">
+                        <span className="persona-card-id">{p.id}</span>
+                        <span className={`persona-card-status ${(p.care_gap_status || '').toLowerCase().replace(/\s+/g, '_')}`}>
+                          {p.care_gap_status}
+                        </span>
+                      </div>
+                      {p.description && <p className="persona-card-desc">{p.description}</p>}
+                      <div className="persona-card-meta">
+                        {p.age_band && <span><strong>Age:</strong> {p.age_band}</span>}
+                        {p.gender && <span><strong>Gender:</strong> {p.gender}</span>}
+                      </div>
+                      {p.reasoning && (
+                        <p className="persona-card-desc" style={{ marginTop: 6, fontStyle: 'italic', fontSize: 11 }}>
+                          {p.reasoning}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ padding: 16, fontSize: 13, color: 'var(--text-secondary)' }}>
+            No matching personas found in the reference database for this member.
+          </div>
         )}
       </div>
 

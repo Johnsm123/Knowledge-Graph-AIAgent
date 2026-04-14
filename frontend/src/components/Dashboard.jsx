@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import AddMember from './AddMember';
+import Neo4jGraph from './Neo4jGraph';
 import './Dashboard.css';
 
 const API_BASE = 'http://localhost:5001/api/v1';
@@ -100,8 +101,12 @@ function Dashboard({ onMemberSelect }) {
   const [showAddMember, setShowAddMember] = useState(false);
   // Auto-process state: { [member_id]: { status, message, step } }
   const [processing, setProcessing]       = useState({});
+  // Reference graph state
+  const [refGraph, setRefGraph]           = useState(null);
+  const [refGraphLoading, setRefGraphLoading] = useState(false);
+  const [refGraphFilter, setRefGraphFilter]   = useState('all');
 
-  useEffect(() => { fetchDashboardData(); }, []);
+  useEffect(() => { fetchDashboardData(); fetchReferenceGraph(); }, []);
   useEffect(() => { setPage(1); }, [category, search, sortBy]);
 
   const fetchDashboardData = async () => {
@@ -119,6 +124,39 @@ function Dashboard({ onMemberSelect }) {
       setLoading(false);
     }
   };
+
+  const fetchReferenceGraph = async () => {
+    try {
+      setRefGraphLoading(true);
+      const res = await axios.get(`${API_BASE}/reference/graph`);
+      setRefGraph(res.data);
+    } catch (err) {
+      console.error('Reference graph fetch error:', err);
+    } finally {
+      setRefGraphLoading(false);
+    }
+  };
+
+  // Filter reference graph nodes/edges by label
+  const filteredRefGraph = (() => {
+    if (!refGraph) return null;
+    if (refGraphFilter === 'all') return refGraph;
+    // Show selected label + connected nodes
+    const selectedNodes = new Set();
+    refGraph.nodes.forEach(n => {
+      if (n.label === refGraphFilter) selectedNodes.add(n.id);
+    });
+    // Add connected nodes via edges
+    const connectedNodes = new Set(selectedNodes);
+    refGraph.edges.forEach(e => {
+      if (selectedNodes.has(e.source)) connectedNodes.add(e.target);
+      if (selectedNodes.has(e.target)) connectedNodes.add(e.source);
+    });
+    return {
+      nodes: refGraph.nodes.filter(n => connectedNodes.has(n.id)),
+      edges: refGraph.edges.filter(e => connectedNodes.has(e.source) && connectedNodes.has(e.target)),
+    };
+  })();
 
   // ── Auto-process handler (SSE) ──────────────────────────────────────────
   const handleAutoProcess = (e, memberId) => {
@@ -330,6 +368,46 @@ function Dashboard({ onMemberSelect }) {
           </div>
         </div>
       )}
+
+      {/* ── Reference Knowledge Graph Visualization ── */}
+      <div className="reference-graph-section">
+        <div className="section-header">
+          <h2><Activity size={20} className="graph-icon" /> Neo4j Knowledge Graph — Reference DB</h2>
+        </div>
+        <p className="section-subtitle">
+          Persona relationship graph from the reference database — showing how Personas, Measures, Members, Providers, and Care Gaps connect in Neo4j.
+        </p>
+
+        {/* Filter pills */}
+        <div className="graph-filters">
+          {['all', 'Persona', 'Member', 'Measure', 'Provider', 'CareGap'].map(f => (
+            <button
+              key={f}
+              className={`graph-filter-pill ${refGraphFilter === f ? 'active' : ''}`}
+              onClick={() => setRefGraphFilter(f)}
+            >
+              {f === 'all' ? 'All Nodes' : f === 'CareGap' ? 'Care Gaps' : f + 's'}
+            </button>
+          ))}
+        </div>
+
+        {refGraphLoading ? (
+          <div className="graph-loading">
+            <Loader size={18} className="spinning" /> Loading reference graph…
+          </div>
+        ) : filteredRefGraph && filteredRefGraph.nodes.length > 0 ? (
+          <Neo4jGraph
+            nodes={filteredRefGraph.nodes}
+            edges={filteredRefGraph.edges}
+            width={1100}
+            height={550}
+          />
+        ) : (
+          <div className="graph-error">
+            No reference graph data available. Ensure the reference database is configured.
+          </div>
+        )}
+      </div>
 
       {/* ── Members panel ── */}
       <div className="members-panel">

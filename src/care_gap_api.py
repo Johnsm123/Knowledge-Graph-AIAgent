@@ -12,7 +12,7 @@ from src.care_gap_neo4j import (
     get_member_open_gaps, get_member_profile, get_measure_comprehensive,
     get_member_claims_cpt_codes, check_member_exclusions
 )
-from src.neo4j_connection import get_knowledge_graph
+from src.neo4j_connection import get_knowledge_graph, get_reference_graph
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
@@ -2431,6 +2431,223 @@ def download_bulk_template():
                          download_name="bulk_upload_template.xlsx",
                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     return jsonify({"error": "Template file not found"}), 404
+
+
+# ── Reference DB — Persona Graph Endpoints ───────────────────────────────────
+
+@app.route("/api/v1/reference/graph", methods=["GET"])
+def reference_graph():
+    """Return nodes + edges from the reference DB for Neo4j-style visualization."""
+    try:
+        ref = get_reference_graph()
+        nodes = []
+        edges = []
+        seen = set()
+
+        def add_node(n):
+            if n and n.get("id") and n["id"] not in seen:
+                seen.add(n["id"])
+                nodes.append(n)
+
+        # Measures
+        measures = ref.run_query("MATCH (m:Measure) RETURN m")
+        for row in measures:
+            m = row["m"]
+            add_node({"id": m["measure_id"], "label": "Measure",
+                       "name": m.get("name", m["measure_id"]), "measure_id": m["measure_id"]})
+
+        # Sample personas — 3 per status to keep the graph readable
+        personas = ref.run_query("""
+            MATCH (p:Persona)-[:BELONGS_TO_MEASURE]->(m:Measure)
+            WITH p.care_gap_status AS status, collect(p)[0..3] AS sample, m
+            UNWIND sample AS p
+            RETURN p.persona_id AS pid, p.description AS description,
+                   p.care_gap_status AS care_gap_status, p.age_band_label AS age_band,
+                   p.gender_criteria_label AS gender, p.measure AS measure,
+                   p.llm_reasoning AS reasoning, m.measure_id AS measure_id
+        """)
+        for row in personas:
+            add_node({"id": row["pid"], "label": "Persona", "name": row["pid"],
+                       "description": row["description"], "care_gap_status": row["care_gap_status"],
+                       "age_band": row["age_band"], "gender": row["gender"],
+                       "measure": row["measure"], "reasoning": row["reasoning"]})
+            edges.append({"source": row["pid"], "target": row["measure_id"], "type": "BELONGS_TO_MEASURE"})
+
+        # Members (limit to 8 for overview)
+        members = ref.run_query("""
+            MATCH (mem:Member)
+            WITH mem LIMIT 8
+            OPTIONAL MATCH (mem)-[:HAS_PCP]->(prov:Provider)
+            OPTIONAL MATCH (mem)-[:HAS_CARE_GAP]->(cg:CareGap)
+            OPTIONAL MATCH (cg)-[:FOR_MEASURE]->(meas:Measure)
+            RETURN mem {.member_id, .name, .gender, .age_years} AS member,
+                   prov {.name, .specialty} AS provider,
+                   collect(DISTINCT cg {.gap_id, .status, .measure}) AS care_gaps,
+                   collect(DISTINCT meas.measure_id) AS gap_measures
+        """)
+        for row in members:
+            mem = row["member"]
+            add_node({"id": mem["member_id"], "label": "Member", "name": mem["name"],
+                       "gender": mem["gender"], "age": mem["age_years"], "member_id": mem["member_id"]})
+
+            prov = row.get("provider")
+            if prov and prov.get("name"):
+                add_node({"id": prov["name"], "label": "Provider",
+                           "name": prov["name"], "specialty": prov.get("specialty")})
+                edges.append({"source": mem["member_id"], "target": prov["name"], "type": "HAS_PCP"})
+
+            for cg in (row.get("care_gaps") or []):
+                if cg and cg.get("gap_id"):
+                    add_node({"id": cg["gap_id"], "label": "CareGap", "name": cg["gap_id"],
+                               "status": cg["status"], "measure": cg.get("measure")})
+                    edges.append({"source": mem["member_id"], "target": cg["gap_id"], "type": "HAS_CARE_GAP"})
+
+            for mid in (row.get("gap_measures") or []):
+                if mid:
+                    for cg in (row.get("care_gaps") or []):
+                        if cg and cg.get("gap_id"):
+                            edges.append({"source": cg["gap_id"], "target": mid, "type": "FOR_MEASURE"})
+
+        # Filter out duplicate/null edges
+        unique_edges = []
+        edge_set = set()
+        for e in edges:
+            key = (e["source"], e["target"], e["type"])
+            if key not in edge_set:
+                edge_set.add(key)
+                unique_edges.append(e)
+
+        return jsonify({"nodes": nodes, "edges": unique_edges})
+    except Exception as e:
+        logger.error(f"Reference graph error: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/reference/member/<member_id>/personas", methods=["GET"])
+def reference_member_personas(member_id):
+    """Return the persona sub-graph for a specific member from the reference DB."""
+    try:
+        ref = get_reference_graph()
+
+        # Get the member and their connected graph
+        data = ref.run_query("""
+            MATCH (m:Member {member_id: $mid})
+            OPTIONAL MATCH (m)-[:HAS_PCP]->(prov:Provider)
+            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(cg:CareGap)
+            OPTIONAL MATCH (cg)-[:FOR_MEASURE]->(meas:Measure)
+            OPTIONAL MATCH (p:Persona)-[:BELONGS_TO_MEASURE]->(meas)
+            WHERE p.care_gap_status IN ['OPEN_GAP', 'COMPLIANT', 'EXCLUDED']
+              AND (
+                (m.gender = 'F' AND p.gender_criteria_label CONTAINS 'Female')
+                OR (m.gender = 'M' AND p.gender_criteria_label CONTAINS 'Male')
+                OR p.gender_criteria_label IS NULL
+              )
+              AND m.age_years >= p.min_age AND m.age_years <= p.max_age
+            RETURN m {.member_id, .name, .gender, .age_years} AS member,
+                   prov {.name, .specialty} AS provider,
+                   collect(DISTINCT cg {.gap_id, .status, .measure}) AS care_gaps,
+                   meas {.measure_id, .name} AS measure,
+                   collect(DISTINCT p {
+                       .persona_id, .description, .care_gap_status,
+                       .age_band_label, .gender_criteria_label, .llm_reasoning
+                   }) AS personas
+        """, {"mid": member_id})
+
+        if not data or not data[0].get("member"):
+            return jsonify({"nodes": [], "edges": [], "member": None})
+
+        row = data[0]
+        member = row["member"]
+        provider = row.get("provider")
+        care_gaps = [cg for cg in (row.get("care_gaps") or []) if cg]
+        measure = row.get("measure")
+        all_personas = [p for p in (row.get("personas") or []) if p]
+        # Limit to 6 personas for a readable graph (2 per status if available)
+        by_status = {}
+        for p in all_personas:
+            st = p.get("care_gap_status", "UNKNOWN")
+            by_status.setdefault(st, []).append(p)
+        personas = []
+        for st, ps in by_status.items():
+            personas.extend(ps[:2])
+        if len(personas) > 8:
+            personas = personas[:8]
+
+        nodes = []
+        edges = []
+
+        # Member node (center)
+        nodes.append({
+            "id": member["member_id"], "label": "Member",
+            "name": member["name"], "gender": member["gender"],
+            "age": member["age_years"]
+        })
+
+        # Provider
+        if provider and provider.get("name"):
+            nodes.append({
+                "id": f"prov_{provider['name']}", "label": "Provider",
+                "name": provider["name"], "specialty": provider.get("specialty")
+            })
+            edges.append({
+                "source": member["member_id"],
+                "target": f"prov_{provider['name']}",
+                "type": "HAS_PCP"
+            })
+
+        # Measure
+        if measure and measure.get("measure_id"):
+            nodes.append({
+                "id": measure["measure_id"], "label": "Measure",
+                "name": measure.get("name", measure["measure_id"]),
+                "measure_id": measure["measure_id"]
+            })
+
+        # CareGaps
+        for cg in care_gaps:
+            nodes.append({
+                "id": cg["gap_id"], "label": "CareGap",
+                "name": cg["gap_id"], "status": cg["status"],
+                "measure": cg.get("measure")
+            })
+            edges.append({
+                "source": member["member_id"],
+                "target": cg["gap_id"],
+                "type": "HAS_CARE_GAP"
+            })
+            if measure and measure.get("measure_id"):
+                edges.append({
+                    "source": cg["gap_id"],
+                    "target": measure["measure_id"],
+                    "type": "FOR_MEASURE"
+                })
+
+        # Personas
+        for p in personas:
+            nodes.append({
+                "id": p["persona_id"], "label": "Persona",
+                "name": p["persona_id"],
+                "description": p.get("description"),
+                "care_gap_status": p.get("care_gap_status"),
+                "age_band": p.get("age_band_label"),
+                "gender": p.get("gender_criteria_label"),
+                "reasoning": p.get("llm_reasoning")
+            })
+            if measure and measure.get("measure_id"):
+                edges.append({
+                    "source": p["persona_id"],
+                    "target": measure["measure_id"],
+                    "type": "BELONGS_TO_MEASURE"
+                })
+
+        return jsonify({
+            "member": member,
+            "nodes": nodes,
+            "edges": edges
+        })
+    except Exception as e:
+        logger.error(f"Reference member personas error: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 # Register member portal Blueprint
