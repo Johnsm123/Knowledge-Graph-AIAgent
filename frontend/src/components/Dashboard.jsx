@@ -369,31 +369,31 @@ function Dashboard({ onMemberSelect }) {
         </div>
       )}
 
-      {/* ── Reference Knowledge Graph Visualization ── */}
+      {/* ── Persona-Based Care Gap Lifecycle Graph ── */}
       <div className="reference-graph-section">
         <div className="section-header">
-          <h2><Activity size={20} className="graph-icon" /> Neo4j Knowledge Graph — Reference DB</h2>
+          <h2><Activity size={20} className="graph-icon" /> Care Gap Lifecycle — Persona Visualization</h2>
         </div>
         <p className="section-subtitle">
-          Persona relationship graph from the reference database — showing how Personas, Measures, Members, Providers, and Care Gaps connect in Neo4j.
+          Real-time persona-based graph showing Members, their AI-generated Personas, Care Gaps (color-coded by lifecycle stage), Measures, and Providers.
         </p>
 
         {/* Filter pills */}
         <div className="graph-filters">
-          {['all', 'Persona', 'Member', 'Measure', 'Provider', 'CareGap'].map(f => (
+          {['all', 'Member', 'Persona', 'CareGap', 'Measure', 'Provider', 'Action'].map(f => (
             <button
               key={f}
               className={`graph-filter-pill ${refGraphFilter === f ? 'active' : ''}`}
               onClick={() => setRefGraphFilter(f)}
             >
-              {f === 'all' ? 'All Nodes' : f === 'CareGap' ? 'Care Gaps' : f + 's'}
+              {f === 'all' ? 'All Nodes' : f === 'CareGap' ? 'Care Gaps' : f === 'Action' ? 'Actions' : f + 's'}
             </button>
           ))}
         </div>
 
         {refGraphLoading ? (
           <div className="graph-loading">
-            <Loader size={18} className="spinning" /> Loading reference graph…
+            <Loader size={18} className="spinning" /> Loading persona graph…
           </div>
         ) : filteredRefGraph && filteredRefGraph.nodes.length > 0 ? (
           <Neo4jGraph
@@ -403,8 +403,25 @@ function Dashboard({ onMemberSelect }) {
             height={550}
           />
         ) : (
-          <div className="graph-error">
-            No reference graph data available. Ensure the reference database is configured.
+          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            <p style={{ marginBottom: 12 }}>No persona data yet. Upload members and run the analysis pipeline to see the care gap lifecycle visualization.</p>
+            <button
+              className="graph-filter-pill active"
+              style={{ cursor: 'pointer' }}
+              onClick={async () => {
+                try {
+                  setRefGraphLoading(true);
+                  await axios.post(`${API_BASE}/reference/sync-all`);
+                  await fetchReferenceGraph();
+                } catch (err) {
+                  console.error('Sync error:', err);
+                } finally {
+                  setRefGraphLoading(false);
+                }
+              }}
+            >
+              Sync Existing Members to Persona DB
+            </button>
           </div>
         )}
       </div>

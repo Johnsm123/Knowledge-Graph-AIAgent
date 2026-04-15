@@ -1156,14 +1156,14 @@ function MemberDetails({ member, onBack }) {
         )}
       </div>
 
-      {/* ── PERSONA GRAPH — Reference DB ────────────────────────────────── */}
+      {/* ── PERSONA GRAPH + LIFECYCLE — Reference DB ─────────────────────── */}
       <div className="persona-graph-section">
         <h4>
           <GitCompare size={18} />
-          Neo4j Reference — Persona Relationships
+          Care Gap Lifecycle — Persona Visualization
         </h4>
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
-          Graph projection from the reference database showing how this member connects to Personas, Measures, and Providers.
+          Real-time visualization showing this member's care gap journey: identification, AI analysis, outreach, appointment booking, and gap closure.
         </p>
 
         {personaLoading ? (
@@ -1176,9 +1176,74 @@ function MemberDetails({ member, onBack }) {
               nodes={personaGraph.nodes}
               edges={personaGraph.edges}
               width={800}
-              height={420}
+              height={450}
             />
-            {/* Persona detail cards */}
+
+            {/* ── Lifecycle Timeline ────────────────────────────────── */}
+            {personaGraph.lifecycle && personaGraph.lifecycle.length > 0 && (
+              <div className="lifecycle-section">
+                <h5 className="lifecycle-title">Care Gap Lifecycle Timeline</h5>
+                {personaGraph.lifecycle.map(gap => {
+                  const STAGES = [
+                    { key: 'gap_identified',     label: 'Gap Identified',     icon: '🔍', color: '#B81F2D', time: gap.identified_at },
+                    { key: 'analysis_started',   label: 'Analysis Started',   icon: '🤖', color: '#F59E0B', time: gap.analysis_started_at },
+                    { key: 'analysis_complete',  label: 'Analysis Complete',  icon: '📊', color: '#FF8C00', time: gap.analysis_completed_at },
+                    { key: 'outreach_sent',      label: 'Outreach Sent',     icon: '📧', color: '#3B82F6', time: gap.outreach_sent_at },
+                    { key: 'appointment_booked', label: 'Appointment Booked', icon: '📅', color: '#8B5CF6', time: gap.appointment_booked_at },
+                    { key: 'gap_closed',         label: 'Gap Closed',        icon: '✅', color: '#10B981', time: gap.closed_at },
+                  ];
+                  const currentIdx = STAGES.findIndex(s => s.key === gap.stage);
+
+                  return (
+                    <div key={gap.gap_id} className="lifecycle-card">
+                      <div className="lifecycle-card-header">
+                        <span className="lifecycle-measure">{gap.measure_name || gap.measure_id}</span>
+                        <span className={`lifecycle-status ${gap.status === 'Closed' ? 'closed' : 'open'}`}>
+                          {gap.status}
+                        </span>
+                      </div>
+
+                      <div className="lifecycle-track">
+                        {STAGES.map((stage, idx) => {
+                          const reached = idx <= currentIdx;
+                          const isCurrent = idx === currentIdx;
+                          return (
+                            <div key={stage.key} className={`lifecycle-step ${reached ? 'reached' : ''} ${isCurrent ? 'current' : ''}`}>
+                              {idx > 0 && (
+                                <div className="lifecycle-connector" style={{ background: reached ? stage.color : '#E5E7EB' }} />
+                              )}
+                              <div className="lifecycle-dot" style={{
+                                background: reached ? stage.color : '#E5E7EB',
+                                boxShadow: isCurrent ? `0 0 0 4px ${stage.color}33` : 'none',
+                              }}>
+                                <span className="lifecycle-icon">{reached ? stage.icon : ''}</span>
+                              </div>
+                              <span className="lifecycle-label" style={{ color: reached ? stage.color : '#9CA3AF' }}>
+                                {stage.label}
+                              </span>
+                              {stage.time && (
+                                <span className="lifecycle-time">
+                                  {new Date(stage.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {gap.outreach_channel && (
+                        <div className="lifecycle-detail">Channel: {gap.outreach_channel}</div>
+                      )}
+                      {gap.appointment_date && (
+                        <div className="lifecycle-detail">Appointment: {gap.appointment_date} {gap.lab_location ? `at ${gap.lab_location}` : ''}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Persona detail card */}
             {personaGraph.nodes.filter(n => n.label === 'Persona').length > 0 && (
               <div className="persona-cards">
                 {personaGraph.nodes
@@ -1196,11 +1261,6 @@ function MemberDetails({ member, onBack }) {
                         {p.age_band && <span><strong>Age:</strong> {p.age_band}</span>}
                         {p.gender && <span><strong>Gender:</strong> {p.gender}</span>}
                       </div>
-                      {p.reasoning && (
-                        <p className="persona-card-desc" style={{ marginTop: 6, fontStyle: 'italic', fontSize: 11 }}>
-                          {p.reasoning}
-                        </p>
-                      )}
                     </div>
                   ))}
               </div>
@@ -1208,7 +1268,7 @@ function MemberDetails({ member, onBack }) {
           </>
         ) : (
           <div style={{ padding: 16, fontSize: 13, color: 'var(--text-secondary)' }}>
-            No matching personas found in the reference database for this member.
+            No persona data yet. Run Auto Process or upload members to generate the care gap lifecycle visualization.
           </div>
         )}
       </div>

@@ -1178,6 +1178,13 @@ def auto_process_member(member_id):
                             "message": f"{name} is fully compliant. No email needed."})
                 return
 
+            # Persona sync: analysis starting
+            try:
+                from src.persona_sync import sync_analysis_started
+                sync_analysis_started(member_id)
+            except Exception:
+                pass
+
             # Step 2: Run 6-agent analysis
             yield _sse({"step": "agent_analysis", "status": "running",
                         "message": "Running AI agent analysis..."})
@@ -1196,6 +1203,14 @@ def auto_process_member(member_id):
 
             yield _sse({"step": "agent_analysis", "status": "done",
                         "message": "All agents completed."})
+
+            # Persona sync: analysis complete
+            try:
+                from src.persona_sync import sync_analysis_complete
+                summary = agent_responses.get("care_gap_agent", "")[:200]
+                sync_analysis_complete(member_id, summary=summary)
+            except Exception:
+                pass
 
             # Step 3: Compose and send email
             email_actually_sent = False
@@ -1218,6 +1233,12 @@ def auto_process_member(member_id):
                     email_actually_sent = True
                     yield _sse({"step": "email", "status": "done",
                                 "message": f"Email sent to {email}"})
+                    # Persona sync: outreach sent
+                    try:
+                        from src.persona_sync import sync_outreach_sent
+                        sync_outreach_sent(member_id, channel="Email")
+                    except Exception:
+                        pass
                 except Exception as email_err:
                     logger.error(f"Email send failed: {email_err}", exc_info=True)
                     yield _sse({"step": "email", "status": "error",
@@ -1316,13 +1337,34 @@ def _send_analysis_email(member_id, name, email, gaps, portal_url,
           <p style="color:#333;font-size:13px;margin:0;"><strong>What to do:</strong> {action}</p>
         </div>"""
 
-    # Clean up agent text for email display
-    clean_rec = re.sub(r'[*#`]', '', recommendation_text[:1500]) if recommendation_text else ""
-    clean_gap = re.sub(r'[*#`]', '', care_gap_text[:1000]) if care_gap_text else ""
-    # Strip codes from display text
-    for pattern in [r'CPT[\s:]*[\d,\s\-]+', r'ICD[\-10]*[\s:]*[\w\.\,\s]+']:
-        clean_rec = re.sub(pattern, '', clean_rec)
-        clean_gap = re.sub(pattern, '', clean_gap)
+    # Clean up agent text for email display — strip ALL backend/clinical info
+    def _clean_for_email(text, max_len=1200):
+        if not text:
+            return ""
+        t = text[:max_len]
+        # Remove markdown formatting
+        t = re.sub(r'[*#`]', '', t)
+        # Remove CPT codes, ICD codes, measure IDs, node references
+        t = re.sub(r'CPT[\s:]*[\d,\s\-]+', '', t)
+        t = re.sub(r'ICD[\-10]*[\s:]*[\w\.\,\s]+', '', t)
+        t = re.sub(r'\b[A-Z]{2,4}-\d+\b', '', t)  # measure IDs like BCS-001
+        t = re.sub(r'\bM\d{4,}\b', '', t)  # member IDs like M0001
+        t = re.sub(r'\bcare_gap_id\b.*', '', t, flags=re.IGNORECASE)
+        t = re.sub(r'\bCareGap\b', 'care gap', t)
+        t = re.sub(r'\bQualityMeasure\b', 'screening', t)
+        t = re.sub(r'\bCodeSet\b', '', t)
+        t = re.sub(r'\bneo4j\b', '', t, flags=re.IGNORECASE)
+        t = re.sub(r'\bgap_id\b', '', t, flags=re.IGNORECASE)
+        t = re.sub(r'\bmeasure_id\b', '', t, flags=re.IGNORECASE)
+        t = re.sub(r'\bnode\b', '', t, flags=re.IGNORECASE)
+        t = re.sub(r'\{[^}]*\}', '', t)  # Remove JSON-like content
+        t = re.sub(r'\s{2,}', ' ', t).strip()
+        # Remove empty lines
+        t = '\n'.join(line for line in t.split('\n') if line.strip())
+        return t
+
+    clean_rec = _clean_for_email(recommendation_text)
+    clean_gap = _clean_for_email(care_gap_text)
 
     subject = f"Your Preventive Care Report - {len(gaps)} Recommended Screening(s)"
 
@@ -1341,9 +1383,9 @@ recognized health guidelines, we recommend the following screenings to help keep
 <p style="color:#666;font-size:13px;margin-bottom:8px;">You have <strong>{len(gaps)}</strong> preventive screening(s) that are due:</p>
 {gap_cards_html}
 
-{"<h2 style='color:#0033A1;margin:24px 0 12px;font-size:18px;'>Care Summary</h2><div style='background:#f0f4ff;padding:16px;border-radius:8px;font-size:14px;line-height:1.6;'>" + clean_gap.strip() + "</div>" if clean_gap.strip() else ""}
+{"<h2 style='color:#0033A1;margin:24px 0 12px;font-size:18px;'>Your Health Summary</h2><div style='background:#f0f4ff;padding:16px;border-radius:8px;font-size:14px;line-height:1.6;color:#333;'>" + clean_gap.strip() + "</div>" if clean_gap.strip() else ""}
 
-{"<h2 style='color:#0033A1;margin:24px 0 12px;font-size:18px;'>Our Recommendations</h2><div style='background:#f0fdf4;padding:16px;border-radius:8px;font-size:14px;line-height:1.6;'>" + clean_rec.strip() + "</div>" if clean_rec.strip() else ""}
+{"<h2 style='color:#0033A1;margin:24px 0 12px;font-size:18px;'>What We Recommend</h2><div style='background:#f0fdf4;padding:16px;border-radius:8px;font-size:14px;line-height:1.6;color:#333;'>" + clean_rec.strip() + "</div>" if clean_rec.strip() else ""}
 
 <div style="background:#fff8e1;border-radius:8px;padding:16px;margin:24px 0;">
   <p style="margin:0;font-size:13px;color:#7a5900;"><strong>Attached:</strong> Your complete Care Management Report (PDF) with full details about your health profile and recommended treatments.</p>

@@ -293,3 +293,142 @@
 .persona-card-meta strong {
   color: var(--cog-primary);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Lifecycle Timeline Styles
+   ═══════════════════════════════════════════════════════════════ */
+.lifecycle-section {
+  margin-top: 16px;
+}
+
+.lifecycle-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cog-primary);
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lifecycle-card {
+  background: var(--cog-white);
+  border: 1px solid var(--cog-gray-lighter);
+  border-radius: 0;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+}
+
+.lifecycle-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.lifecycle-measure {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cog-primary);
+}
+
+.lifecycle-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lifecycle-status.open {
+  background: rgba(184, 31, 45, 0.1);
+  color: #B81F2D;
+}
+
+.lifecycle-status.closed {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10B981;
+}
+
+.lifecycle-track {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  position: relative;
+  padding: 0 4px;
+}
+
+.lifecycle-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.lifecycle-connector {
+  position: absolute;
+  top: 14px;
+  right: 50%;
+  left: -50%;
+  height: 3px;
+  border-radius: 2px;
+  z-index: 0;
+}
+
+.lifecycle-step:first-child .lifecycle-connector {
+  display: none;
+}
+
+.lifecycle-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.lifecycle-dot .lifecycle-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.lifecycle-label {
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 6px;
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.lifecycle-time {
+  font-size: 9px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  text-align: center;
+}
+
+.lifecycle-step.current .lifecycle-dot {
+  transform: scale(1.15);
+}
+
+.lifecycle-detail {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--cog-gray-lighter);
+}
+
+/* Active status for persona */
+.persona-card-status.active {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+}

@@ -8,15 +8,36 @@ const LABEL_COLORS = {
   Measure:  { bg: '#E9C71D', text: '#000048' },
   Provider: { bg: '#2DB81F', text: '#fff' },
   CareGap:  { bg: '#B81F2D', text: '#fff' },
+  Action:   { bg: '#9333EA', text: '#fff' },
   Default:  { bg: '#6B7280', text: '#fff' },
+};
+
+// Stage-based colors for CareGap nodes
+const STAGE_COLORS = {
+  gap_identified:     { bg: '#B81F2D', text: '#fff' },  // Red
+  analysis_started:   { bg: '#F59E0B', text: '#000' },  // Amber
+  analysis_complete:  { bg: '#FF8C00', text: '#fff' },  // Orange
+  outreach_sent:      { bg: '#3B82F6', text: '#fff' },  // Blue
+  appointment_booked: { bg: '#8B5CF6', text: '#fff' },  // Purple
+  gap_closed:         { bg: '#10B981', text: '#fff' },  // Green
+};
+
+const ACTION_COLORS = {
+  identified:     '#B81F2D',
+  analysis_start: '#F59E0B',
+  analysis_done:  '#FF8C00',
+  outreach:       '#3B82F6',
+  appointment:    '#8B5CF6',
+  closed:         '#10B981',
 };
 
 const LABEL_RADIUS = {
   Member: 28,
   Measure: 32,
-  Persona: 20,
+  Persona: 22,
   Provider: 24,
-  CareGap: 22,
+  CareGap: 24,
+  Action: 16,
 };
 
 const REL_COLORS = {
@@ -26,6 +47,8 @@ const REL_COLORS = {
   FOR_MEASURE: '#FF8C00',
   HAS_CLAIM: '#6B7280',
   HAS_ENROLLMENT: '#9333EA',
+  HAS_PERSONA: '#26EFE9',
+  HAS_ACTION: '#9333EA',
 };
 
 // ── Simple force simulation ──────────────────────────────────────────────────
@@ -230,7 +253,13 @@ function Neo4jGraph({ nodes: rawNodes, edges: rawEdges, width = 900, height = 50
 
         {/* Nodes */}
         {positions.map(node => {
-          const col = LABEL_COLORS[node.label] || LABEL_COLORS.Default;
+          // Dynamic color: CareGap uses stage color, Action uses action type color
+          let col = LABEL_COLORS[node.label] || LABEL_COLORS.Default;
+          if (node.label === 'CareGap' && node.stage && STAGE_COLORS[node.stage]) {
+            col = STAGE_COLORS[node.stage];
+          } else if (node.label === 'Action' && node.action_type && ACTION_COLORS[node.action_type]) {
+            col = { bg: ACTION_COLORS[node.action_type], text: '#fff' };
+          }
           const r = LABEL_RADIUS[node.label] || 20;
           const isHovered = hoveredNode === node.id;
           const dimmed = hoveredNode && !isHovered &&
@@ -309,13 +338,20 @@ function Neo4jGraph({ nodes: rawNodes, edges: rawEdges, width = 900, height = 50
           </div>
           {tooltip.node.description && <p className="tooltip-desc">{tooltip.node.description}</p>}
           {tooltip.node.care_gap_status && <p><strong>Status:</strong> {tooltip.node.care_gap_status}</p>}
+          {tooltip.node.stage && <p><strong>Stage:</strong> {tooltip.node.stage.replace(/_/g, ' ')}</p>}
           {tooltip.node.age_band && <p><strong>Age Band:</strong> {tooltip.node.age_band}</p>}
           {tooltip.node.gender && <p><strong>Gender:</strong> {tooltip.node.gender}</p>}
+          {tooltip.node.age_str && <p><strong>Age:</strong> {tooltip.node.age_str}</p>}
+          {tooltip.node.age && !tooltip.node.age_str && <p><strong>Age:</strong> {tooltip.node.age}</p>}
+          {tooltip.node.chronic_conditions && <p><strong>Conditions:</strong> {tooltip.node.chronic_conditions}</p>}
+          {tooltip.node.insurance_type && <p><strong>Insurance:</strong> {tooltip.node.insurance_type}</p>}
           {tooltip.node.specialty && <p><strong>Specialty:</strong> {tooltip.node.specialty}</p>}
           {tooltip.node.measure_id && <p><strong>Measure:</strong> {tooltip.node.measure_id}</p>}
+          {tooltip.node.measure && !tooltip.node.measure_id && <p><strong>Measure:</strong> {tooltip.node.measure}</p>}
+          {tooltip.node.action_type && <p><strong>Action:</strong> {tooltip.node.action_type.replace(/_/g, ' ')}</p>}
+          {tooltip.node.timestamp && <p><strong>Time:</strong> {new Date(tooltip.node.timestamp).toLocaleString()}</p>}
           {tooltip.node.reasoning && <p className="tooltip-reasoning"><strong>Reasoning:</strong> {tooltip.node.reasoning}</p>}
-          {tooltip.node.age && <p><strong>Age:</strong> {tooltip.node.age}</p>}
-          {tooltip.node.status && <p><strong>Status:</strong> {tooltip.node.status}</p>}
+          {tooltip.node.status && !tooltip.node.stage && <p><strong>Status:</strong> {tooltip.node.status}</p>}
         </div>
       )}
     </div>

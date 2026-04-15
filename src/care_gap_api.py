@@ -392,7 +392,7 @@ def book_appointment():
         insurance    = (appt or {}).get("insurance_type", "Commercial")
         pcp_name     = (appt or {}).get("pcp_name", "Your Provider")
 
-        # ── Send professional email ───────────────────────────────────────
+        # ── Send professional email (member-facing, no backend info) ─────
         if member_email and cfg.azure_communication_connection_string:
             sender = cfg.azure_communication_sender
             subject = f"Appointment Confirmation: {measure_name} — {friendly_date}"
@@ -408,55 +408,44 @@ def book_appointment():
 
   <table style="width:100%; border-collapse:collapse; margin:24px 0; background:#f0f4ff; border-radius:6px; overflow:hidden;">
     <tr style="background:#0033A1; color:white;">
-      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">📅 Appointment Details</th>
+      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">Appointment Details</th>
     </tr>
-    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">Screening Type</td><td style="padding:10px 16px;">{measure_name}</td></tr>
+    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">Screening</td><td style="padding:10px 16px;">{measure_name}</td></tr>
     <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Date</td><td style="padding:10px 16px;">{friendly_date}</td></tr>
     <tr><td style="padding:10px 16px; font-weight:600;">Time</td><td style="padding:10px 16px;">{friendly_time}</td></tr>
-    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Appointment ID</td><td style="padding:10px 16px; font-family:monospace;">{appointment_id}</td></tr>
+    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Confirmation #</td><td style="padding:10px 16px;">{appointment_id}</td></tr>
   </table>
 
   <table style="width:100%; border-collapse:collapse; margin:24px 0; background:#f0f4ff; border-radius:6px; overflow:hidden;">
     <tr style="background:#005EB8; color:white;">
-      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">🏥 Lab &amp; Specialist Information</th>
+      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">Where to Go</th>
     </tr>
-    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">Lab Number</td><td style="padding:10px 16px;">{lab_info['lab_number']}</td></tr>
-    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Lab Location</td><td style="padding:10px 16px;">{lab_info['lab_location']}</td></tr>
-    <tr><td style="padding:10px 16px; font-weight:600;">Assigned Specialist</td><td style="padding:10px 16px;">{lab_info['lab_specialist']}</td></tr>
-    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Specialty</td><td style="padding:10px 16px;">{lab_info['specialty']}</td></tr>
-  </table>
-
-  <table style="width:100%; border-collapse:collapse; margin:24px 0; background:#f0f4ff; border-radius:6px; overflow:hidden;">
-    <tr style="background:#004494; color:white;">
-      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">🩺 Clinical Codes</th>
-    </tr>
-    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">CPT Code(s)</td><td style="padding:10px 16px; font-family:monospace;">{cpt_codes or "Per provider order"}</td></tr>
-    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">ICD-10 Code(s)</td><td style="padding:10px 16px; font-family:monospace;">{icd_codes or "Per diagnosis"}</td></tr>
+    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">Location</td><td style="padding:10px 16px;">{lab_info['lab_location']}</td></tr>
+    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Specialist</td><td style="padding:10px 16px;">{lab_info['lab_specialist']}</td></tr>
     <tr><td style="padding:10px 16px; font-weight:600;">Referring Provider</td><td style="padding:10px 16px;">{pcp_name}</td></tr>
   </table>
 
   <table style="width:100%; border-collapse:collapse; margin:24px 0; background:#f0f4ff; border-radius:6px; overflow:hidden;">
     <tr style="background:#1a6b3c; color:white;">
-      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">💳 Insurance Information</th>
+      <th colspan="2" style="padding:12px 16px; text-align:left; font-size:15px;">Your Coverage</th>
     </tr>
-    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">Plan ID</td><td style="padding:10px 16px; font-family:monospace;">{plan_id}</td></tr>
-    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Insurance Type</td><td style="padding:10px 16px;">{insurance}</td></tr>
-    <tr><td style="padding:10px 16px; font-weight:600;">Member ID</td><td style="padding:10px 16px; font-family:monospace;">{member_id}</td></tr>
+    <tr><td style="padding:10px 16px; font-weight:600; width:40%;">Insurance</td><td style="padding:10px 16px;">{insurance}</td></tr>
+    <tr style="background:#e8eeff;"><td style="padding:10px 16px; font-weight:600;">Preventive screenings are typically covered at no cost under your plan.</td></tr>
   </table>
 
   <div style="background:#fff8e1; border-left:4px solid #f59e0b; padding:16px; border-radius:4px; margin:24px 0;">
-    <strong>📋 Pre-Appointment Instructions:</strong>
-    <ul style="margin:8px 0; padding-left:20px;">
+    <strong>Before Your Visit:</strong>
+    <ul style="margin:8px 0; padding-left:20px; color:#555;">
       <li>Please arrive 15 minutes before your scheduled time.</li>
-      <li>Bring a valid government-issued photo ID and your insurance card.</li>
-      <li>Wear comfortable, loose-fitting clothing appropriate for the screening.</li>
-      <li>If you need to reschedule, please contact us at least 24 hours in advance.</li>
+      <li>Bring a valid photo ID and your insurance card.</li>
+      <li>Wear comfortable, loose-fitting clothing.</li>
+      <li>To reschedule, contact us at least 24 hours in advance.</li>
     </ul>
   </div>
 
-  <p>If you have any questions, please contact your care management team. Do not reply to this email.</p>
+  <p style="color:#555;">If you have any questions, please contact your care management team.</p>
   <hr style="border:none; border-top:1px solid #dce3f5; margin:24px 0;">
-  <p style="color:#888; font-size:12px;">This is an automated message from the HealthCare Management Portal. Appointment ID: {appointment_id}</p>
+  <p style="color:#888; font-size:12px;">This is an automated message from the HealthCare Management Portal.</p>
 </div>
 </body></html>"""
 
@@ -483,11 +472,9 @@ def book_appointment():
             plain_body = (
                 f"Appointment Confirmation: {measure_name}\n"
                 f"Date: {friendly_date} at {friendly_time}\n"
-                f"Lab: {lab_info['lab_number']} - {lab_info['lab_location']}\n"
+                f"Location: {lab_info['lab_location']}\n"
                 f"Specialist: {lab_info['lab_specialist']}\n"
-                f"CPT Code: {cpt_codes or 'Per provider order'}\n"
-                f"ICD-10 Code: {icd_codes or 'Per diagnosis'}\n"
-                f"Appointment ID: {appointment_id}"
+                f"Confirmation #: {appointment_id}"
             )
             merge_email(
                 email_id=email_id,
@@ -509,6 +496,22 @@ def book_appointment():
                 {"eid": email_id, "html": body_html, "appt_id": appointment_id,
                  "mid": measure_id, "cgid": care_gap_id}
             )
+
+        # ── Sync: appointment booked in persona DB ──────────────
+        if care_gap_id:
+            try:
+                from src.persona_sync import sync_appointment_booked
+                logger.info(f"[BOOK] Syncing appointment to persona DB: member={member_id}, gap={care_gap_id}, appt={appointment_id}")
+                sync_appointment_booked(
+                    member_id=member_id, care_gap_id=care_gap_id,
+                    appointment_id=appointment_id,
+                    appointment_date=friendly_date,
+                    lab_location=lab_info["lab_location"],
+                )
+            except Exception as e:
+                logger.error(f"[BOOK] Persona sync failed for gap {care_gap_id}: {e}")
+        else:
+            logger.warning(f"[BOOK] No care_gap_id provided — skipping persona sync for {member_id}/{measure_id}")
 
         # ── Send WhatsApp appointment confirmation ─────────────────
         whatsapp_sent = False
@@ -644,6 +647,18 @@ def complete_appointment(appointment_id):
             RETURN count(g) AS cnt
         """, {"mid": appt["member_id"]})[0]["cnt"]
         is_now_compliant = (remaining == 0)
+
+        # Sync: gap closed in persona DB
+        if care_gap_id:
+            try:
+                from src.persona_sync import sync_gap_closed
+                logger.info(f"[COMPLETE] Syncing gap closure to persona DB: member={appt['member_id']}, gap={care_gap_id}")
+                sync_gap_closed(member_id=appt["member_id"],
+                                care_gap_id=care_gap_id)
+            except Exception as e:
+                logger.error(f"[COMPLETE] Persona sync failed for gap {care_gap_id}: {e}")
+        else:
+            logger.warning(f"[COMPLETE] No care_gap_id — skipping persona sync for {appointment_id}")
 
         return jsonify({
             "status":           "success",
@@ -1391,6 +1406,18 @@ def force_close_appointment(appointment_id):
         """, {"mid": appt["member_id"]})[0]["cnt"]
         is_now_compliant = (remaining == 0)
 
+        # Sync: gap closed in persona DB
+        if care_gap_id:
+            try:
+                from src.persona_sync import sync_gap_closed
+                logger.info(f"[FORCE-CLOSE] Syncing gap closure to persona DB: member={appt['member_id']}, gap={care_gap_id}")
+                sync_gap_closed(member_id=appt["member_id"],
+                                care_gap_id=care_gap_id)
+            except Exception as e:
+                logger.error(f"[FORCE-CLOSE] Persona sync failed for gap {care_gap_id}: {e}")
+        else:
+            logger.warning(f"[FORCE-CLOSE] No care_gap_id — skipping persona sync for {appointment_id}")
+
         return jsonify({
             "status":           "success",
             "claim_id":         claim_id,
@@ -1524,6 +1551,27 @@ def bulk_upload_members():
             open_gaps = get_member_open_gaps(member_id)
             profile = get_member_profile(member_id)
 
+            # ── Sync persona to reference DB for visualization ──────
+            try:
+                from src.persona_sync import sync_member_persona, sync_care_gap
+                sync_member_persona(
+                    member_id=member_id, name=name, dob=dob,
+                    gender=gender, age_str=age_str,
+                    chronic_conditions=chronic_conditions,
+                    insurance_type=insurance_type,
+                    pcp_name=(profile or {}).get("pcp_name", pcp_id),
+                    pcp_id=pcp_id,
+                )
+                for og in open_gaps:
+                    sync_care_gap(
+                        member_id=member_id,
+                        care_gap_id=og["care_gap_id"],
+                        measure_id=og["measure_id"],
+                        measure_name=og.get("measure_name", og["measure_id"]),
+                    )
+            except Exception as ps_err:
+                logger.warning(f"Persona sync failed for {member_id}: {ps_err}")
+
             results.append({
                 "member_id": member_id,
                 "name": name,
@@ -1582,8 +1630,23 @@ def bulk_process_members():
         memail = member_info.get("email", "")
         try:
             # 1. Run 6-agent analysis
+            # Sync: analysis started
+            try:
+                from src.persona_sync import sync_analysis_started
+                sync_analysis_started(mid)
+            except Exception:
+                pass
+
             agents = get_agents()
             analysis = agents.validate_and_suggest(mid)
+
+            # Sync: analysis complete
+            try:
+                from src.persona_sync import sync_analysis_complete
+                summary = str(analysis.get("summary", ""))[:200] if isinstance(analysis, dict) else ""
+                sync_analysis_complete(mid, summary=summary)
+            except Exception:
+                pass
 
             # 2. Send outreach email with portal link
             email_sent = False
@@ -1709,6 +1772,13 @@ def bulk_process_members():
                                     date=_dt.now().strftime("%Y-%m-%d"),
                                     status="Sent",
                                 )
+                            # Sync: outreach sent
+                            try:
+                                from src.persona_sync import sync_outreach_sent
+                                sync_outreach_sent(mid, channel="Email")
+                            except Exception:
+                                pass
+
                 except Exception as email_err:
                     logger.warning(f"Bulk email failed for {mid}: {email_err}")
 
@@ -2486,216 +2556,107 @@ def download_bulk_template():
 
 @app.route("/api/v1/reference/graph", methods=["GET"])
 def reference_graph():
-    """Return nodes + edges from the reference DB for Neo4j-style visualization."""
+    """Return persona-based nodes + edges from the reference DB for dashboard visualization."""
     try:
-        ref = get_reference_graph()
-        nodes = []
-        edges = []
-        seen = set()
-
-        def add_node(n):
-            if n and n.get("id") and n["id"] not in seen:
-                seen.add(n["id"])
-                nodes.append(n)
-
-        # Measures
-        measures = ref.run_query("MATCH (m:Measure) RETURN m")
-        for row in measures:
-            m = row["m"]
-            add_node({"id": m["measure_id"], "label": "Measure",
-                       "name": m.get("name", m["measure_id"]), "measure_id": m["measure_id"]})
-
-        # Sample personas — 3 per status to keep the graph readable
-        personas = ref.run_query("""
-            MATCH (p:Persona)-[:BELONGS_TO_MEASURE]->(m:Measure)
-            WITH p.care_gap_status AS status, collect(p)[0..3] AS sample, m
-            UNWIND sample AS p
-            RETURN p.persona_id AS pid, p.description AS description,
-                   p.care_gap_status AS care_gap_status, p.age_band_label AS age_band,
-                   p.gender_criteria_label AS gender, p.measure AS measure,
-                   p.llm_reasoning AS reasoning, m.measure_id AS measure_id
-        """)
-        for row in personas:
-            add_node({"id": row["pid"], "label": "Persona", "name": row["pid"],
-                       "description": row["description"], "care_gap_status": row["care_gap_status"],
-                       "age_band": row["age_band"], "gender": row["gender"],
-                       "measure": row["measure"], "reasoning": row["reasoning"]})
-            edges.append({"source": row["pid"], "target": row["measure_id"], "type": "BELONGS_TO_MEASURE"})
-
-        # Members (limit to 8 for overview)
-        members = ref.run_query("""
-            MATCH (mem:Member)
-            WITH mem LIMIT 8
-            OPTIONAL MATCH (mem)-[:HAS_PCP]->(prov:Provider)
-            OPTIONAL MATCH (mem)-[:HAS_CARE_GAP]->(cg:CareGap)
-            OPTIONAL MATCH (cg)-[:FOR_MEASURE]->(meas:Measure)
-            RETURN mem {.member_id, .name, .gender, .age_years} AS member,
-                   prov {.name, .specialty} AS provider,
-                   collect(DISTINCT cg {.gap_id, .status, .measure}) AS care_gaps,
-                   collect(DISTINCT meas.measure_id) AS gap_measures
-        """)
-        for row in members:
-            mem = row["member"]
-            add_node({"id": mem["member_id"], "label": "Member", "name": mem["name"],
-                       "gender": mem["gender"], "age": mem["age_years"], "member_id": mem["member_id"]})
-
-            prov = row.get("provider")
-            if prov and prov.get("name"):
-                add_node({"id": prov["name"], "label": "Provider",
-                           "name": prov["name"], "specialty": prov.get("specialty")})
-                edges.append({"source": mem["member_id"], "target": prov["name"], "type": "HAS_PCP"})
-
-            for cg in (row.get("care_gaps") or []):
-                if cg and cg.get("gap_id"):
-                    add_node({"id": cg["gap_id"], "label": "CareGap", "name": cg["gap_id"],
-                               "status": cg["status"], "measure": cg.get("measure")})
-                    edges.append({"source": mem["member_id"], "target": cg["gap_id"], "type": "HAS_CARE_GAP"})
-
-            for mid in (row.get("gap_measures") or []):
-                if mid:
-                    for cg in (row.get("care_gaps") or []):
-                        if cg and cg.get("gap_id"):
-                            edges.append({"source": cg["gap_id"], "target": mid, "type": "FOR_MEASURE"})
-
-        # Filter out duplicate/null edges
-        unique_edges = []
-        edge_set = set()
-        for e in edges:
-            key = (e["source"], e["target"], e["type"])
-            if key not in edge_set:
-                edge_set.add(key)
-                unique_edges.append(e)
-
-        return jsonify({"nodes": nodes, "edges": unique_edges})
+        from src.persona_sync import get_dashboard_graph
+        result = get_dashboard_graph()
+        return jsonify(result)
     except Exception as e:
-        logger.error(f"Reference graph error: {e}")
-        return jsonify({"status": "error", "error": str(e)}), 500
+        logger.error(f"Reference graph error: {e}", exc_info=True)
+        return jsonify({"nodes": [], "edges": []})
 
 
 @app.route("/api/v1/reference/member/<member_id>/personas", methods=["GET"])
 def reference_member_personas(member_id):
-    """Return the persona sub-graph for a specific member from the reference DB."""
+    """Return the persona + care-gap lifecycle sub-graph for a specific member."""
     try:
-        ref = get_reference_graph()
+        from src.persona_sync import get_member_lifecycle_graph, sync_appointment_booked, sync_gap_closed
 
-        # Get the member and their connected graph
-        data = ref.run_query("""
-            MATCH (m:Member {member_id: $mid})
-            OPTIONAL MATCH (m)-[:HAS_PCP]->(prov:Provider)
-            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(cg:CareGap)
-            OPTIONAL MATCH (cg)-[:FOR_MEASURE]->(meas:Measure)
-            OPTIONAL MATCH (p:Persona)-[:BELONGS_TO_MEASURE]->(meas)
-            WHERE p.care_gap_status IN ['OPEN_GAP', 'COMPLIANT', 'EXCLUDED']
-              AND (
-                (m.gender = 'F' AND p.gender_criteria_label CONTAINS 'Female')
-                OR (m.gender = 'M' AND p.gender_criteria_label CONTAINS 'Male')
-                OR p.gender_criteria_label IS NULL
-              )
-              AND m.age_years >= p.min_age AND m.age_years <= p.max_age
-            RETURN m {.member_id, .name, .gender, .age_years} AS member,
-                   prov {.name, .specialty} AS provider,
-                   collect(DISTINCT cg {.gap_id, .status, .measure}) AS care_gaps,
-                   meas {.measure_id, .name} AS measure,
-                   collect(DISTINCT p {
-                       .persona_id, .description, .care_gap_status,
-                       .age_band_label, .gender_criteria_label, .llm_reasoning
-                   }) AS personas
-        """, {"mid": member_id})
+        # ── Reconcile: check original DB for appointments not yet synced ──
+        try:
+            kg = get_knowledge_graph()
+            appointments = kg.run_query("""
+                MATCH (m:Member {member_id: $mid})-[:HAS_APPOINTMENT]->(a:Appointment)
+                RETURN a.appointment_id AS appointment_id,
+                       a.care_gap_id    AS care_gap_id,
+                       a.appointment_date AS appointment_date,
+                       a.lab_location   AS lab_location,
+                       a.status         AS status
+            """, {"mid": member_id})
+            for appt in appointments:
+                cgid = appt.get("care_gap_id")
+                if not cgid:
+                    continue
+                # Check if this gap already has appointment_booked stage in ref DB
+                from src.persona_sync import _ref
+                ref = _ref()
+                check = ref.run_query(
+                    "MATCH (g:CareGap {gap_id: $gid}) RETURN g.stage AS stage",
+                    {"gid": cgid}
+                )
+                current_stage = (check[0]["stage"] if check else None)
+                is_completed = appt.get("status") == "Completed"
 
-        if not data or not data[0].get("member"):
-            return jsonify({"nodes": [], "edges": [], "member": None})
+                # Already fully synced
+                if current_stage == "gap_closed":
+                    continue
 
-        row = data[0]
-        member = row["member"]
-        provider = row.get("provider")
-        care_gaps = [cg for cg in (row.get("care_gaps") or []) if cg]
-        measure = row.get("measure")
-        all_personas = [p for p in (row.get("personas") or []) if p]
-        # Limit to 6 personas for a readable graph (2 per status if available)
-        by_status = {}
-        for p in all_personas:
-            st = p.get("care_gap_status", "UNKNOWN")
-            by_status.setdefault(st, []).append(p)
-        personas = []
-        for st, ps in by_status.items():
-            personas.extend(ps[:2])
-        if len(personas) > 8:
-            personas = personas[:8]
+                # Sync appointment booking if not yet at that stage
+                if current_stage not in ("appointment_booked", "gap_closed"):
+                    logger.info(f"[RECONCILE] Syncing appointment for gap {cgid} (current stage: {current_stage})")
+                    sync_appointment_booked(
+                        member_id=member_id, care_gap_id=cgid,
+                        appointment_id=appt.get("appointment_id", ""),
+                        appointment_date=appt.get("appointment_date", ""),
+                        lab_location=appt.get("lab_location", ""),
+                    )
 
-        nodes = []
-        edges = []
+                # If appointment completed in original DB, close gap in ref DB
+                if is_completed and current_stage != "gap_closed":
+                    logger.info(f"[RECONCILE] Syncing gap closure for {cgid} (appointment completed)")
+                    sync_gap_closed(member_id=member_id, care_gap_id=cgid)
 
-        # Member node (center)
-        nodes.append({
-            "id": member["member_id"], "label": "Member",
-            "name": member["name"], "gender": member["gender"],
-            "age": member["age_years"]
-        })
+            # Also check for gaps closed directly (without appointment) in original DB
+            closed_gaps = kg.run_query("""
+                MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+                WHERE g.is_open = false
+                RETURN g.care_gap_id AS care_gap_id
+            """, {"mid": member_id})
+            for cg in closed_gaps:
+                cgid = cg.get("care_gap_id")
+                if not cgid:
+                    continue
+                from src.persona_sync import _ref
+                ref = _ref()
+                check = ref.run_query(
+                    "MATCH (g:CareGap {gap_id: $gid}) RETURN g.stage AS stage",
+                    {"gid": cgid}
+                )
+                current_stage = (check[0]["stage"] if check else None)
+                if current_stage != "gap_closed":
+                    logger.info(f"[RECONCILE] Syncing closed gap {cgid} (current stage: {current_stage})")
+                    sync_gap_closed(member_id=member_id, care_gap_id=cgid)
 
-        # Provider
-        if provider and provider.get("name"):
-            nodes.append({
-                "id": f"prov_{provider['name']}", "label": "Provider",
-                "name": provider["name"], "specialty": provider.get("specialty")
-            })
-            edges.append({
-                "source": member["member_id"],
-                "target": f"prov_{provider['name']}",
-                "type": "HAS_PCP"
-            })
+        except Exception as rec_err:
+            logger.warning(f"[RECONCILE] Reconciliation failed: {rec_err}")
 
-        # Measure
-        if measure and measure.get("measure_id"):
-            nodes.append({
-                "id": measure["measure_id"], "label": "Measure",
-                "name": measure.get("name", measure["measure_id"]),
-                "measure_id": measure["measure_id"]
-            })
-
-        # CareGaps
-        for cg in care_gaps:
-            nodes.append({
-                "id": cg["gap_id"], "label": "CareGap",
-                "name": cg["gap_id"], "status": cg["status"],
-                "measure": cg.get("measure")
-            })
-            edges.append({
-                "source": member["member_id"],
-                "target": cg["gap_id"],
-                "type": "HAS_CARE_GAP"
-            })
-            if measure and measure.get("measure_id"):
-                edges.append({
-                    "source": cg["gap_id"],
-                    "target": measure["measure_id"],
-                    "type": "FOR_MEASURE"
-                })
-
-        # Personas
-        for p in personas:
-            nodes.append({
-                "id": p["persona_id"], "label": "Persona",
-                "name": p["persona_id"],
-                "description": p.get("description"),
-                "care_gap_status": p.get("care_gap_status"),
-                "age_band": p.get("age_band_label"),
-                "gender": p.get("gender_criteria_label"),
-                "reasoning": p.get("llm_reasoning")
-            })
-            if measure and measure.get("measure_id"):
-                edges.append({
-                    "source": p["persona_id"],
-                    "target": measure["measure_id"],
-                    "type": "BELONGS_TO_MEASURE"
-                })
-
-        return jsonify({
-            "member": member,
-            "nodes": nodes,
-            "edges": edges
-        })
+        result = get_member_lifecycle_graph(member_id)
+        return jsonify(result)
     except Exception as e:
-        logger.error(f"Reference member personas error: {e}")
+        logger.error(f"Reference member personas error: {e}", exc_info=True)
+        return jsonify({"nodes": [], "edges": [], "member": None, "lifecycle": []})
+
+
+@app.route("/api/v1/reference/sync-all", methods=["POST"])
+def sync_all_to_reference():
+    """Bulk sync all existing members from original DB into the persona reference DB."""
+    try:
+        from src.persona_sync import bootstrap_persona_schema, sync_all_existing_members
+        bootstrap_persona_schema()
+        count = sync_all_existing_members()
+        return jsonify({"status": "success", "synced": count})
+    except Exception as e:
+        logger.error(f"Sync-all error: {e}", exc_info=True)
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
@@ -2705,4 +2666,12 @@ app.register_blueprint(portal_bp)
 
 
 if __name__ == "__main__":
+    # Bootstrap persona reference DB schema on startup
+    try:
+        from src.persona_sync import bootstrap_persona_schema
+        bootstrap_persona_schema()
+        logger.info("Persona reference DB schema ready")
+    except Exception as e:
+        logger.warning(f"Persona schema bootstrap skipped: {e}")
+
     app.run(debug=True, port=5001, use_reloader=False)

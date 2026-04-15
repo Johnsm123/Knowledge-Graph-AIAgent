@@ -114,16 +114,16 @@ def send_appointment_confirmation(to_phone, member_name, measure_name,
     # Fallback: freeform message with full details
     logger.info(f"[WHATSAPP] Template failed, trying freeform for {member_name}")
     body = (
-        f"Hello {member_name},\n\n"
-        f"Your screening appointment has been confirmed.\n\n"
-        f"Screening: {measure_name}\n"
+        f"Hi {member_name},\n\n"
+        f"Your appointment has been confirmed:\n\n"
+        f"*{measure_name}*\n"
         f"Date: {appointment_date}\n"
         f"Time: {appointment_time}\n"
         f"Location: {lab_location}\n"
-        f"Specialist: {lab_specialist}\n"
-        f"Appointment ID: {appointment_id}\n\n"
-        f"Please arrive 15 minutes early with your ID and insurance card.\n\n"
-        f"- HealthCare Management Portal"
+        f"Doctor: {lab_specialist}\n"
+        f"Ref: {appointment_id}\n\n"
+        f"Please arrive 15 min early with your ID and insurance card.\n\n"
+        f"HealthCare Management Portal"
     )
     return send_whatsapp(to_phone, body)
 
@@ -133,21 +133,24 @@ def send_care_gap_report(to_phone, member_name, gaps, portal_url=""):
     Send care gap analysis summary via WhatsApp.
     Uses freeform message (requires 24h opt-in window for sandbox).
     """
+    from src.pdf_report import _friendly
+
     gap_lines = []
     for i, g in enumerate(gaps, 1):
-        measure = g.get("measure_name") or g.get("measure_id", "Screening")
-        gap_lines.append(f"  {i}. {measure}")
+        mid = g.get("measure_id", "")
+        friendly_name, _, _ = _friendly(mid, g.get("resolution_guide") or g.get("description", ""))
+        gap_lines.append(f"{i}. {friendly_name}")
 
     gap_list = "\n".join(gap_lines)
-    portal_line = f"\nSchedule appointments: {portal_url}" if portal_url else ""
+    portal_line = f"\nBook appointments: {portal_url}" if portal_url else ""
 
     body = (
-        f"Hello {member_name},\n\n"
-        f"Your preventive care report is ready. "
-        f"We recommend {len(gaps)} screening(s):\n\n"
+        f"Hi {member_name},\n\n"
+        f"Your preventive care report is ready.\n\n"
+        f"*Recommended Screenings ({len(gaps)}):*\n"
         f"{gap_list}\n\n"
-        f"A detailed report with PDF has been sent to your email."
+        f"A detailed report has been sent to your email."
         f"{portal_line}\n\n"
-        f"- HealthCare Management Portal"
+        f"HealthCare Management Portal"
     )
     return send_whatsapp(to_phone, body)

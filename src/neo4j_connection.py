@@ -66,7 +66,7 @@ def get_knowledge_graph() -> MedicalKnowledgeGraph:
 
 
 def get_reference_graph() -> MedicalKnowledgeGraph:
-    """Get or create the singleton reference database connection."""
+    """Get or create the singleton reference (persona visualization) database connection."""
     global _ref_kg
     if _ref_kg is None:
         if not settings.neo4j_ref_uri:
@@ -77,3 +77,14 @@ def get_reference_graph() -> MedicalKnowledgeGraph:
             password=settings.neo4j_ref_password,
         )
     return _ref_kg
+
+
+def reset_reference_graph():
+    """Force reconnect to reference DB (e.g. after credential change)."""
+    global _ref_kg
+    if _ref_kg:
+        try:
+            _ref_kg.close()
+        except Exception:
+            pass
+    _ref_kg = None
