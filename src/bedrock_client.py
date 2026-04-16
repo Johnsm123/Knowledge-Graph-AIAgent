@@ -8,6 +8,8 @@ Amazon Nova Pro (or any Bedrock model) instead of Azure OpenAI.
 
 import json
 import logging
+import time
+import random
 from typing import Any, AsyncGenerator, Mapping, Optional, Sequence, Union
 
 import boto3
@@ -159,11 +161,22 @@ class BedrockChatCompletionClient(ChatCompletionClient):
         if system_prompts:
             kwargs["system"] = system_prompts
 
-        try:
-            response = self._client.converse(**kwargs)
-        except Exception as exc:
-            logger.error(f"Bedrock Converse error: {exc}")
-            raise
+        max_retries = 6
+        base_delay = 2.0
+        for attempt in range(max_retries):
+            try:
+                response = self._client.converse(**kwargs)
+                break
+            except self._client.exceptions.ThrottlingException as exc:
+                if attempt == max_retries - 1:
+                    logger.error(f"Bedrock Converse throttled after {max_retries} retries: {exc}")
+                    raise
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                logger.warning(f"Bedrock throttled (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s")
+                time.sleep(delay)
+            except Exception as exc:
+                logger.error(f"Bedrock Converse error: {exc}")
+                raise
 
         # Extract response text
         output = response.get("output", {})

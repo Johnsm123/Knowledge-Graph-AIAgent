@@ -24,21 +24,25 @@ def _get_client():
     return _client
 
 
-def _format_phone(phone: str) -> str:
-    """Ensure phone is in whatsapp:+... format."""
+def _format_phone_e164(phone: str) -> str:
+    """Ensure phone is in E.164 format (+countrycode...)."""
     phone = phone.strip()
     if phone.startswith("whatsapp:"):
-        return phone
+        phone = phone.replace("whatsapp:", "")
     if not phone.startswith("+"):
         digits = "".join(c for c in phone if c.isdigit())
         if len(digits) == 10:
-            # Assume Indian number for 10-digit
             phone = f"+91{digits}"
         elif len(digits) == 11 and digits.startswith("1"):
             phone = f"+{digits}"
         else:
             phone = f"+{digits}"
-    return f"whatsapp:{phone}"
+    return phone
+
+
+def _format_phone(phone: str) -> str:
+    """Ensure phone is in whatsapp:+... format."""
+    return f"whatsapp:{_format_phone_e164(phone)}"
 
 
 def send_whatsapp(to_phone: str, body: str) -> dict:

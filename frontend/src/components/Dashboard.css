@@ -299,6 +299,22 @@
   padding: 5px 10px; background: rgba(45,184,31,0.10); border-radius: var(--radius-button);
 }
 
+/* Outreach & Appointment badges on member tiles */
+.tile-badges {
+  display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px 8px;
+}
+.outreach-badge, .appointment-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: .72rem; font-weight: 600; padding: 3px 9px;
+  border-radius: 20px; white-space: nowrap;
+}
+.outreach-badge {
+  background: rgba(139, 92, 246, 0.12); color: #7C3AED;
+}
+.appointment-badge {
+  background: rgba(59, 130, 246, 0.12); color: #2563EB;
+}
+
 /* spinning icon */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinning { animation: spin 1s linear infinite; }

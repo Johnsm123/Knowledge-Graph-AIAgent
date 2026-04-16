@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Users, AlertCircle, CheckCircle, TrendingUp, Activity, UserPlus,
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  SortAsc, SortDesc, Filter, Zap, Loader, Mail, Trash2,
+  SortAsc, SortDesc, Filter, Zap, Loader, Mail, Trash2, Calendar,
 } from 'lucide-react';
 import axios from 'axios';
 import AddMember from './AddMember';
@@ -185,14 +185,21 @@ function Dashboard({ onMemberSelect }) {
         }
 
         if (step === 'complete') {
+          const channels = [];
+          if (data.email_sent) channels.push('Email');
+          if (data.whatsapp_sent) channels.push('WhatsApp');
+          const doneMsg = channels.length > 0
+            ? channels.join(' + ') + ' Sent'
+            : (data.status === 'compliant' ? 'Compliant' : 'Done');
           setProcessing(prev => ({
             ...prev,
             [memberId]: {
               status: 'done',
               step: 'complete',
-              message: data.email_sent ? 'Email Sent' : (data.status === 'compliant' ? 'Compliant' : 'Done'),
+              message: doneMsg,
               gapsCount: data.gaps_count || 0,
               emailSent: data.email_sent || false,
+              whatsappSent: data.whatsapp_sent || false,
             },
           }));
           es.close();
@@ -212,6 +219,10 @@ function Dashboard({ onMemberSelect }) {
         else if (step === 'email' && status === 'done') msg = 'Email sent!';
         else if (step === 'email' && status === 'error') msg = data.message || 'Email failed';
         else if (step === 'email' && status === 'skipped') msg = 'No email on file';
+        else if (step === 'whatsapp' && status === 'running') msg = 'Sending WhatsApp...';
+        else if (step === 'whatsapp' && status === 'done') msg = 'WhatsApp sent!';
+        else if (step === 'whatsapp' && status === 'error') msg = data.message || 'WhatsApp failed';
+        else if (step === 'whatsapp' && status === 'skipped') msg = 'No phone on file';
 
         setProcessing(prev => ({
           ...prev,
@@ -524,6 +535,22 @@ function Dashboard({ onMemberSelect }) {
                       )}
                     </div>
 
+                    {/* Outreach & Appointment badges */}
+                    {(member.outreach_count > 0 || member.appointment_count > 0) && (
+                      <div className="tile-badges">
+                        {member.outreach_count > 0 && (
+                          <span className="outreach-badge" title={member.last_outreach_date ? `Last outreach: ${member.last_outreach_date}` : 'Outreach sent'}>
+                            <Mail size={12} /> Outreach Done
+                          </span>
+                        )}
+                        {member.appointment_count > 0 && (
+                          <span className="appointment-badge" title="Has scheduled appointments">
+                            <Calendar size={12} /> Appt Booked
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     <div className="tile-footer">
                       {/* Auto-process status or button */}
                       {processing[member.member_id]?.status === 'running' ? (
@@ -536,6 +563,7 @@ function Dashboard({ onMemberSelect }) {
                           <CheckCircle size={14} />
                           {processing[member.member_id].message}
                           {processing[member.member_id].emailSent && ' ✉'}
+                          {processing[member.member_id].whatsappSent && ' 💬'}
                         </span>
                       ) : processing[member.member_id]?.status === 'error' ? (
                         <button className="btn-auto-process error" onClick={(e) => handleAutoProcess(e, member.member_id)}>

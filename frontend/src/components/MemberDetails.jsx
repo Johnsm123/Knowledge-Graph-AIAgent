@@ -351,6 +351,9 @@ function MemberDetails({ member, onBack }) {
           setAiDone(true);
           setStreamingAgent(null);
           es.close();
+          // Auto-refresh graph after AI analysis + outreach
+          fetchMemberDetails();
+          fetchPersonaGraph();
 
         } else if (type === 'error') {
           console.error('SSE error:', payload.message);
@@ -504,6 +507,9 @@ function MemberDetails({ member, onBack }) {
         }));
         setShowAppointmentModal(false);
         setSelectedGap(null);
+        // Auto-refresh graph and timeline after booking
+        fetchMemberDetails();
+        fetchPersonaGraph();
       } else {
         setBookingError(res.data.error || 'Booking failed. Please try again.');
       }
@@ -530,8 +536,9 @@ function MemberDetails({ member, onBack }) {
           [booking.care_gap_id]: { ...prev[booking.care_gap_id], claim_id: claimId, status: 'Completed' },
         }));
         setCompletedGaps(prev => new Set([...prev, booking.care_gap_id]));
-        // Refresh member details to reflect closed gap + new claim in Claims tab
+        // Refresh member details and persona graph to reflect closed gap
         await fetchMemberDetails();
+        await fetchPersonaGraph();
         // Show compliance banner if all gaps are now closed
         if (res.data.is_now_compliant) {
           setCompliantToast(true);
@@ -565,6 +572,7 @@ function MemberDetails({ member, onBack }) {
         }));
         setCompletedGaps(prev => new Set([...prev, booking.care_gap_id]));
         await fetchMemberDetails();
+        await fetchPersonaGraph();
         if (res.data.is_now_compliant) {
           setCompliantToast(true);
           setTimeout(() => setCompliantToast(false), 6000);
@@ -676,15 +684,15 @@ function MemberDetails({ member, onBack }) {
                 <h3>Plan Information</h3>
                 <div className="info-row">
                   <span className="label">Plan ID:</span>
-                  <span className="value">{details?.profile.plan_id}</span>
+                  <span className="value">{details?.profile?.plan_id || 'N/A'}</span>
                 </div>
                 <div className="info-row">
                   <span className="label">Copay:</span>
-                  <span className="value">${details?.profile.copay}</span>
+                  <span className="value">${details?.profile?.copay ?? 'N/A'}</span>
                 </div>
                 <div className="info-row">
                   <span className="label">Preventive Covered:</span>
-                  <span className="value">{details?.profile.preventive_covered}</span>
+                  <span className="value">{details?.profile?.preventive_covered || 'N/A'}</span>
                 </div>
               </div>
 

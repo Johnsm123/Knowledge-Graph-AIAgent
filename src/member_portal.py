@@ -1450,8 +1450,19 @@ recognized health guidelines, we recommend the following screenings to help keep
             }
         ],
     }
-    poller = client.begin_send(message)
-    result = poller.result()
+    import time as _time
+    for _attempt in range(4):
+        try:
+            poller = client.begin_send(message)
+            result = poller.result()
+            break
+        except Exception as _email_exc:
+            if "TooManyRequests" in str(_email_exc) and _attempt < 3:
+                _wait = max(1, (_attempt + 1) * 2)
+                logger.warning(f"[EMAIL] Rate limited (attempt {_attempt + 1}/4), retrying in {_wait}s")
+                _time.sleep(_wait)
+            else:
+                raise
 
     # Check Azure result status
     send_status = None

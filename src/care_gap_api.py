@@ -4,6 +4,7 @@ Run: python -m src.care_gap_api
 """
 import json
 import logging
+import time as _time_mod
 from flask import Flask, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
 from src.care_gap_data_loader import load_all
@@ -25,6 +26,21 @@ def get_agents():
     if agent_system is None:
         agent_system = CareGapAgentSystem()
     return agent_system
+
+
+def _send_email_with_retry(client, message, max_retries=4):
+    """Send email via Azure Communication Services with retry on rate-limiting."""
+    for attempt in range(max_retries):
+        try:
+            poller = client.begin_send(message)
+            return poller.result()
+        except Exception as exc:
+            if "TooManyRequests" in str(exc) and attempt < max_retries - 1:
+                wait = max(1, (attempt + 1) * 2)
+                logger.warning(f"[EMAIL] Rate limited (attempt {attempt + 1}/{max_retries}), retrying in {wait}s")
+                _time_mod.sleep(wait)
+            else:
+                raise
 
 
 @app.route("/api/v1/care-gaps/load-data", methods=["POST"])
@@ -66,7 +82,7 @@ def get_open_gaps(member_id):
 
 @app.route("/api/v1/members", methods=["GET"])
 def get_all_members():
-    """Get all members with their care gap status."""
+    """Get all members with their care gap status and outreach info."""
     try:
         kg = get_knowledge_graph()
         members = kg.run_query("""
@@ -76,6 +92,13 @@ def get_all_members():
                  count(DISTINCT CASE WHEN g.is_open = true  THEN g.care_gap_id ELSE null END) AS open_gaps,
                  count(DISTINCT CASE WHEN g.is_open = false THEN g.care_gap_id ELSE null END) AS closed_gaps
             OPTIONAL MATCH (m)-[:ASSIGNED_TO]->(p:Provider)
+            OPTIONAL MATCH (o:Outreach)-[:CONTACTS]->(m)
+            WITH m, open_gaps, closed_gaps, p,
+                 count(DISTINCT o) AS outreach_count,
+                 max(o.date) AS last_outreach_date
+            OPTIONAL MATCH (m)-[:HAS_APPOINTMENT]->(a:Appointment)
+            WITH m, open_gaps, closed_gaps, p, outreach_count, last_outreach_date,
+                 count(DISTINCT a) AS appointment_count
             RETURN m.member_id as member_id,
                    m.name as name,
                    m.age_str as age,
@@ -84,7 +107,10 @@ def get_all_members():
                    open_gaps,
                    closed_gaps,
                    p.name as pcp_name,
-                   p.provider_id as pcp_id
+                   p.provider_id as pcp_id,
+                   outreach_count,
+                   last_outreach_date,
+                   appointment_count
             ORDER BY open_gaps DESC, m.name
         """, {})
         return jsonify({"members": members, "total": len(members)})
@@ -456,8 +482,7 @@ def book_appointment():
                     "recipients": {"to": [{"address": member_email}]},
                     "content": {"subject": subject, "html": body_html},
                 }
-                poller = client.begin_send(message)
-                poller.result()
+                _send_email_with_retry(client, message)
                 logger.info(f"Appointment email sent to {member_email} for {appointment_id}")
             except Exception as email_err:
                 logger.warning(f"Email send failed for {appointment_id}: {email_err}")
@@ -532,6 +557,8 @@ def book_appointment():
                 whatsapp_sent = wa_result.get("success", False)
                 if whatsapp_sent:
                     logger.info(f"WhatsApp appointment confirmation sent for {appointment_id}")
+                else:
+                    logger.warning(f"WhatsApp send failed for {appointment_id}: {wa_result.get('error', 'unknown')}")
             except Exception as wa_err:
                 logger.warning(f"WhatsApp send failed for {appointment_id}: {wa_err}")
 
@@ -734,6 +761,15 @@ def add_member():
             chronic_conditions=data.get("chronic_conditions", []),
         )
         
+        # Ensure BenefitPlan node exists before creating enrollment
+        from src.care_gap_neo4j import merge_benefit_plan
+        merge_benefit_plan(
+            plan_id=data["plan_id"],
+            preventive_covered="All preventive services",
+            copay=0,
+            deductible=500,
+            eligibility_rules="Standard eligibility",
+        )
         # Create enrollment relationships
         merge_enrollment(
             member_id=data["member_id"],
@@ -1233,8 +1269,7 @@ def send_member_email(member_id):
                 ),
             },
         }
-        poller = client.begin_send(message)
-        result = poller.result()
+        result = _send_email_with_retry(client, message)
 
         # Check Azure result status
         send_status = result.get("status") if isinstance(result, dict) else getattr(result, "status", None)
@@ -1304,8 +1339,7 @@ def test_email_send():
                 "html": "<html><body><h2>Email Test Successful</h2><p>Azure Communication Services is configured correctly.</p></body></html>",
             },
         }
-        poller = client.begin_send(message)
-        result = poller.result()
+        result = _send_email_with_retry(client, message)
 
         send_status = result.get("status") if isinstance(result, dict) else getattr(result, "status", None)
         msg_id = result.get("id", "") if isinstance(result, dict) else str(result)
@@ -1474,7 +1508,9 @@ def bulk_upload_members():
     Expected Excel columns:
       Name, DOB, Gender, Email, Phone, PCPID, PlanID, ZIP,
       ChronicConditions (comma-separated), InsuranceType,
-      EnrollmentStart, EnrollmentEnd
+      EnrollmentStart, EnrollmentEnd,
+      PriorScreenings (optional, semicolon-separated measure:date pairs,
+        e.g. "BCS:2025-06-15;COL:2024-03-20")
 
     Returns JSON with a list of members and their detected gaps.
     """
@@ -1541,10 +1577,47 @@ def bulk_upload_members():
                 age_str=age_str, email=email, phone=phone,
                 insurance_type=insurance_type, chronic_conditions=chronic_conditions,
             )
+            # Ensure BenefitPlan node exists before creating enrollment
+            from src.care_gap_neo4j import merge_benefit_plan
+            merge_benefit_plan(
+                plan_id=plan_id,
+                preventive_covered="All preventive services",
+                copay=0,
+                deductible=500,
+                eligibility_rules="Standard eligibility",
+            )
             merge_enrollment(
                 member_id=member_id, plan_id=plan_id,
                 pcp_id=pcp_id, effective_from=enrollment_start, effective_to=enrollment_end,
             )
+
+            # Load prior screenings as claims (e.g. "BCS:2025-06-15;COL:2024-03-20")
+            prior_raw = str(row.get("PriorScreenings", "")).strip()
+            if prior_raw and prior_raw.lower() != "nan":
+                from src.hedis_golden_reference import HEDIS_MEASURES
+                from src.care_gap_neo4j import merge_claim
+                for entry in prior_raw.split(";"):
+                    entry = entry.strip()
+                    if ":" not in entry:
+                        continue
+                    mid_part, svc_date = entry.split(":", 1)
+                    mid_part = mid_part.strip().upper()
+                    svc_date = svc_date.strip()[:10]
+                    measure_def = HEDIS_MEASURES.get(mid_part)
+                    if not measure_def:
+                        logger.warning(f"[BULK] Unknown measure '{mid_part}' in PriorScreenings for {member_id}")
+                        continue
+                    claim_id = f"PRIOR-{member_id}-{mid_part}"
+                    merge_claim(
+                        claim_id=claim_id,
+                        member_id=member_id,
+                        provider_id=pcp_id,
+                        cpt_code=measure_def.get("primary_cpt", ""),
+                        icd_code=measure_def.get("primary_icd10", ""),
+                        service_date=svc_date,
+                        status="Completed",
+                    )
+                    logger.info(f"[BULK] Prior screening claim created: {claim_id} ({mid_part} on {svc_date})")
 
             # Detect care gaps (pure Python — fast)
             gap_result = detect_care_gaps(member_id)
@@ -1745,8 +1818,7 @@ def bulk_process_members():
                                     }
                                 ],
                             }
-                            poller = client.begin_send(message)
-                            poller.result()
+                            _send_email_with_retry(client, message)
                             email_sent = True
 
                             # Persist email in Neo4j
@@ -1826,10 +1898,18 @@ def bulk_process_members():
                     "error": str(exc),
                 }
 
-    # Launch threads for all members simultaneously
+    # Process members with limited concurrency (max 2 at a time)
+    # to avoid Bedrock API throttling
+    MAX_CONCURRENT = 2
+    semaphore = threading.Semaphore(MAX_CONCURRENT)
+
+    def process_one_with_limit(member_info):
+        with semaphore:
+            process_one(member_info)
+
     threads = []
     for m in member_list:
-        t = threading.Thread(target=process_one, args=(m,))
+        t = threading.Thread(target=process_one_with_limit, args=(m,))
         t.start()
         threads.append(t)
 
@@ -2304,7 +2384,7 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
   <h2>Upload Patient Excel File</h2>
   <p>Drag & drop your Excel file here, or click to browse.<br>
      Required columns: <strong>Name, DOB, Gender, Email</strong><br>
-     Optional: Phone, PCPID, PlanID, ZIP, ChronicConditions, InsuranceType, EnrollmentStart, EnrollmentEnd</p>
+     Optional: Phone, PCPID, PlanID, ZIP, ChronicConditions, InsuranceType, EnrollmentStart, EnrollmentEnd, PriorScreenings (e.g. BCS:2025-06-15;COL:2024-03-20)</p>
   <input type="file" id="fileInput" accept=".xlsx,.xls">
   <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">Choose Excel File</button>
   <br><span class="template-link" onclick="downloadTemplate()">Download sample template</span>

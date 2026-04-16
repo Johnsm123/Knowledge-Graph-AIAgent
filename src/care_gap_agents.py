@@ -888,14 +888,15 @@ RECOMMENDED NEXT ACTION: [specific action for top gap]""",
             }
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    return pool.submit(asyncio.run, _run()).result()
-            return loop.run_until_complete(_run())
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(_run())
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, _run()).result()
+        return asyncio.run(_run())
 
     def _run_agent_single(self, agent, task: str) -> str:
         """
@@ -915,14 +916,15 @@ RECOMMENDED NEXT ACTION: [specific action for top gap]""",
             return result.chat_message.content if result and result.chat_message else ""
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    return pool.submit(asyncio.run, _run()).result()
-            return loop.run_until_complete(_run())
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(_run())
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, _run()).result()
+        return asyncio.run(_run())
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
