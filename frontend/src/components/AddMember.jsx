@@ -120,6 +120,38 @@ const ZIP_COUNTRY_MAP = {
   'France': 'fr',
 };
 
+// Curated list of conditions commonly relevant to hereditary risk assessment
+// (aligned with HEDIS measures: GSD/EED/KED/BPD, COL, BCS, CCS, CBP, SPC).
+const HEREDITARY_CONDITIONS = [
+  'Diabetes Type 2', 'Diabetes Type 1', 'Hypertension',
+  'Coronary Artery Disease', 'Stroke', 'High Cholesterol',
+  'Breast Cancer', 'Colorectal Cancer', 'Prostate Cancer',
+  'Ovarian Cancer', 'Lung Cancer',
+  'Alzheimer\'s Disease', 'Parkinson\'s Disease',
+  'Asthma', 'COPD', 'Thyroid Disease',
+  'Kidney Disease', 'Liver Disease',
+  'Osteoporosis', 'Rheumatoid Arthritis',
+  'Depression', 'Bipolar Disorder', 'Schizophrenia',
+  'Sickle Cell Disease', 'Hemophilia',
+  'Cystic Fibrosis', 'Huntington\'s Disease',
+];
+
+const FAMILY_RELATIONS = [
+  'Father', 'Mother',
+  'Brother', 'Sister',
+  'Son', 'Daughter',
+  'Paternal Grandfather', 'Paternal Grandmother',
+  'Maternal Grandfather', 'Maternal Grandmother',
+  'Paternal Uncle', 'Paternal Aunt',
+  'Maternal Uncle', 'Maternal Aunt',
+];
+
+const SMOKING_OPTIONS    = ['', 'Never', 'Former', 'Current (Light)', 'Current (Heavy)'];
+const ALCOHOL_OPTIONS    = ['', 'None', 'Occasional', 'Regular', 'Heavy'];
+const EXERCISE_OPTIONS   = ['', 'Sedentary', 'Light', 'Moderate', 'Active', 'Very Active'];
+const DIET_OPTIONS       = ['', 'Balanced', 'Vegetarian', 'Vegan', 'Mediterranean', 'Low-Carb / Keto', 'High-Sodium', 'Irregular'];
+const STRESS_OPTIONS     = ['', 'Low', 'Moderate', 'High'];
+
 const LANGUAGES = [
   // English & European (HEDIS standard)
   { group: 'English & European', options: [
@@ -177,6 +209,24 @@ function AddMember({ onClose, onSuccess }) {
     plan_id: '',
     enrollment_start: '',
     enrollment_end: '2025-12-31',
+    // Lifestyle (all optional)
+    lifestyle: {
+      bmi: '', height_cm: '', weight_kg: '',
+      smoking_status: '', alcohol_use: '',
+      exercise_frequency: '', diet_type: '',
+      sleep_hours_avg: '', stress_level: '', notes: '',
+    },
+    // Family / ancestral history
+    family_history: [],
+    // Medical history
+    medical_history: {
+      past_conditions: [],
+      current_conditions: [],
+      surgeries: [],
+      allergies: [],
+      medications: [],
+      immunizations: [],
+    },
   });
 
   const [providers, setProviders]   = useState([]);
@@ -297,6 +347,94 @@ function AddMember({ onClose, onSuccess }) {
           : [...prev.chronic_conditions, condition],
       };
     });
+  };
+
+  // ── Lifestyle handlers ──
+  const handleLifestyleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => {
+      const next = { ...prev, lifestyle: { ...prev.lifestyle, [name]: value } };
+      // Auto-compute BMI when height & weight both provided
+      const h = parseFloat(name === 'height_cm' ? value : next.lifestyle.height_cm);
+      const w = parseFloat(name === 'weight_kg' ? value : next.lifestyle.weight_kg);
+      if (h > 0 && w > 0) {
+        const bmi = (w / ((h / 100) ** 2)).toFixed(1);
+        next.lifestyle.bmi = bmi;
+      }
+      return next;
+    });
+  };
+
+  // ── Family history handlers ──
+  const addFamilyMember = () => {
+    setFormData(prev => ({
+      ...prev,
+      family_history: [
+        ...prev.family_history,
+        { relation: '', name: '', alive: true, age_or_age_at_death: '',
+          conditions: [], cause_of_death: '', notes: '' },
+      ],
+    }));
+  };
+  const removeFamilyMember = (idx) => {
+    setFormData(prev => ({
+      ...prev,
+      family_history: prev.family_history.filter((_, i) => i !== idx),
+    }));
+  };
+  const updateFamilyMember = (idx, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      family_history: prev.family_history.map((fm, i) =>
+        i === idx ? { ...fm, [field]: value } : fm
+      ),
+    }));
+  };
+  const toggleFamilyCondition = (idx, condition) => {
+    setFormData(prev => ({
+      ...prev,
+      family_history: prev.family_history.map((fm, i) => {
+        if (i !== idx) return fm;
+        const has = (fm.conditions || []).includes(condition);
+        return {
+          ...fm,
+          conditions: has
+            ? fm.conditions.filter(c => c !== condition)
+            : [...(fm.conditions || []), condition],
+        };
+      }),
+    }));
+  };
+
+  // ── Medical history handlers (generic list add/remove/update) ──
+  const addHistoryItem = (bucket, template) => {
+    setFormData(prev => ({
+      ...prev,
+      medical_history: {
+        ...prev.medical_history,
+        [bucket]: [...(prev.medical_history[bucket] || []), template],
+      },
+    }));
+  };
+  const removeHistoryItem = (bucket, idx) => {
+    setFormData(prev => ({
+      ...prev,
+      medical_history: {
+        ...prev.medical_history,
+        [bucket]: prev.medical_history[bucket].filter((_, i) => i !== idx),
+      },
+    }));
+  };
+  const updateHistoryItem = (bucket, idx, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      medical_history: {
+        ...prev.medical_history,
+        [bucket]: prev.medical_history[bucket].map((it, i) =>
+          i === idx ? { ...it, [field]: value } : it
+        ),
+      },
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -524,6 +662,251 @@ function AddMember({ onClose, onSuccess }) {
             )}
           </div>
 
+          {/* ── Section 4B: Lifestyle ─────────────────────────────── */}
+          <div className="form-section">
+            <div className="form-section-title">
+              <span className="section-icon">🏃</span> Lifestyle
+              <span className="section-note">Optional — strengthens risk-adjusted gap recommendations</span>
+            </div>
+            <div className="form-grid form-grid-3">
+              <div className="form-group">
+                <label>Height (cm)</label>
+                <input type="number" name="height_cm" min="50" max="260"
+                  value={formData.lifestyle.height_cm}
+                  onChange={handleLifestyleChange} placeholder="e.g. 170" />
+              </div>
+              <div className="form-group">
+                <label>Weight (kg)</label>
+                <input type="number" name="weight_kg" min="2" max="400"
+                  value={formData.lifestyle.weight_kg}
+                  onChange={handleLifestyleChange} placeholder="e.g. 72" />
+              </div>
+              <div className="form-group">
+                <label>BMI <span className="section-note">Auto-calculated</span></label>
+                <input type="text" name="bmi" value={formData.lifestyle.bmi}
+                  onChange={handleLifestyleChange} placeholder="Auto" />
+              </div>
+              <div className="form-group">
+                <label>Smoking Status</label>
+                <select name="smoking_status" value={formData.lifestyle.smoking_status}
+                  onChange={handleLifestyleChange}>
+                  {SMOKING_OPTIONS.map(s => <option key={s} value={s}>{s || 'Select'}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Alcohol Use</label>
+                <select name="alcohol_use" value={formData.lifestyle.alcohol_use}
+                  onChange={handleLifestyleChange}>
+                  {ALCOHOL_OPTIONS.map(s => <option key={s} value={s}>{s || 'Select'}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Exercise Frequency</label>
+                <select name="exercise_frequency" value={formData.lifestyle.exercise_frequency}
+                  onChange={handleLifestyleChange}>
+                  {EXERCISE_OPTIONS.map(s => <option key={s} value={s}>{s || 'Select'}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Diet Type</label>
+                <select name="diet_type" value={formData.lifestyle.diet_type}
+                  onChange={handleLifestyleChange}>
+                  {DIET_OPTIONS.map(s => <option key={s} value={s}>{s || 'Select'}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Average Sleep (hours/night)</label>
+                <input type="number" name="sleep_hours_avg" min="0" max="24" step="0.5"
+                  value={formData.lifestyle.sleep_hours_avg}
+                  onChange={handleLifestyleChange} placeholder="e.g. 7" />
+              </div>
+              <div className="form-group">
+                <label>Stress Level</label>
+                <select name="stress_level" value={formData.lifestyle.stress_level}
+                  onChange={handleLifestyleChange}>
+                  {STRESS_OPTIONS.map(s => <option key={s} value={s}>{s || 'Select'}</option>)}
+                </select>
+              </div>
+              <div className="form-group form-group-wide" style={{ gridColumn: '1 / -1' }}>
+                <label>Lifestyle Notes</label>
+                <textarea name="notes" value={formData.lifestyle.notes}
+                  onChange={handleLifestyleChange} rows="2"
+                  placeholder="Additional context (optional)" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 4C: Family / Ancestral History ──────────────── */}
+          <div className="form-section">
+            <div className="form-section-title">
+              <span className="section-icon">🧬</span> Family / Ancestral History
+              <span className="section-note">
+                First-degree relatives' conditions elevate hereditary risk and re-prioritize screenings
+              </span>
+            </div>
+            {formData.family_history.length === 0 && (
+              <p className="empty-hint">No relatives added yet. Click below to add the member's parents, siblings, or grandparents.</p>
+            )}
+            {formData.family_history.map((fm, idx) => (
+              <div key={idx} className="family-member-card">
+                <div className="family-member-header">
+                  <strong>Relative #{idx + 1}</strong>
+                  <button type="button" className="btn-remove" onClick={() => removeFamilyMember(idx)}>
+                    Remove
+                  </button>
+                </div>
+                <div className="form-grid form-grid-3">
+                  <div className="form-group">
+                    <label>Relation *</label>
+                    <select value={fm.relation}
+                      onChange={(e) => updateFamilyMember(idx, 'relation', e.target.value)}>
+                      <option value="">Select</option>
+                      {FAMILY_RELATIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Name (optional)</label>
+                    <input type="text" value={fm.name}
+                      onChange={(e) => updateFamilyMember(idx, 'name', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label>Age / Age at Death</label>
+                    <input type="text" value={fm.age_or_age_at_death}
+                      onChange={(e) => updateFamilyMember(idx, 'age_or_age_at_death', e.target.value)} />
+                  </div>
+                  <div className="form-group form-group-checkbox">
+                    <label className="checkbox-label">
+                      <input type="checkbox" checked={fm.alive}
+                        onChange={(e) => updateFamilyMember(idx, 'alive', e.target.checked)} />
+                      <span>Alive</span>
+                    </label>
+                  </div>
+                  {!fm.alive && (
+                    <div className="form-group form-group-wide">
+                      <label>Cause of Death</label>
+                      <input type="text" value={fm.cause_of_death}
+                        onChange={(e) => updateFamilyMember(idx, 'cause_of_death', e.target.value)} />
+                    </div>
+                  )}
+                </div>
+                <div className="form-group form-group-wide" style={{ marginTop: 8 }}>
+                  <label>Known Conditions</label>
+                  <div className="conditions-grid">
+                    {HEREDITARY_CONDITIONS.map(cond => (
+                      <label key={cond}
+                        className={`condition-chip ${(fm.conditions || []).includes(cond) ? 'condition-chip--selected' : ''}`}>
+                        <input type="checkbox"
+                          checked={(fm.conditions || []).includes(cond)}
+                          onChange={() => toggleFamilyCondition(idx, cond)}
+                          style={{ display: 'none' }} />
+                        {cond}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="form-group form-group-wide" style={{ marginTop: 8 }}>
+                  <label>Notes</label>
+                  <textarea value={fm.notes} rows="2"
+                    onChange={(e) => updateFamilyMember(idx, 'notes', e.target.value)} />
+                </div>
+              </div>
+            ))}
+            <button type="button" className="btn-add-row" onClick={addFamilyMember}>
+              + Add Relative
+            </button>
+          </div>
+
+          {/* ── Section 4D: Medical History ─────────────────────────── */}
+          <div className="form-section">
+            <div className="form-section-title">
+              <span className="section-icon">📋</span> Medical History
+              <span className="section-note">Past/current conditions, surgeries, allergies, medications</span>
+            </div>
+
+            {/* Current Conditions */}
+            <HistoryBucket
+              title="Current Conditions"
+              items={formData.medical_history.current_conditions}
+              fields={[
+                { name: 'name', label: 'Condition', type: 'text', placeholder: 'e.g. Hypertension' },
+                { name: 'onset_year', label: 'Onset Year', type: 'text', placeholder: 'YYYY', width: 'sm' },
+                { name: 'notes', label: 'Notes', type: 'text', placeholder: '' },
+              ]}
+              onAdd={() => addHistoryItem('current_conditions', { name: '', onset_year: '', notes: '' })}
+              onRemove={(i) => removeHistoryItem('current_conditions', i)}
+              onUpdate={(i, f, v) => updateHistoryItem('current_conditions', i, f, v)}
+            />
+
+            {/* Past Conditions */}
+            <HistoryBucket
+              title="Past Conditions (Resolved)"
+              items={formData.medical_history.past_conditions}
+              fields={[
+                { name: 'name', label: 'Condition', type: 'text', placeholder: 'e.g. Pneumonia' },
+                { name: 'onset_year', label: 'Year', type: 'text', placeholder: 'YYYY', width: 'sm' },
+                { name: 'notes', label: 'Notes', type: 'text' },
+              ]}
+              onAdd={() => addHistoryItem('past_conditions', { name: '', onset_year: '', notes: '' })}
+              onRemove={(i) => removeHistoryItem('past_conditions', i)}
+              onUpdate={(i, f, v) => updateHistoryItem('past_conditions', i, f, v)}
+            />
+
+            {/* Surgeries */}
+            <HistoryBucket
+              title="Surgeries"
+              items={formData.medical_history.surgeries}
+              fields={[
+                { name: 'name', label: 'Procedure', type: 'text', placeholder: 'e.g. Appendectomy' },
+                { name: 'year', label: 'Year', type: 'text', placeholder: 'YYYY', width: 'sm' },
+                { name: 'notes', label: 'Notes', type: 'text' },
+              ]}
+              onAdd={() => addHistoryItem('surgeries', { name: '', year: '', notes: '' })}
+              onRemove={(i) => removeHistoryItem('surgeries', i)}
+              onUpdate={(i, f, v) => updateHistoryItem('surgeries', i, f, v)}
+            />
+
+            {/* Allergies */}
+            <HistoryBucket
+              title="Allergies"
+              items={formData.medical_history.allergies}
+              fields={[
+                { name: 'substance', label: 'Substance', type: 'text', placeholder: 'e.g. Penicillin' },
+                { name: 'severity', label: 'Severity', type: 'select', options: ['', 'Mild', 'Moderate', 'Severe', 'Anaphylaxis'], width: 'sm' },
+                { name: 'reaction', label: 'Reaction', type: 'text', placeholder: 'e.g. Rash' },
+              ]}
+              onAdd={() => addHistoryItem('allergies', { substance: '', severity: '', reaction: '' })}
+              onRemove={(i) => removeHistoryItem('allergies', i)}
+              onUpdate={(i, f, v) => updateHistoryItem('allergies', i, f, v)}
+            />
+
+            {/* Medications */}
+            <HistoryBucket
+              title="Current Medications"
+              items={formData.medical_history.medications}
+              fields={[
+                { name: 'name', label: 'Medication', type: 'text', placeholder: 'e.g. Metformin' },
+                { name: 'dose', label: 'Dose', type: 'text', placeholder: 'e.g. 500mg BID', width: 'sm' },
+                { name: 'purpose', label: 'Purpose', type: 'text', placeholder: 'e.g. Diabetes' },
+              ]}
+              onAdd={() => addHistoryItem('medications', { name: '', dose: '', purpose: '' })}
+              onRemove={(i) => removeHistoryItem('medications', i)}
+              onUpdate={(i, f, v) => updateHistoryItem('medications', i, f, v)}
+            />
+
+            {/* Immunizations */}
+            <HistoryBucket
+              title="Immunizations"
+              items={formData.medical_history.immunizations}
+              fields={[
+                { name: 'name', label: 'Vaccine', type: 'text', placeholder: 'e.g. Influenza' },
+                { name: 'year', label: 'Year', type: 'text', placeholder: 'YYYY', width: 'sm' },
+              ]}
+              onAdd={() => addHistoryItem('immunizations', { name: '', year: '' })}
+              onRemove={(i) => removeHistoryItem('immunizations', i)}
+              onUpdate={(i, f, v) => updateHistoryItem('immunizations', i, f, v)}
+            />
+          </div>
+
           {/* ── Section 5: Insurance & Enrollment ────────────────── */}
           <div className="form-section">
             <div className="form-section-title">
@@ -598,6 +981,42 @@ function AddMember({ onClose, onSuccess }) {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// Reusable sub-component for each medical-history bucket
+function HistoryBucket({ title, items, fields, onAdd, onRemove, onUpdate }) {
+  return (
+    <div className="history-bucket">
+      <div className="history-bucket-title">{title}</div>
+      {items.length === 0 && (
+        <p className="empty-hint empty-hint-sm">No entries. Click "+ Add" to create one.</p>
+      )}
+      {items.map((item, idx) => (
+        <div key={idx} className="history-row">
+          {fields.map(f => (
+            <div key={f.name} className={`form-group history-field history-field-${f.width || 'md'}`}>
+              <label>{f.label}</label>
+              {f.type === 'select' ? (
+                <select value={item[f.name] || ''}
+                  onChange={(e) => onUpdate(idx, f.name, e.target.value)}>
+                  {(f.options || []).map(opt => (
+                    <option key={opt} value={opt}>{opt || 'Select'}</option>
+                  ))}
+                </select>
+              ) : (
+                <input type={f.type || 'text'} value={item[f.name] || ''}
+                  placeholder={f.placeholder || ''}
+                  onChange={(e) => onUpdate(idx, f.name, e.target.value)} />
+              )}
+            </div>
+          ))}
+          <button type="button" className="btn-remove btn-remove-sm"
+            onClick={() => onRemove(idx)} title="Remove row">×</button>
+        </div>
+      ))}
+      <button type="button" className="btn-add-row" onClick={onAdd}>+ Add</button>
     </div>
   );
 }

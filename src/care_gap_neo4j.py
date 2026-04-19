@@ -21,6 +21,10 @@ def setup_constraints():
         "CREATE CONSTRAINT IF NOT EXISTS FOR (cg:ClinicalGuideline) REQUIRE cg.guideline_id IS UNIQUE",
         "CREATE CONSTRAINT IF NOT EXISTS FOR (so:ScreeningOption) REQUIRE so.option_id IS UNIQUE",
         "CREATE CONSTRAINT IF NOT EXISTS FOR (bp:BestPractices) REQUIRE bp.best_practices_id IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (l:Lifestyle) REQUIRE l.lifestyle_id IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (fm:FamilyMember) REQUIRE fm.family_member_id IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (cond:Condition) REQUIRE cond.name IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (mh:MedicalHistoryEntry) REQUIRE mh.entry_id IS UNIQUE",
     ]
     for c in constraints:
         kg.execute_write(c)
@@ -909,3 +913,302 @@ def close_care_gap_with_claim(care_gap_id: str, member_id: str, measure_id: str,
         MATCH (g:CareGap {care_gap_id: $care_gap_id})
         MERGE (c)-[:CLOSES_GAP]->(g)
     """, {"claim_id": claim_id, "care_gap_id": care_gap_id})
+
+
+# ── Extended Patient Record: Lifestyle, Family History, Medical History ──────
+
+HEREDITARY_HIGH_RISK_CONDITIONS = {
+    "Diabetes Type 2", "Diabetes Type 1", "Hypertension", "Coronary Artery Disease",
+    "Stroke", "Breast Cancer", "Colorectal Cancer", "Prostate Cancer",
+    "Ovarian Cancer", "Alzheimer's Disease", "Parkinson's Disease",
+    "Asthma", "High Cholesterol", "Depression", "Bipolar Disorder",
+    "Schizophrenia", "Thyroid Disease", "Kidney Disease", "Liver Disease",
+    "Osteoporosis", "Rheumatoid Arthritis", "Sickle Cell Disease",
+    "Hemophilia", "Cystic Fibrosis", "Huntington's Disease",
+}
+
+FIRST_DEGREE_RELATIONS = {"father", "mother", "sibling", "son", "daughter"}
+
+
+def merge_lifestyle(member_id: str, lifestyle: dict):
+    """
+    Upsert a member's Lifestyle node (1:1 with Member).
+    lifestyle keys (all optional):
+      bmi, height_cm, weight_kg, smoking_status, alcohol_use,
+      exercise_frequency, diet_type, sleep_hours_avg, stress_level, notes
+    """
+    lifestyle = lifestyle or {}
+    kg = get_knowledge_graph()
+    lifestyle_id = f"{member_id}_lifestyle"
+    kg.execute_write("""
+        MERGE (l:Lifestyle {lifestyle_id: $lifestyle_id})
+        SET l.member_id          = $member_id,
+            l.bmi                = $bmi,
+            l.height_cm          = $height_cm,
+            l.weight_kg          = $weight_kg,
+            l.smoking_status     = $smoking_status,
+            l.alcohol_use        = $alcohol_use,
+            l.exercise_frequency = $exercise_frequency,
+            l.diet_type          = $diet_type,
+            l.sleep_hours_avg    = $sleep_hours_avg,
+            l.stress_level       = $stress_level,
+            l.notes              = $notes,
+            l.updated_at         = datetime()
+        WITH l
+        MATCH (m:Member {member_id: $member_id})
+        MERGE (m)-[:HAS_LIFESTYLE]->(l)
+    """, {
+        "lifestyle_id": lifestyle_id,
+        "member_id": member_id,
+        "bmi": lifestyle.get("bmi"),
+        "height_cm": lifestyle.get("height_cm"),
+        "weight_kg": lifestyle.get("weight_kg"),
+        "smoking_status": lifestyle.get("smoking_status", ""),
+        "alcohol_use": lifestyle.get("alcohol_use", ""),
+        "exercise_frequency": lifestyle.get("exercise_frequency", ""),
+        "diet_type": lifestyle.get("diet_type", ""),
+        "sleep_hours_avg": lifestyle.get("sleep_hours_avg"),
+        "stress_level": lifestyle.get("stress_level", ""),
+        "notes": lifestyle.get("notes", ""),
+    })
+
+
+def merge_condition(name: str, icd10: str = ""):
+    """Upsert a Condition node keyed by canonical name."""
+    if not name:
+        return
+    kg = get_knowledge_graph()
+    kg.execute_write("""
+        MERGE (c:Condition {name: $name})
+        ON CREATE SET c.icd10 = $icd10
+        SET c.icd10 = coalesce($icd10, c.icd10, '')
+    """, {"name": name.strip(), "icd10": icd10 or ""})
+
+
+def replace_family_history(member_id: str, family_members: list):
+    """
+    Replace the member's family history with the provided list. Each entry:
+      {relation, name?, alive, age_or_age_at_death, conditions: [..],
+       cause_of_death?, notes?}
+    Safe to call repeatedly; wipes prior FamilyMember nodes for this member.
+    """
+    kg = get_knowledge_graph()
+    # Detach delete old FamilyMember nodes for this member (keeps Condition nodes reusable).
+    kg.execute_write("""
+        MATCH (m:Member {member_id: $member_id})-[:HAS_RELATIVE]->(fm:FamilyMember)
+        DETACH DELETE fm
+    """, {"member_id": member_id})
+
+    for idx, fm in enumerate(family_members or []):
+        relation = (fm.get("relation") or "").strip()
+        if not relation:
+            continue
+        fm_id = f"{member_id}_fm_{idx}_{relation}".replace(" ", "_")
+        conditions = [c for c in (fm.get("conditions") or []) if c]
+        kg.execute_write("""
+            MERGE (fm:FamilyMember {family_member_id: $fm_id})
+            SET fm.member_id           = $member_id,
+                fm.relation            = $relation,
+                fm.name                = $name,
+                fm.alive               = $alive,
+                fm.age_or_age_at_death = $age,
+                fm.cause_of_death      = $cause,
+                fm.notes               = $notes,
+                fm.conditions_summary  = $conditions
+            WITH fm
+            MATCH (m:Member {member_id: $member_id})
+            MERGE (m)-[:HAS_RELATIVE]->(fm)
+        """, {
+            "fm_id": fm_id,
+            "member_id": member_id,
+            "relation": relation,
+            "name": fm.get("name", ""),
+            "alive": bool(fm.get("alive", True)),
+            "age": fm.get("age_or_age_at_death") or "",
+            "cause": fm.get("cause_of_death", ""),
+            "notes": fm.get("notes", ""),
+            "conditions": conditions,
+        })
+        for cond_name in conditions:
+            merge_condition(cond_name)
+            kg.execute_write("""
+                MATCH (fm:FamilyMember {family_member_id: $fm_id})
+                MATCH (c:Condition {name: $name})
+                MERGE (fm)-[:HAS_CONDITION]->(c)
+            """, {"fm_id": fm_id, "name": cond_name.strip()})
+
+
+def replace_medical_history(member_id: str, entries: dict):
+    """
+    Replace the member's medical history. `entries` shape:
+      {
+        past_conditions:   [{name, onset_year?, status?, notes?}, ...],
+        current_conditions:[{name, onset_year?, notes?}, ...],
+        surgeries:         [{name, year?, notes?}, ...],
+        allergies:         [{substance, severity?, reaction?}, ...],
+        medications:       [{name, dose?, started?, purpose?}, ...],
+        immunizations:     [{name, year?}, ...]
+      }
+    """
+    kg = get_knowledge_graph()
+    kg.execute_write("""
+        MATCH (m:Member {member_id: $member_id})-[:HAS_MEDICAL_HISTORY]->(e:MedicalHistoryEntry)
+        DETACH DELETE e
+    """, {"member_id": member_id})
+
+    buckets = [
+        ("past_condition",    (entries or {}).get("past_conditions")   or []),
+        ("current_condition", (entries or {}).get("current_conditions") or []),
+        ("surgery",           (entries or {}).get("surgeries")          or []),
+        ("allergy",           (entries or {}).get("allergies")          or []),
+        ("medication",        (entries or {}).get("medications")        or []),
+        ("immunization",      (entries or {}).get("immunizations")      or []),
+    ]
+
+    for bucket_type, items in buckets:
+        for idx, item in enumerate(items):
+            entry_id = f"{member_id}_{bucket_type}_{idx}"
+            label = item.get("name") or item.get("substance") or ""
+            if not label:
+                continue
+            kg.execute_write("""
+                MERGE (e:MedicalHistoryEntry {entry_id: $entry_id})
+                SET e.member_id  = $member_id,
+                    e.type       = $type,
+                    e.label      = $label,
+                    e.year       = $year,
+                    e.status     = $status,
+                    e.severity   = $severity,
+                    e.reaction   = $reaction,
+                    e.dose       = $dose,
+                    e.started    = $started,
+                    e.purpose    = $purpose,
+                    e.notes      = $notes
+                WITH e
+                MATCH (m:Member {member_id: $member_id})
+                MERGE (m)-[:HAS_MEDICAL_HISTORY]->(e)
+            """, {
+                "entry_id": entry_id,
+                "member_id": member_id,
+                "type": bucket_type,
+                "label": label,
+                "year": str(item.get("year") or item.get("onset_year") or ""),
+                "status": item.get("status", ""),
+                "severity": item.get("severity", ""),
+                "reaction": item.get("reaction", ""),
+                "dose": item.get("dose", ""),
+                "started": str(item.get("started") or ""),
+                "purpose": item.get("purpose", ""),
+                "notes": item.get("notes", ""),
+            })
+            if bucket_type in ("past_condition", "current_condition"):
+                merge_condition(label)
+                kg.execute_write("""
+                    MATCH (e:MedicalHistoryEntry {entry_id: $entry_id})
+                    MATCH (c:Condition {name: $name})
+                    MERGE (e)-[:REFERENCES_CONDITION]->(c)
+                """, {"entry_id": entry_id, "name": label.strip()})
+
+
+def get_member_lifestyle(member_id: str):
+    kg = get_knowledge_graph()
+    rows = kg.run_query("""
+        MATCH (m:Member {member_id: $member_id})-[:HAS_LIFESTYLE]->(l:Lifestyle)
+        RETURN l.bmi                AS bmi,
+               l.height_cm          AS height_cm,
+               l.weight_kg          AS weight_kg,
+               l.smoking_status     AS smoking_status,
+               l.alcohol_use        AS alcohol_use,
+               l.exercise_frequency AS exercise_frequency,
+               l.diet_type          AS diet_type,
+               l.sleep_hours_avg    AS sleep_hours_avg,
+               l.stress_level       AS stress_level,
+               l.notes              AS notes
+    """, {"member_id": member_id})
+    return rows[0] if rows else {}
+
+
+def get_member_family_history(member_id: str):
+    kg = get_knowledge_graph()
+    return kg.run_query("""
+        MATCH (m:Member {member_id: $member_id})-[:HAS_RELATIVE]->(fm:FamilyMember)
+        OPTIONAL MATCH (fm)-[:HAS_CONDITION]->(c:Condition)
+        WITH fm, collect(DISTINCT c.name) AS condition_names
+        RETURN fm.family_member_id   AS family_member_id,
+               fm.relation           AS relation,
+               fm.name               AS name,
+               fm.alive              AS alive,
+               fm.age_or_age_at_death AS age_or_age_at_death,
+               fm.cause_of_death     AS cause_of_death,
+               fm.notes              AS notes,
+               [x IN condition_names WHERE x IS NOT NULL] AS conditions
+        ORDER BY fm.relation
+    """, {"member_id": member_id})
+
+
+def get_member_medical_history(member_id: str):
+    kg = get_knowledge_graph()
+    rows = kg.run_query("""
+        MATCH (m:Member {member_id: $member_id})-[:HAS_MEDICAL_HISTORY]->(e:MedicalHistoryEntry)
+        RETURN e.type      AS type,
+               e.label     AS label,
+               e.year      AS year,
+               e.status    AS status,
+               e.severity  AS severity,
+               e.reaction  AS reaction,
+               e.dose      AS dose,
+               e.started   AS started,
+               e.purpose   AS purpose,
+               e.notes     AS notes
+        ORDER BY e.type, e.year DESC
+    """, {"member_id": member_id})
+
+    buckets = {
+        "past_conditions": [], "current_conditions": [], "surgeries": [],
+        "allergies": [], "medications": [], "immunizations": [],
+    }
+    type_to_bucket = {
+        "past_condition": "past_conditions",
+        "current_condition": "current_conditions",
+        "surgery": "surgeries",
+        "allergy": "allergies",
+        "medication": "medications",
+        "immunization": "immunizations",
+    }
+    for r in rows:
+        bkt = type_to_bucket.get(r.get("type"))
+        if not bkt:
+            continue
+        buckets[bkt].append({k: v for k, v in r.items() if v not in (None, "")})
+    return buckets
+
+
+def compute_hereditary_risks(family_history: list) -> list:
+    """
+    Derive a list of elevated hereditary risks from first-degree relatives'
+    conditions. Each entry: {condition, relatives: [..]}.
+    """
+    risk_map: dict = {}
+    for fm in family_history or []:
+        relation = (fm.get("relation") or "").lower()
+        is_first_degree = any(rel in relation for rel in FIRST_DEGREE_RELATIONS)
+        if not is_first_degree:
+            continue
+        for cond in (fm.get("conditions") or []):
+            if cond in HEREDITARY_HIGH_RISK_CONDITIONS:
+                risk_map.setdefault(cond, set()).add(fm.get("relation"))
+    return [
+        {"condition": cond, "relatives": sorted(r for r in rels if r)}
+        for cond, rels in sorted(risk_map.items())
+    ]
+
+
+def get_member_extended_profile(member_id: str) -> dict:
+    """Return lifestyle + family_history + medical_history + hereditary_risks."""
+    family_history = get_member_family_history(member_id)
+    return {
+        "lifestyle": get_member_lifestyle(member_id),
+        "family_history": family_history,
+        "medical_history": get_member_medical_history(member_id),
+        "hereditary_risks": compute_hereditary_risks(family_history),
+    }

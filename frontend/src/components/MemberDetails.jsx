@@ -657,6 +657,12 @@ function MemberDetails({ member, onBack }) {
         <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>
           Overview
         </button>
+        <button className={activeTab === 'patient-record' ? 'active' : ''} onClick={() => setActiveTab('patient-record')}>
+          Patient Record
+          {(details?.hereditary_risks || []).length > 0 && (
+            <span className="tab-risk-dot" title="Hereditary risk detected">●</span>
+          )}
+        </button>
         <button className={activeTab === 'gaps' ? 'active' : ''} onClick={() => setActiveTab('gaps')}>
           Care Gaps ({details?.open_gaps?.length || 0})
         </button>
@@ -905,6 +911,18 @@ function MemberDetails({ member, onBack }) {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── PATIENT RECORD TAB ─────────────────────────────────────────── */}
+        {activeTab === 'patient-record' && (
+          <PatientRecordTab
+            memberId={member?.member_id}
+            lifestyle={details?.lifestyle || {}}
+            familyHistory={details?.family_history || []}
+            medicalHistory={details?.medical_history || {}}
+            hereditaryRisks={details?.hereditary_risks || []}
+            onRefresh={fetchMemberDetails}
+          />
         )}
 
         {/* ── GAPS TAB ───────────────────────────────────────────────────── */}
@@ -1816,6 +1834,423 @@ function OtRow({ label, value }) {
     <div className="ot-row">
       <span className="ot-row-label">{label}</span>
       <span className="ot-row-value">{value}</span>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Patient Record Tab — Lifestyle, Family History, Medical History, Risks
+// ═══════════════════════════════════════════════════════════════════════
+
+const PR_FAMILY_RELATIONS = [
+  'Father', 'Mother', 'Brother', 'Sister', 'Son', 'Daughter',
+  'Paternal Grandfather', 'Paternal Grandmother',
+  'Maternal Grandfather', 'Maternal Grandmother',
+  'Paternal Uncle', 'Paternal Aunt',
+  'Maternal Uncle', 'Maternal Aunt',
+];
+
+const PR_HEREDITARY_CONDITIONS = [
+  'Diabetes Type 2', 'Diabetes Type 1', 'Hypertension',
+  'Coronary Artery Disease', 'Stroke', 'High Cholesterol',
+  'Breast Cancer', 'Colorectal Cancer', 'Prostate Cancer',
+  'Ovarian Cancer', 'Lung Cancer',
+  'Alzheimer\'s Disease', 'Parkinson\'s Disease',
+  'Asthma', 'COPD', 'Thyroid Disease', 'Kidney Disease',
+  'Depression', 'Bipolar Disorder', 'Schizophrenia',
+  'Osteoporosis', 'Rheumatoid Arthritis',
+  'Sickle Cell Disease', 'Hemophilia',
+  'Cystic Fibrosis', 'Huntington\'s Disease',
+];
+
+function PatientRecordTab({ memberId, lifestyle, familyHistory, medicalHistory, hereditaryRisks, onRefresh }) {
+  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  const [draftLifestyle, setDraftLifestyle] = useState(lifestyle || {});
+  const [draftFamily, setDraftFamily]       = useState(familyHistory || []);
+  const [draftMedical, setDraftMedical]     = useState(medicalHistory || {});
+
+  useEffect(() => { setDraftLifestyle(lifestyle || {}); }, [lifestyle]);
+  useEffect(() => { setDraftFamily(familyHistory || []); }, [familyHistory]);
+  useEffect(() => { setDraftMedical(medicalHistory || {}); }, [medicalHistory]);
+
+  const handleSave = async () => {
+    if (!memberId) return;
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      // Normalize lifestyle numeric fields
+      const lsPayload = { ...draftLifestyle };
+      ['bmi', 'height_cm', 'weight_kg', 'sleep_hours_avg'].forEach(k => {
+        if (lsPayload[k] === '' || lsPayload[k] == null) lsPayload[k] = null;
+        else lsPayload[k] = Number(lsPayload[k]);
+      });
+
+      await Promise.all([
+        fetch(`${API_BASE}/members/${memberId}/lifestyle`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(lsPayload),
+        }),
+        fetch(`${API_BASE}/members/${memberId}/family-history`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ family_members: draftFamily }),
+        }),
+        fetch(`${API_BASE}/members/${memberId}/medical-history`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(draftMedical),
+        }),
+      ]);
+      setSaveMsg('Saved');
+      setEditMode(false);
+      onRefresh && onRefresh();
+    } catch (err) {
+      setSaveMsg('Save failed: ' + err.message);
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(''), 3000);
+    }
+  };
+
+  const handleCancel = () => {
+    setDraftLifestyle(lifestyle || {});
+    setDraftFamily(familyHistory || []);
+    setDraftMedical(medicalHistory || {});
+    setEditMode(false);
+  };
+
+  return (
+    <div className="patient-record-tab">
+      {/* Hereditary-risk banner */}
+      {hereditaryRisks.length > 0 && (
+        <div className="hereditary-risk-banner">
+          <div className="hrb-icon">⚠</div>
+          <div className="hrb-body">
+            <strong>Elevated Hereditary Risk Detected</strong>
+            <div className="hrb-list">
+              {hereditaryRisks.map((r, i) => (
+                <span key={i} className="hrb-chip">
+                  {r.condition} <em>({(r.relatives || []).join(', ')})</em>
+                </span>
+              ))}
+            </div>
+            <p className="hrb-note">
+              Care-gap recommendations below are risk-adjusted based on first-degree relative conditions.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Header / edit toggle */}
+      <div className="patient-record-header">
+        <h3>Comprehensive Patient Record</h3>
+        <div>
+          {saveMsg && <span className="save-msg">{saveMsg}</span>}
+          {!editMode ? (
+            <button className="btn-edit" onClick={() => setEditMode(true)}>Edit</button>
+          ) : (
+            <>
+              <button className="btn-cancel-sm" onClick={handleCancel} disabled={saving}>Cancel</button>
+              <button className="btn-save-sm" onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Lifestyle card */}
+      <div className="pr-card">
+        <div className="pr-card-title">🏃 Lifestyle</div>
+        {editMode ? (
+          <LifestyleEditor data={draftLifestyle} onChange={setDraftLifestyle} />
+        ) : (
+          <LifestyleView data={lifestyle} />
+        )}
+      </div>
+
+      {/* Family / Ancestral History card */}
+      <div className="pr-card">
+        <div className="pr-card-title">🧬 Family / Ancestral History</div>
+        {editMode ? (
+          <FamilyHistoryEditor data={draftFamily} onChange={setDraftFamily} />
+        ) : (
+          <FamilyHistoryView data={familyHistory} />
+        )}
+      </div>
+
+      {/* Medical History card */}
+      <div className="pr-card">
+        <div className="pr-card-title">📋 Medical History</div>
+        {editMode ? (
+          <MedicalHistoryEditor data={draftMedical} onChange={setDraftMedical} />
+        ) : (
+          <MedicalHistoryView data={medicalHistory} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Lifestyle View ──
+function LifestyleView({ data }) {
+  const d = data || {};
+  const rows = [
+    ['BMI', d.bmi],
+    ['Height', d.height_cm ? `${d.height_cm} cm` : ''],
+    ['Weight', d.weight_kg ? `${d.weight_kg} kg` : ''],
+    ['Smoking', d.smoking_status],
+    ['Alcohol', d.alcohol_use],
+    ['Exercise', d.exercise_frequency],
+    ['Diet', d.diet_type],
+    ['Sleep (avg hrs)', d.sleep_hours_avg],
+    ['Stress', d.stress_level],
+  ];
+  const hasAny = rows.some(([, v]) => v !== undefined && v !== null && v !== '');
+  if (!hasAny) return <p className="pr-empty">No lifestyle data recorded. Click Edit to add.</p>;
+  return (
+    <div className="pr-kv-grid">
+      {rows.map(([k, v]) => (
+        <div className="pr-kv" key={k}>
+          <span className="pr-kv-label">{k}</span>
+          <span className="pr-kv-value">{v || '—'}</span>
+        </div>
+      ))}
+      {d.notes && <div className="pr-notes"><strong>Notes:</strong> {d.notes}</div>}
+    </div>
+  );
+}
+
+// ── Lifestyle Editor ──
+function LifestyleEditor({ data, onChange }) {
+  const set = (k, v) => {
+    const next = { ...data, [k]: v };
+    const h = parseFloat(k === 'height_cm' ? v : next.height_cm);
+    const w = parseFloat(k === 'weight_kg' ? v : next.weight_kg);
+    if (h > 0 && w > 0) next.bmi = (w / ((h / 100) ** 2)).toFixed(1);
+    onChange(next);
+  };
+  return (
+    <div className="pr-editor-grid">
+      <PRInput label="Height (cm)" type="number" value={data.height_cm || ''} onChange={v => set('height_cm', v)} />
+      <PRInput label="Weight (kg)" type="number" value={data.weight_kg || ''} onChange={v => set('weight_kg', v)} />
+      <PRInput label="BMI (auto)" value={data.bmi || ''} onChange={v => set('bmi', v)} />
+      <PRSelect label="Smoking" value={data.smoking_status || ''} options={['', 'Never', 'Former', 'Current (Light)', 'Current (Heavy)']}
+                onChange={v => set('smoking_status', v)} />
+      <PRSelect label="Alcohol" value={data.alcohol_use || ''} options={['', 'None', 'Occasional', 'Regular', 'Heavy']}
+                onChange={v => set('alcohol_use', v)} />
+      <PRSelect label="Exercise" value={data.exercise_frequency || ''} options={['', 'Sedentary', 'Light', 'Moderate', 'Active', 'Very Active']}
+                onChange={v => set('exercise_frequency', v)} />
+      <PRSelect label="Diet" value={data.diet_type || ''} options={['', 'Balanced', 'Vegetarian', 'Vegan', 'Mediterranean', 'Low-Carb / Keto', 'High-Sodium', 'Irregular']}
+                onChange={v => set('diet_type', v)} />
+      <PRInput label="Sleep (hrs)" type="number" value={data.sleep_hours_avg || ''} onChange={v => set('sleep_hours_avg', v)} />
+      <PRSelect label="Stress" value={data.stress_level || ''} options={['', 'Low', 'Moderate', 'High']}
+                onChange={v => set('stress_level', v)} />
+      <div className="pr-editor-wide">
+        <label>Notes</label>
+        <textarea rows="2" value={data.notes || ''} onChange={e => set('notes', e.target.value)} />
+      </div>
+    </div>
+  );
+}
+
+// ── Family history view ──
+function FamilyHistoryView({ data }) {
+  if (!data || data.length === 0) {
+    return <p className="pr-empty">No family history recorded. Click Edit to add.</p>;
+  }
+  return (
+    <div className="pr-family-list">
+      {data.map((fm, i) => (
+        <div key={i} className="pr-family-item">
+          <div className="pr-family-header">
+            <strong>{fm.relation}</strong>
+            {fm.name && <span className="pr-family-name">({fm.name})</span>}
+            <span className={`pr-family-status ${fm.alive ? 'alive' : 'deceased'}`}>
+              {fm.alive ? 'Alive' : 'Deceased'} {fm.age_or_age_at_death ? `· age ${fm.age_or_age_at_death}` : ''}
+            </span>
+          </div>
+          {(fm.conditions || []).length > 0 && (
+            <div className="pr-family-conditions">
+              {(fm.conditions || []).map(c => (
+                <span key={c} className="pr-condition-chip">{c}</span>
+              ))}
+            </div>
+          )}
+          {!fm.alive && fm.cause_of_death && (
+            <div className="pr-family-meta">Cause of death: {fm.cause_of_death}</div>
+          )}
+          {fm.notes && <div className="pr-family-meta">{fm.notes}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Family history editor ──
+function FamilyHistoryEditor({ data, onChange }) {
+  const update = (i, field, value) => {
+    onChange(data.map((f, idx) => (idx === i ? { ...f, [field]: value } : f)));
+  };
+  const toggleCond = (i, c) => {
+    onChange(data.map((f, idx) => {
+      if (idx !== i) return f;
+      const has = (f.conditions || []).includes(c);
+      return { ...f, conditions: has
+        ? f.conditions.filter(x => x !== c)
+        : [...(f.conditions || []), c] };
+    }));
+  };
+  const add = () => onChange([...data, { relation: '', alive: true, conditions: [] }]);
+  const remove = (i) => onChange(data.filter((_, idx) => idx !== i));
+
+  return (
+    <div>
+      {data.length === 0 && (
+        <p className="pr-empty-sm">No relatives yet. Click + Add.</p>
+      )}
+      {data.map((fm, i) => (
+        <div key={i} className="pr-family-edit-card">
+          <div className="pr-family-edit-header">
+            <strong>Relative #{i + 1}</strong>
+            <button className="btn-remove btn-remove-sm" onClick={() => remove(i)}>×</button>
+          </div>
+          <div className="pr-editor-grid">
+            <PRSelect label="Relation" value={fm.relation || ''}
+                      options={['', ...PR_FAMILY_RELATIONS]}
+                      onChange={v => update(i, 'relation', v)} />
+            <PRInput label="Name" value={fm.name || ''} onChange={v => update(i, 'name', v)} />
+            <PRInput label="Age / age at death" value={fm.age_or_age_at_death || ''}
+                     onChange={v => update(i, 'age_or_age_at_death', v)} />
+            <div className="pr-check">
+              <label>
+                <input type="checkbox" checked={!!fm.alive}
+                       onChange={e => update(i, 'alive', e.target.checked)} />
+                {' '}Alive
+              </label>
+            </div>
+            {!fm.alive && (
+              <PRInput label="Cause of death" value={fm.cause_of_death || ''}
+                       onChange={v => update(i, 'cause_of_death', v)} wide />
+            )}
+          </div>
+          <div className="pr-cond-picker">
+            <label>Known conditions</label>
+            <div className="conditions-grid">
+              {PR_HEREDITARY_CONDITIONS.map(c => (
+                <label key={c}
+                  className={`condition-chip ${(fm.conditions || []).includes(c) ? 'condition-chip--selected' : ''}`}>
+                  <input type="checkbox"
+                    checked={(fm.conditions || []).includes(c)}
+                    onChange={() => toggleCond(i, c)}
+                    style={{ display: 'none' }} />
+                  {c}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+      <button className="btn-add-row" onClick={add}>+ Add Relative</button>
+    </div>
+  );
+}
+
+// ── Medical history view ──
+function MedicalHistoryView({ data }) {
+  const d = data || {};
+  const sections = [
+    ['Current Conditions', d.current_conditions, (x) => `${x.label || x.name} ${x.year ? `(${x.year})` : ''}`],
+    ['Past Conditions',    d.past_conditions,    (x) => `${x.label || x.name} ${x.year ? `(${x.year})` : ''}`],
+    ['Surgeries',          d.surgeries,          (x) => `${x.label || x.name} ${x.year ? `(${x.year})` : ''}`],
+    ['Allergies',          d.allergies,          (x) => `${x.label || x.substance}${x.severity ? ` — ${x.severity}` : ''}${x.reaction ? ` (${x.reaction})` : ''}`],
+    ['Medications',        d.medications,        (x) => `${x.label || x.name}${x.dose ? ` ${x.dose}` : ''}${x.purpose ? ` — ${x.purpose}` : ''}`],
+    ['Immunizations',      d.immunizations,      (x) => `${x.label || x.name} ${x.year ? `(${x.year})` : ''}`],
+  ];
+  const hasAny = sections.some(([, items]) => (items || []).length > 0);
+  if (!hasAny) return <p className="pr-empty">No medical history recorded. Click Edit to add.</p>;
+  return (
+    <div className="pr-mh-grid">
+      {sections.map(([title, items, fmt]) => (
+        (items || []).length > 0 && (
+          <div key={title} className="pr-mh-section">
+            <div className="pr-mh-title">{title}</div>
+            <ul className="pr-mh-list">
+              {items.map((it, i) => <li key={i}>{fmt(it)}</li>)}
+            </ul>
+          </div>
+        )
+      ))}
+    </div>
+  );
+}
+
+// ── Medical history editor ──
+function MedicalHistoryEditor({ data, onChange }) {
+  const buckets = [
+    { key: 'current_conditions', title: 'Current Conditions',
+      fields: [['name', 'Condition'], ['onset_year', 'Year'], ['notes', 'Notes']] },
+    { key: 'past_conditions', title: 'Past Conditions',
+      fields: [['name', 'Condition'], ['onset_year', 'Year'], ['notes', 'Notes']] },
+    { key: 'surgeries', title: 'Surgeries',
+      fields: [['name', 'Procedure'], ['year', 'Year'], ['notes', 'Notes']] },
+    { key: 'allergies', title: 'Allergies',
+      fields: [['substance', 'Substance'], ['severity', 'Severity'], ['reaction', 'Reaction']] },
+    { key: 'medications', title: 'Medications',
+      fields: [['name', 'Medication'], ['dose', 'Dose'], ['purpose', 'Purpose']] },
+    { key: 'immunizations', title: 'Immunizations',
+      fields: [['name', 'Vaccine'], ['year', 'Year']] },
+  ];
+
+  const addRow  = (key) => onChange({ ...data, [key]: [...(data[key] || []), {}] });
+  const delRow  = (key, i) => onChange({ ...data, [key]: (data[key] || []).filter((_, idx) => idx !== i) });
+  const updRow  = (key, i, f, v) => onChange({
+    ...data,
+    [key]: (data[key] || []).map((row, idx) => idx === i ? { ...row, [f]: v } : row),
+  });
+
+  return (
+    <div>
+      {buckets.map(b => (
+        <div key={b.key} className="pr-mh-editor">
+          <div className="pr-mh-editor-title">{b.title}</div>
+          {(data[b.key] || []).map((row, i) => (
+            <div key={i} className="pr-mh-row">
+              {b.fields.map(([fname, flabel]) => (
+                <div key={fname} className="form-group">
+                  <label>{flabel}</label>
+                  <input type="text" value={row[fname] || ''}
+                    onChange={e => updRow(b.key, i, fname, e.target.value)} />
+                </div>
+              ))}
+              <button className="btn-remove btn-remove-sm" onClick={() => delRow(b.key, i)}>×</button>
+            </div>
+          ))}
+          <button className="btn-add-row" onClick={() => addRow(b.key)}>+ Add {b.title}</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Tiny input/select helpers ──
+function PRInput({ label, value, onChange, type = 'text', wide = false }) {
+  return (
+    <div className={`form-group ${wide ? 'pr-editor-wide' : ''}`}>
+      <label>{label}</label>
+      <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function PRSelect({ label, value, options, onChange }) {
+  return (
+    <div className="form-group">
+      <label>{label}</label>
+      <select value={value || ''} onChange={e => onChange(e.target.value)}>
+        {options.map(o => <option key={o} value={o}>{o || 'Select'}</option>)}
+      </select>
     </div>
   );
 }

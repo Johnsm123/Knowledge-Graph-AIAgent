@@ -32,7 +32,7 @@ class BedrockChatCompletionClient(ChatCompletionClient):
     component_type = "model"
     component_config_schema = BaseModel
     component_provider_override = "bedrock_client.BedrockChatCompletionClient"
-
+ 
     def __init__(
         self,
         model_id: str,

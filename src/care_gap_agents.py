@@ -36,6 +36,7 @@ from src.care_gap_neo4j import (
     get_member_profile,
     merge_care_gap,
     check_member_exclusions,
+    get_member_extended_profile,
 )
 
 logger = logging.getLogger(__name__)
@@ -314,6 +315,64 @@ def _format_gaps_for_prompt(gaps: List[Dict]) -> str:
             f"Required CPT: {g.get('required_cpt_codes', 'N/A')}"
         )
     return "\n".join(lines)
+
+
+def _format_lifestyle_for_prompt(ls: Dict) -> str:
+    if not ls:
+        return "  Not recorded."
+    parts = [
+        f"BMI: {ls.get('bmi') or '—'}",
+        f"Smoking: {ls.get('smoking_status') or '—'}",
+        f"Alcohol: {ls.get('alcohol_use') or '—'}",
+        f"Exercise: {ls.get('exercise_frequency') or '—'}",
+        f"Diet: {ls.get('diet_type') or '—'}",
+        f"Sleep(hrs): {ls.get('sleep_hours_avg') or '—'}",
+        f"Stress: {ls.get('stress_level') or '—'}",
+    ]
+    return "  " + " | ".join(parts)
+
+
+def _format_family_history_for_prompt(fh: List[Dict]) -> str:
+    if not fh:
+        return "  None recorded."
+    lines = []
+    for f in fh:
+        conds = ", ".join(f.get("conditions") or []) or "no conditions recorded"
+        alive = "alive" if f.get("alive") else "deceased"
+        age = f.get("age_or_age_at_death") or "—"
+        lines.append(f"  {f.get('relation')}: {alive}, age {age} — {conds}")
+    return "\n".join(lines)
+
+
+def _format_hereditary_risks_for_prompt(risks: List[Dict]) -> str:
+    if not risks:
+        return "  None."
+    return "\n".join(
+        f"  ⚠ {r.get('condition')} — from {', '.join(r.get('relatives') or [])}"
+        for r in risks
+    )
+
+
+def _format_medical_history_for_prompt(mh: Dict) -> str:
+    if not mh:
+        return "  Not recorded."
+    lines = []
+    def _bullet(title, items, fmt):
+        if items:
+            lines.append(f"  {title}:")
+            for it in items:
+                lines.append("    - " + fmt(it))
+    _bullet("Current Conditions", mh.get("current_conditions") or [],
+            lambda x: f"{x.get('label') or x.get('name')} ({x.get('year') or '—'})")
+    _bullet("Past Conditions", mh.get("past_conditions") or [],
+            lambda x: f"{x.get('label') or x.get('name')} ({x.get('year') or '—'})")
+    _bullet("Surgeries", mh.get("surgeries") or [],
+            lambda x: f"{x.get('label') or x.get('name')} ({x.get('year') or '—'})")
+    _bullet("Allergies", mh.get("allergies") or [],
+            lambda x: f"{x.get('label')} (severity: {x.get('severity') or '—'})")
+    _bullet("Medications", mh.get("medications") or [],
+            lambda x: f"{x.get('label')} {x.get('dose') or ''} — {x.get('purpose') or ''}")
+    return "\n".join(lines) if lines else "  Not recorded."
 
 
 # ── Golden-reference helpers (bypass Neo4j for eligibility / exclusion) ────────
@@ -600,21 +659,29 @@ class CareGapAgentSystem:
             name="patient_analyst",
             system_message="""You are the Patient Analyst for a HEDIS care gap system.
 
-You receive pre-fetched member profile and claims data from Neo4j.
+You receive pre-fetched member profile, claims, lifestyle, family history,
+and medical history data from Neo4j (sections 1, 1B, 1C, 1D, 1E).
 
-Your job (respond in ≤8 lines):
+Your job (respond in ≤14 lines):
 - Confirm member age, gender, and insurance plan
 - Note the PCP name and specialty
 - Identify chronic conditions from ICD codes (E11.x = Type 2 Diabetes)
-- Flag if member's age/gender makes them eligible for female-only or diabetes measures
+- Summarise lifestyle risk factors (high BMI, smoking, heavy alcohol, sedentary)
+- Summarise hereditary / family-history risks present in first-degree relatives
+- Flag if any of these signals should prompt earlier screening than standard
+  HEDIS age bands (e.g. family colorectal cancer → earlier COL; family diabetes
+  + BMI ≥ 25 → prioritize GSD/EED)
 
 Format:
 PATIENT SUMMARY
   Name/ID  : ...
-  Age/Gender: ...  (eligible for diabetes measures: YES/NO)
+  Age/Gender: ... (eligible for diabetes measures: YES/NO)
   Plan     : ... | $0 copay preventive
   PCP      : ... (specialty, network status)
-  Conditions: ... (from ICD codes in claims)""",
+  Conditions: ... (from ICD codes in claims)
+  Lifestyle risks: ... (BMI / smoking / alcohol / exercise / diet flags)
+  Family / hereditary risks: ... (first-degree relatives → condition list)
+  Risk-adjusted screening flags: ... (which measures to prioritize and why)""",
             model_client=self.model_client,
         )
 
@@ -698,7 +765,9 @@ Format per gap:
             name="recommendation_agent",
             system_message="""You are the Recommendation Agent for a HEDIS care gap system.
 
-You receive the complete care gap analysis from the team above.
+You receive the complete care gap analysis from the team above, PLUS the
+member's lifestyle (Section 1B), family/ancestral history (Section 1C),
+hereditary risk signals (Section 1D), and medical history (Section 1E).
 
 Your job:
 1. Provide a FINAL CARE GAP SUMMARY TABLE (one line per measure: status + action)
@@ -707,11 +776,25 @@ Your job:
    - In-network provider type (Radiology→BCS, OB/GYN→CCS, GI→COL, Lab/Endo→GSD/EED/KED/BPD)
    - Member cost: $0 copay (all preventive services under plan PL-001)
    - Best outreach channel: Phone (urgent/chronic), SMS (screening reminders)
-3. Write a 4-6 line care manager script for the #1 priority gap
+3. RISK-ADJUSTED PRIORITIZATION: re-order priorities using hereditary risk +
+   lifestyle. Examples:
+     - Family history of colorectal cancer in a first-degree relative → bump
+       COL to Priority #1 even if age-band-standard
+     - Family diabetes + BMI ≥ 25 + smoking → escalate GSD/EED/CBP
+     - Family breast cancer → emphasise BCS and recommend earlier mammography
+   When you escalate a gap, state exactly which hereditary/lifestyle signal
+   drove the decision.
+4. Write a 4-6 line care manager script for the #1 priority gap that
+   references the hereditary/lifestyle context where relevant (e.g.
+   "Because your mother was diagnosed with diabetes, earlier screening
+   is especially important for you.")
+5. Suggest 1–2 non-HEDIS lifestyle interventions if warranted (nutrition,
+   smoking cessation referral, etc.) — clearly labelled as "Supplemental".
 
 End your response with:
 TOTAL OPEN GAPS: N
-RECOMMENDED NEXT ACTION: [specific action for top gap]""",
+RECOMMENDED NEXT ACTION: [specific action for top gap]
+HEREDITARY RISK FLAG: [YES/NO — if YES, one-line reason]""",
             model_client=self.model_client,
         )
 
@@ -793,6 +876,18 @@ RECOMMENDED NEXT ACTION: [specific action for top gap]""",
 
         existing_gaps = get_member_open_gaps(member_id)
 
+        # Extended patient record — used to prioritise recommendations and
+        # surface hereditary risk signals to the LLM agents. Falls back to
+        # empty dicts for members who don't yet have an extended record.
+        try:
+            extended = get_member_extended_profile(member_id)
+        except Exception as _exc:
+            logger.warning(f"Extended profile fetch failed for {member_id}: {_exc}")
+            extended = {
+                "lifestyle": {}, "family_history": [],
+                "medical_history": {}, "hereditary_risks": [],
+            }
+
         return {
             "profile":            profile,
             "age":                age,
@@ -804,6 +899,10 @@ RECOMMENDED NEXT ACTION: [specific action for top gap]""",
             "satisfied_measures": satisfied_measures,
             "excluded_measures":  excluded_measures,
             "existing_gaps":      existing_gaps,
+            "lifestyle":          extended.get("lifestyle", {}),
+            "family_history":     extended.get("family_history", []),
+            "medical_history":    extended.get("medical_history", {}),
+            "hereditary_risks":   extended.get("hereditary_risks", []),
         }
 
     def _build_task(self, v: Dict, member_id: str) -> str:
@@ -833,6 +932,18 @@ RECOMMENDED NEXT ACTION: [specific action for top gap]""",
   PCP       : {profile.get('pcp_name')} | {profile.get('pcp_specialty')} | {profile.get('pcp_network_status')}
   Chronic Conditions (from member record): {profile.get('chronic_conditions') or 'None recorded'}
   ICD codes (claims + conditions combined): {list(set(icd_codes[:15]))}
+
+[SECTION 1B — LIFESTYLE]  ← for patient_analyst
+{_format_lifestyle_for_prompt(v.get('lifestyle') or {})}
+
+[SECTION 1C — FAMILY / ANCESTRAL HISTORY]  ← for patient_analyst + recommendation_agent
+{_format_family_history_for_prompt(v.get('family_history') or [])}
+
+[SECTION 1D — HEREDITARY RISK SIGNALS (first-degree relatives)]  ← for recommendation_agent
+{_format_hereditary_risks_for_prompt(v.get('hereditary_risks') or [])}
+
+[SECTION 1E — MEDICAL HISTORY]  ← for patient_analyst
+{_format_medical_history_for_prompt(v.get('medical_history') or {})}
 
 [SECTION 2 — APPLICABLE HEDIS MEASURES]  ← for hedis_measure_agent
   Total applicable: {len(applicable)}

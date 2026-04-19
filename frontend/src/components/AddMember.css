@@ -299,3 +299,107 @@ form {
   .form-group-wide { grid-column: span 1; }
   .add-member-content { width: 95%; max-height: 95vh; }
 }
+
+/* ── Extended patient record styling ─────────────────────────── */
+.empty-hint {
+  padding: 10px 12px;
+  color: var(--cog-gray-medium);
+  font-size: 13px;
+  font-style: italic;
+  background: #f8f9fc;
+  border: 1px dashed #d4d8e0;
+  border-radius: 6px;
+}
+
+.empty-hint-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+  margin: 6px 0;
+}
+
+.family-member-card {
+  border: 1px solid #e4e7ef;
+  background: #fafbff;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+
+.family-member-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #eef0f5;
+  padding-bottom: 6px;
+}
+
+.btn-add-row {
+  margin-top: 10px;
+  padding: 8px 16px;
+  background: var(--cog-primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.btn-add-row:hover {
+  opacity: 0.92;
+}
+
+.btn-remove {
+  background: transparent;
+  color: var(--cog-red, #d33);
+  border: 1px solid var(--cog-red, #d33);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-remove-sm {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  align-self: end;
+}
+
+.history-bucket {
+  margin: 14px 0;
+  padding: 10px 12px;
+  background: #fafbff;
+  border: 1px solid #e4e7ef;
+  border-radius: 8px;
+}
+
+.history-bucket-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--cog-primary);
+  margin-bottom: 8px;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr 34px;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.history-field-sm { /* nothing extra, relies on grid template */ }
+.history-field-md { /* nothing extra */ }
+
+@media (max-width: 768px) {
+  .history-row {
+    grid-template-columns: 1fr 34px;
+  }
+  .history-row .history-field {
+    grid-column: 1 / 2;
+  }
+}

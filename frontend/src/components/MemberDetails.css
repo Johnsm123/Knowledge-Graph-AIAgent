@@ -2580,3 +2580,372 @@
   background: #ccc;
   cursor: not-allowed;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Patient Record tab — Lifestyle / Family History / Medical History
+   ══════════════════════════════════════════════════════════════ */
+
+.patient-record-tab {
+  padding: 4px 2px 24px;
+}
+
+.tab-risk-dot {
+  color: #d33;
+  margin-left: 6px;
+  font-size: 16px;
+  vertical-align: middle;
+}
+
+.hereditary-risk-banner {
+  display: flex;
+  gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(90deg, #fff6e6 0%, #fff1d4 100%);
+  border: 1px solid #f0c36b;
+  border-left: 4px solid #d97706;
+  border-radius: 10px;
+  margin-bottom: 18px;
+}
+
+.hrb-icon {
+  font-size: 24px;
+  line-height: 1;
+  color: #b45309;
+}
+
+.hrb-body { flex: 1; }
+.hrb-body strong {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 6px;
+  color: #92400e;
+}
+
+.hrb-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.hrb-chip {
+  background: #fff;
+  border: 1px solid #f0c36b;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #92400e;
+}
+
+.hrb-chip em { color: #6b7280; font-style: normal; font-size: 11px; }
+
+.hrb-note { margin: 4px 0 0; font-size: 12px; color: #6b7280; }
+
+.patient-record-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e4e7ef;
+}
+
+.patient-record-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.btn-edit, .btn-save-sm, .btn-cancel-sm {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  margin-left: 6px;
+  border: none;
+}
+
+.btn-edit      { background: var(--cog-primary, #000048); color: #fff; }
+.btn-save-sm   { background: #10b981; color: #fff; }
+.btn-cancel-sm { background: #e5e7eb; color: #111; }
+
+.save-msg {
+  font-size: 12px;
+  color: #10b981;
+  margin-right: 10px;
+}
+
+.pr-card {
+  background: #fff;
+  border: 1px solid #e4e7ef;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.pr-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--cog-primary, #000048);
+  margin-bottom: 12px;
+}
+
+.pr-empty {
+  color: #6b7280;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.pr-empty-sm {
+  color: #6b7280;
+  font-size: 12px;
+  margin: 4px 0 10px;
+}
+
+.pr-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.pr-kv {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  background: #fafbff;
+  border: 1px solid #eef0f5;
+  border-radius: 8px;
+}
+
+.pr-kv-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 0.04em;
+}
+
+.pr-kv-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111;
+}
+
+.pr-notes {
+  grid-column: 1 / -1;
+  padding: 8px 10px;
+  background: #f8f9fc;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.pr-family-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pr-family-item {
+  padding: 10px 12px;
+  background: #fafbff;
+  border: 1px solid #e4e7ef;
+  border-left: 3px solid var(--cog-primary, #000048);
+  border-radius: 8px;
+}
+
+.pr-family-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.pr-family-name {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.pr-family-status {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.pr-family-status.alive    { background: #d1fae5; color: #065f46; }
+.pr-family-status.deceased { background: #fee2e2; color: #991b1b; }
+
+.pr-family-conditions {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pr-condition-chip {
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.pr-family-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.pr-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.pr-editor-wide { grid-column: 1 / -1; }
+
+.pr-family-edit-card {
+  background: #f8f9fc;
+  border: 1px solid #e4e7ef;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.pr-family-edit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eef0f5;
+}
+
+.pr-cond-picker {
+  margin-top: 10px;
+}
+.pr-cond-picker > label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+.pr-check {
+  display: flex;
+  align-items: center;
+  padding-top: 18px;
+  font-size: 13px;
+}
+
+.pr-mh-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.pr-mh-section {
+  background: #fafbff;
+  border: 1px solid #eef0f5;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.pr-mh-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cog-primary, #000048);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.pr-mh-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.pr-mh-list li { margin-bottom: 4px; }
+
+.pr-mh-editor {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: #fafbff;
+  border: 1px solid #eef0f5;
+  border-radius: 8px;
+}
+
+.pr-mh-editor-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--cog-primary, #000048);
+  margin-bottom: 8px;
+}
+
+.pr-mh-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr 34px;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+  .pr-mh-row { grid-template-columns: 1fr 34px; }
+  .pr-mh-row .form-group { grid-column: 1 / 2; }
+}
+
+/* Reuse condition-chip style from AddMember.css if it exists — fall back. */
+.patient-record-tab .condition-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  margin: 3px;
+  font-size: 12px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.patient-record-tab .condition-chip--selected {
+  background: var(--cog-primary, #000048);
+  color: #fff;
+  border-color: var(--cog-primary, #000048);
+}
+
+.patient-record-tab .conditions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.btn-remove {
+  background: transparent;
+  color: #d33;
+  border: 1px solid #d33;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.btn-remove-sm {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.btn-add-row {
+  margin-top: 6px;
+  padding: 6px 14px;
+  background: var(--cog-primary, #000048);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn-add-row:hover { opacity: 0.9; }

@@ -11,7 +11,9 @@ from src.care_gap_data_loader import load_all
 from src.care_gap_agents import CareGapAgentSystem
 from src.care_gap_neo4j import (
     get_member_open_gaps, get_member_profile, get_measure_comprehensive,
-    get_member_claims_cpt_codes, check_member_exclusions
+    get_member_claims_cpt_codes, check_member_exclusions,
+    get_member_extended_profile, merge_lifestyle,
+    replace_family_history, replace_medical_history,
 )
 from src.neo4j_connection import get_knowledge_graph, get_reference_graph
 
@@ -203,6 +205,9 @@ def get_member_details(member_id):
             ORDER BY a.appointment_date DESC
         """, {"member_id": member_id})
 
+        # Extended patient record (lifestyle / family history / medical history)
+        extended = get_member_extended_profile(member_id)
+
         return jsonify({
             "member_id": member_id,
             "profile": profile,
@@ -210,7 +215,60 @@ def get_member_details(member_id):
             "closed_gaps": closed_gaps,
             "claims": claims,
             "outreach_history": outreach,
-            "appointments": appointments
+            "appointments": appointments,
+            "lifestyle": extended.get("lifestyle", {}),
+            "family_history": extended.get("family_history", []),
+            "medical_history": extended.get("medical_history", {}),
+            "hereditary_risks": extended.get("hereditary_risks", []),
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/members/<member_id>/lifestyle", methods=["PUT"])
+def update_member_lifestyle(member_id):
+    """Upsert lifestyle record for an existing member."""
+    try:
+        data = request.json or {}
+        merge_lifestyle(member_id, data)
+        return jsonify({"status": "success", "member_id": member_id})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/members/<member_id>/family-history", methods=["PUT"])
+def update_member_family_history(member_id):
+    """Replace family-history entries for an existing member."""
+    try:
+        data = request.json or {}
+        entries = data.get("family_members", data if isinstance(data, list) else [])
+        if isinstance(data, list):
+            entries = data
+        replace_family_history(member_id, entries or [])
+        return jsonify({"status": "success", "member_id": member_id, "count": len(entries or [])})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/members/<member_id>/medical-history", methods=["PUT"])
+def update_member_medical_history(member_id):
+    """Replace medical-history entries for an existing member."""
+    try:
+        data = request.json or {}
+        replace_medical_history(member_id, data)
+        return jsonify({"status": "success", "member_id": member_id})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/members/<member_id>/patient-record", methods=["GET"])
+def get_member_patient_record(member_id):
+    """Return the extended patient record (lifestyle + family + medical) alone."""
+    try:
+        return jsonify({
+            "status": "success",
+            "member_id": member_id,
+            **get_member_extended_profile(member_id),
         })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
@@ -779,6 +837,19 @@ def add_member():
             effective_to=data.get("enrollment_end", "2025-12-31")
         )
         
+        # Persist extended patient record if the caller supplied any of it.
+        lifestyle_payload = data.get("lifestyle") or {}
+        if lifestyle_payload:
+            merge_lifestyle(data["member_id"], lifestyle_payload)
+
+        family_payload = data.get("family_history") or []
+        if family_payload:
+            replace_family_history(data["member_id"], family_payload)
+
+        medical_payload = data.get("medical_history") or {}
+        if medical_payload:
+            replace_medical_history(data["member_id"], medical_payload)
+
         # Auto-detect care gaps immediately based on chronic conditions —
         # no LLM, pure Python. Ensures the member shows correct gap count
         # in the list without requiring a manual "AI Suggestions" click first.
@@ -1505,12 +1576,23 @@ def bulk_upload_members():
     each member (pure Python — no LLM), and return a preview so the care
     manager can approve before triggering the full agent analysis + email.
 
-    Expected Excel columns:
+    Expected Excel columns (REQUIRED in CAPS, OPTIONAL extended in italics):
       Name, DOB, Gender, Email, Phone, PCPID, PlanID, ZIP,
       ChronicConditions (comma-separated), InsuranceType,
       EnrollmentStart, EnrollmentEnd,
       PriorScreenings (optional, semicolon-separated measure:date pairs,
         e.g. "BCS:2025-06-15;COL:2024-03-20")
+
+      --- Extended patient record (all optional) ---
+      HeightCm, WeightKg, SmokingStatus, AlcoholUse, ExerciseFrequency,
+      DietType, SleepHoursAvg, StressLevel, LifestyleNotes,
+      FamilyHistory  -> "relation|alive|age|cond1,cond2;relation|alive|age|cond1"
+      PastConditions -> "name|year|status;..."
+      CurrentConditions -> "name|year;..."
+      Surgeries -> "name|year;..."
+      Allergies -> "substance|severity|reaction;..."
+      Medications -> "name|dose|started|purpose;..."
+      Immunizations -> "name|year;..."
 
     Returns JSON with a list of members and their detected gaps.
     """
@@ -1521,6 +1603,57 @@ def bulk_upload_members():
         get_member_open_gaps, get_member_profile,
     )
     from src.care_gap_agents import detect_care_gaps
+
+    def _cell(row, key, default=""):
+        val = row.get(key, default)
+        if val is None:
+            return default
+        s = str(val).strip()
+        if s.lower() == "nan" or s == "":
+            return default
+        return s
+
+    def _num(row, key):
+        s = _cell(row, key, "")
+        if not s:
+            return None
+        try:
+            return float(s) if "." in s else int(s)
+        except Exception:
+            return None
+
+    def _parse_family(raw: str):
+        out = []
+        for chunk in (raw or "").split(";"):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            parts = [p.strip() for p in chunk.split("|")]
+            relation = parts[0] if len(parts) > 0 else ""
+            if not relation:
+                continue
+            alive = (parts[1].lower() in ("true", "yes", "1", "alive")) if len(parts) > 1 else True
+            age = parts[2] if len(parts) > 2 else ""
+            conditions = [c.strip() for c in (parts[3].split(",") if len(parts) > 3 else []) if c.strip()]
+            out.append({
+                "relation": relation, "name": "", "alive": alive,
+                "age_or_age_at_death": age, "conditions": conditions,
+                "cause_of_death": "", "notes": "",
+            })
+        return out
+
+    def _parse_entries(raw: str, schema: list):
+        """schema = list of field names in order. Empty strings skip the field."""
+        out = []
+        for chunk in (raw or "").split(";"):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            parts = [p.strip() for p in chunk.split("|")]
+            item = {schema[i]: parts[i] for i in range(min(len(schema), len(parts))) if parts[i]}
+            if item:
+                out.append(item)
+        return out
 
     if "file" not in request.files:
         return jsonify({"status": "error", "error": "No file uploaded. Use form field name 'file'."}), 400
@@ -1590,6 +1723,43 @@ def bulk_upload_members():
                 member_id=member_id, plan_id=plan_id,
                 pcp_id=pcp_id, effective_from=enrollment_start, effective_to=enrollment_end,
             )
+
+            # ── Extended patient record (optional columns) ──────────────────
+            height_cm = _num(row, "HeightCm")
+            weight_kg = _num(row, "WeightKg")
+            bmi = None
+            if height_cm and weight_kg:
+                try:
+                    bmi = round(float(weight_kg) / ((float(height_cm) / 100) ** 2), 1)
+                except Exception:
+                    bmi = None
+            lifestyle = {
+                "height_cm": height_cm, "weight_kg": weight_kg, "bmi": bmi,
+                "smoking_status":     _cell(row, "SmokingStatus"),
+                "alcohol_use":        _cell(row, "AlcoholUse"),
+                "exercise_frequency": _cell(row, "ExerciseFrequency"),
+                "diet_type":          _cell(row, "DietType"),
+                "sleep_hours_avg":    _num(row, "SleepHoursAvg"),
+                "stress_level":       _cell(row, "StressLevel"),
+                "notes":              _cell(row, "LifestyleNotes"),
+            }
+            if any(v not in (None, "", 0) for v in lifestyle.values()):
+                merge_lifestyle(member_id, lifestyle)
+
+            fam = _parse_family(_cell(row, "FamilyHistory"))
+            if fam:
+                replace_family_history(member_id, fam)
+
+            history = {
+                "past_conditions":    _parse_entries(_cell(row, "PastConditions"),    ["name", "onset_year", "status", "notes"]),
+                "current_conditions": _parse_entries(_cell(row, "CurrentConditions"), ["name", "onset_year", "notes"]),
+                "surgeries":          _parse_entries(_cell(row, "Surgeries"),         ["name", "year", "notes"]),
+                "allergies":          _parse_entries(_cell(row, "Allergies"),         ["substance", "severity", "reaction"]),
+                "medications":        _parse_entries(_cell(row, "Medications"),       ["name", "dose", "started", "purpose"]),
+                "immunizations":      _parse_entries(_cell(row, "Immunizations"),     ["name", "year"]),
+            }
+            if any(history.values()):
+                replace_medical_history(member_id, history)
 
             # Load prior screenings as claims (e.g. "BCS:2025-06-15;COL:2024-03-20")
             prior_raw = str(row.get("PriorScreenings", "")).strip()
