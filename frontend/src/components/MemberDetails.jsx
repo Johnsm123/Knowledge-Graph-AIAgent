@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { ArrowLeft, Phone, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader, GitCompare, Bot, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Mail, Calendar, FileText, MessageCircle, Send, X, Sparkles, Loader, GitCompare, Bot, CheckCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import axios from 'axios';
@@ -641,10 +641,6 @@ function MemberDetails({ member, onBack }) {
           <button className="action-btn" onClick={() => setChatOpen(true)}>
             <Bot size={18} />
             AI Chat
-          </button>
-          <button className="action-btn">
-            <Phone size={18} />
-            Call
           </button>
           <button className="action-btn" onClick={() => setEmailPanelOpen(true)}>
             <Mail size={18} />

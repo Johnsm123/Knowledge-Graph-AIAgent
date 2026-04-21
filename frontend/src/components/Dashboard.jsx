@@ -185,11 +185,8 @@ function Dashboard({ onMemberSelect }) {
         }
 
         if (step === 'complete') {
-          const channels = [];
-          if (data.email_sent) channels.push('Email');
-          if (data.whatsapp_sent) channels.push('WhatsApp');
-          const doneMsg = channels.length > 0
-            ? channels.join(' + ') + ' Sent'
+          const doneMsg = data.email_sent
+            ? 'Email Sent'
             : (data.status === 'compliant' ? 'Compliant' : 'Done');
           setProcessing(prev => ({
             ...prev,
@@ -199,7 +196,6 @@ function Dashboard({ onMemberSelect }) {
               message: doneMsg,
               gapsCount: data.gaps_count || 0,
               emailSent: data.email_sent || false,
-              whatsappSent: data.whatsapp_sent || false,
             },
           }));
           es.close();
@@ -219,10 +215,6 @@ function Dashboard({ onMemberSelect }) {
         else if (step === 'email' && status === 'done') msg = 'Email sent!';
         else if (step === 'email' && status === 'error') msg = data.message || 'Email failed';
         else if (step === 'email' && status === 'skipped') msg = 'No email on file';
-        else if (step === 'whatsapp' && status === 'running') msg = 'Sending WhatsApp...';
-        else if (step === 'whatsapp' && status === 'done') msg = 'WhatsApp sent!';
-        else if (step === 'whatsapp' && status === 'error') msg = data.message || 'WhatsApp failed';
-        else if (step === 'whatsapp' && status === 'skipped') msg = 'No phone on file';
 
         setProcessing(prev => ({
           ...prev,
@@ -563,7 +555,6 @@ function Dashboard({ onMemberSelect }) {
                           <CheckCircle size={14} />
                           {processing[member.member_id].message}
                           {processing[member.member_id].emailSent && ' ✉'}
-                          {processing[member.member_id].whatsappSent && ' 💬'}
                         </span>
                       ) : processing[member.member_id]?.status === 'error' ? (
                         <button className="btn-auto-process error" onClick={(e) => handleAutoProcess(e, member.member_id)}>

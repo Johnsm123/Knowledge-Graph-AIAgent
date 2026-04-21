@@ -31,11 +31,6 @@ class Settings(BaseSettings):
     neo4j_ref_password: str = ""
     neo4j_ref_database: str = "neo4j"
 
-    # Twilio WhatsApp Configuration
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_whatsapp_from: str = "whatsapp:+14155238886"
-
     # Google Maps / Places API
     google_maps_api_key: str = ""
 
