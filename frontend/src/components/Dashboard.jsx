@@ -104,7 +104,8 @@ function Dashboard({ onMemberSelect }) {
   // Reference graph state
   const [refGraph, setRefGraph]           = useState(null);
   const [refGraphLoading, setRefGraphLoading] = useState(false);
-  const [refGraphFilter, setRefGraphFilter]   = useState('all');
+  // Set of member IDs whose neighborhood is currently expanded
+  const [expandedMembers, setExpandedMembers] = useState(new Set());
 
   useEffect(() => { fetchDashboardData(); fetchReferenceGraph(); }, []);
   useEffect(() => { setPage(1); }, [category, search, sortBy]);
@@ -137,26 +138,55 @@ function Dashboard({ onMemberSelect }) {
     }
   };
 
-  // Filter reference graph nodes/edges by label
+  // Members-only view with click-to-expand (Neo4j Browser style)
+  // Initially: show only Member nodes, no edges.
+  // On click of a Member: add that member's neighborhood (connected nodes + edges).
   const filteredRefGraph = (() => {
     if (!refGraph) return null;
-    if (refGraphFilter === 'all') return refGraph;
-    // Show selected label + connected nodes
-    const selectedNodes = new Set();
-    refGraph.nodes.forEach(n => {
-      if (n.label === refGraphFilter) selectedNodes.add(n.id);
-    });
-    // Add connected nodes via edges
-    const connectedNodes = new Set(selectedNodes);
-    refGraph.edges.forEach(e => {
-      if (selectedNodes.has(e.source)) connectedNodes.add(e.target);
-      if (selectedNodes.has(e.target)) connectedNodes.add(e.source);
-    });
+    const memberIds = new Set(
+      refGraph.nodes.filter(n => n.label === 'Member').map(n => n.id)
+    );
+    // Nodes we want to include = all members + any node connected to an expanded member
+    const visibleNodes = new Set(memberIds);
+    const visibleEdges = [];
+    if (expandedMembers.size > 0) {
+      refGraph.edges.forEach(e => {
+        const srcExpanded = expandedMembers.has(e.source);
+        const tgtExpanded = expandedMembers.has(e.target);
+        if (srcExpanded || tgtExpanded) {
+          visibleNodes.add(e.source);
+          visibleNodes.add(e.target);
+          visibleEdges.push(e);
+        }
+      });
+      // Also walk one more hop from any non-member node already added, so
+      // e.g. Persona → CareGap → Measure chains surface when expanding a member.
+      const nonMemberAdded = new Set(
+        [...visibleNodes].filter(id => !memberIds.has(id))
+      );
+      refGraph.edges.forEach(e => {
+        if (nonMemberAdded.has(e.source) || nonMemberAdded.has(e.target)) {
+          visibleNodes.add(e.source);
+          visibleNodes.add(e.target);
+          if (!visibleEdges.includes(e)) visibleEdges.push(e);
+        }
+      });
+    }
     return {
-      nodes: refGraph.nodes.filter(n => connectedNodes.has(n.id)),
-      edges: refGraph.edges.filter(e => connectedNodes.has(e.source) && connectedNodes.has(e.target)),
+      nodes: refGraph.nodes.filter(n => visibleNodes.has(n.id)),
+      edges: visibleEdges,
     };
   })();
+
+  const handleGraphNodeClick = (node) => {
+    if (node.label !== 'Member') return; // only members are expandable
+    setExpandedMembers(prev => {
+      const next = new Set(prev);
+      if (next.has(node.id)) next.delete(node.id); // toggle collapse
+      else next.add(node.id);
+      return next;
+    });
+  };
 
   // ── Auto-process handler (SSE) ──────────────────────────────────────────
   const handleAutoProcess = (e, memberId) => {
@@ -378,20 +408,25 @@ function Dashboard({ onMemberSelect }) {
           <h2><Activity size={20} className="graph-icon" /> Care Gap Lifecycle — Persona Visualization</h2>
         </div>
         <p className="section-subtitle">
-          Real-time persona-based graph showing Members, their AI-generated Personas, Care Gaps (color-coded by lifecycle stage), Measures, and Providers.
+          Click any Member node to expand its Personas, Care Gaps, Measures, Providers and Actions — like the Neo4j Browser. Click again to collapse.
         </p>
 
-        {/* Filter pills */}
+        {/* Expansion controls */}
         <div className="graph-filters">
-          {['all', 'Member', 'Persona', 'CareGap', 'Measure', 'Provider', 'Action'].map(f => (
+          <button
+            className="graph-filter-pill active"
+            style={{ cursor: 'default' }}
+          >
+            Members ({filteredRefGraph ? filteredRefGraph.nodes.filter(n => n.label === 'Member').length : 0})
+          </button>
+          {expandedMembers.size > 0 && (
             <button
-              key={f}
-              className={`graph-filter-pill ${refGraphFilter === f ? 'active' : ''}`}
-              onClick={() => setRefGraphFilter(f)}
+              className="graph-filter-pill"
+              onClick={() => setExpandedMembers(new Set())}
             >
-              {f === 'all' ? 'All Nodes' : f === 'CareGap' ? 'Care Gaps' : f === 'Action' ? 'Actions' : f + 's'}
+              Reset View ({expandedMembers.size} expanded)
             </button>
-          ))}
+          )}
         </div>
 
         {refGraphLoading ? (
@@ -404,6 +439,7 @@ function Dashboard({ onMemberSelect }) {
             edges={filteredRefGraph.edges}
             width={1100}
             height={550}
+            onNodeClick={handleGraphNodeClick}
           />
         ) : (
           <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>

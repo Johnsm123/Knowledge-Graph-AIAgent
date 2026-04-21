@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Cognizant Care",
+    "slug": "cognizant-care-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0033a0"
+    },
+    "scheme": "cogcare",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cognizant.care"
+    },
+    "android": {
+      "package": "com.cognizant.care",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0033a0"
+      },
+      "permissions": ["NOTIFICATIONS"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#0033a0"
+        }
+      ]
+    ],
+    "extra": {
+      "apiBaseUrl": "http://10.118.16.26:5001"
+    }
+  }
+}

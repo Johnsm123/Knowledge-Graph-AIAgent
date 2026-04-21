@@ -2863,6 +2863,22 @@ def sync_all_to_reference():
 from src.member_portal import portal_bp
 app.register_blueprint(portal_bp)
 
+# Register mobile APK API Blueprint
+from src.mobile_api import mobile_bp
+app.register_blueprint(mobile_bp)
+
+
+@app.route("/api/v1/noshow/trigger", methods=["POST"])
+def noshow_trigger():
+    """Manual trigger for the no-show sweep (useful for ops/testing)."""
+    from src.noshow_scheduler import trigger_now
+    try:
+        trigger_now()
+        return jsonify({"status": "ok"})
+    except Exception as exc:
+        logger.error(f"no-show trigger failed: {exc}", exc_info=True)
+        return jsonify({"status": "error", "error": str(exc)}), 500
+
 
 if __name__ == "__main__":
     # Bootstrap persona reference DB schema on startup
@@ -2873,4 +2889,11 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"Persona schema bootstrap skipped: {e}")
 
-    app.run(debug=True, port=5001, use_reloader=False)
+    # Start the no-show auto-cancel + re-outreach scheduler
+    try:
+        from src.noshow_scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        logger.warning(f"No-show scheduler failed to start: {e}")
+
+    app.run(debug=True, host="0.0.0.0", port=5001, use_reloader=False)

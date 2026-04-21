@@ -29,13 +29,29 @@
 /* Logo at the top of the card */
 .login-logo {
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin-bottom: 22px;
+  gap: 12px;
+  margin: 0 auto 22px;
+  width: fit-content;
 }
 
 .login-logo img {
-  height: 42px;
+  height: 40px;
+  width: auto;
   object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+}
+
+.login-logo-text {
+  font-size: 26px;
+  font-weight: 700;
+  color: #0033a0;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  display: inline-block;
+  white-space: nowrap;
 }
 
 /* Heading */

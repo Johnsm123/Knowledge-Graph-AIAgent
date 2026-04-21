@@ -131,10 +131,11 @@ function simulate(nodes, edges, width, height, iterations = 120) {
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
-function Neo4jGraph({ nodes: rawNodes, edges: rawEdges, width = 900, height = 500, title }) {
+function Neo4jGraph({ nodes: rawNodes, edges: rawEdges, width = 900, height = 500, title, onNodeClick }) {
   const svgRef = useRef(null);
   const [hoveredNode, setHoveredNode] = useState(null);
   const [dragNode, setDragNode] = useState(null);
+  const [dragStart, setDragStart] = useState(null);
   const [positions, setPositions] = useState([]);
   const [tooltip, setTooltip] = useState(null);
 
@@ -153,6 +154,7 @@ function Neo4jGraph({ nodes: rawNodes, edges: rawEdges, width = 900, height = 50
   const handleMouseDown = useCallback((e, nodeId) => {
     e.preventDefault();
     setDragNode(nodeId);
+    setDragStart({ x: e.clientX, y: e.clientY, nodeId });
   }, []);
 
   const handleMouseMove = useCallback((e) => {
@@ -165,9 +167,19 @@ function Neo4jGraph({ nodes: rawNodes, edges: rawEdges, width = 900, height = 50
     ));
   }, [dragNode]);
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e) => {
+    // Detect click (minimal drag distance) vs drag
+    if (dragStart && onNodeClick && e) {
+      const dx = Math.abs(e.clientX - dragStart.x);
+      const dy = Math.abs(e.clientY - dragStart.y);
+      if (dx < 4 && dy < 4) {
+        const clickedNode = rawNodes.find(n => n.id === dragStart.nodeId);
+        if (clickedNode) onNodeClick(clickedNode);
+      }
+    }
     setDragNode(null);
-  }, []);
+    setDragStart(null);
+  }, [dragStart, onNodeClick, rawNodes]);
 
   const handleNodeHover = (node, e) => {
     setHoveredNode(node.id);

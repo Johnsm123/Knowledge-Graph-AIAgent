@@ -28,6 +28,7 @@ function Login({ onLogin }) {
       <div className="login-card">
         <div className="login-logo">
           <img src="/ct-logo.png" alt="Cognizant" />
+          <span className="login-logo-text">Cognizant</span>
         </div>
 
         <h2 className="login-title">Sign In</h2>

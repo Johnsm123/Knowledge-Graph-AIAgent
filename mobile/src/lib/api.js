@@ -1,0 +1,101 @@
+import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
+
+const API_BASE = Constants.expoConfig?.extra?.apiBaseUrl || "http://10.0.2.2:5000";
+const TOKEN_KEY = "cogcare.jwt";
+const MEMBER_KEY = "cogcare.member_id";
+
+export async function saveSession(memberId, token) {
+  await SecureStore.setItemAsync(TOKEN_KEY, token);
+  await SecureStore.setItemAsync(MEMBER_KEY, memberId);
+}
+
+export async function getSession() {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const memberId = await SecureStore.getItemAsync(MEMBER_KEY);
+  return token ? { token, memberId } : null;
+}
+
+export async function clearSession() {
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(MEMBER_KEY);
+}
+
+async function authHeaders() {
+  const session = await getSession();
+  if (!session) throw new Error("Not authenticated");
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.token}`,
+  };
+}
+
+export async function requestOtp(memberId) {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/activate/request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ member_id: memberId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+export async function verifyOtp(memberId, otp) {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/activate/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ member_id: memberId, otp }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "OTP verification failed");
+  await saveSession(data.member_id, data.token);
+  return data;
+}
+
+export async function getMe() {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/member/me`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error("Fetch failed");
+  return res.json();
+}
+
+export async function listAppointments() {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/appointments`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error("Fetch failed");
+  return res.json();
+}
+
+export async function bookAppointment(payload) {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/appointments`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Booking failed");
+  return data;
+}
+
+export async function sendChat(message) {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/chat`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ message }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Chat failed");
+  return data.reply;
+}
+
+export async function registerPushToken(fcmToken) {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/push/register`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ fcm_token: fcmToken }),
+  });
+  return res.ok;
+}
