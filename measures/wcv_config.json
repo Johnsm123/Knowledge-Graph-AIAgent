@@ -1,0 +1,62 @@
+{
+  "measure_id": "WCV",
+  "measure_name": "Child and Adolescent Well-Care Visits",
+  "eligible_age_min": 3,
+  "eligible_age_max": 21,
+  "eligible_gender": "Any",
+  "measurement_year": 2025,
+  "lookback_years": 1,
+  "lookback_start_month": 1,
+  "lookback_start_day": 1,
+  "compliance_codes": {
+    "CPT": [
+      "99382",
+      "99383",
+      "99384",
+      "99385",
+      "99391",
+      "99392",
+      "99393",
+      "99394",
+      "99395"
+    ],
+    "LOINC": [],
+    "HCPCS": [
+      "G0438",
+      "G0439",
+      "S0302",
+      "S0610",
+      "S0612",
+      "S0613"
+    ]
+  },
+  "exclusion_codes": {
+    "Required exclusions": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Members with hospice services or who die during the measurement year are excluded per general HEDIS required exclusions."
+    }
+  },
+  "ab2_only_exclusions": [],
+  "age_bands": [
+    {
+      "code": "AB1",
+      "min": 3,
+      "max": 17
+    },
+    {
+      "code": "AB2",
+      "min": 18,
+      "max": 21
+    }
+  ],
+  "gender_criteria": [],
+  "gap_statuses": [
+    "OPEN_GAP",
+    "COMPLIANT",
+    "EXCLUDED",
+    "NOT_ELIGIBLE"
+  ]
+}

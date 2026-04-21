@@ -1,0 +1,4129 @@
+[
+  {
+    "persona_id": "BCS_P00001",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": false,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "NOT_ELIGIBLE",
+    "llm_reasoning": "Member not enrolled during measurement period, so not eligible for denominator.",
+    "description": "Female age 58 not enrolled in plan, no mammogram or exclusions.",
+    "Name": "Linda Carter",
+    "DOB": "1967-04-12",
+    "Gender": "Female",
+    "Email": "linda.carter@example.com",
+    "Phone": "312-555-1023",
+    "ZIP": "60611",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2022-01-01",
+    "EnrollmentEnd": "2023-12-31",
+    "PCPID": "PCP_001",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 165,
+    "WeightKg": 70,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 6.5,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Moderate activity but not currently enrolled in health plan.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00002",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": false,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "NOT_ELIGIBLE",
+    "llm_reasoning": "Not enrolled during measurement year, so excluded from denominator.",
+    "description": "Female age 70 not enrolled, no mammogram or exclusions.",
+    "Name": "Patricia Gomez",
+    "DOB": "1955-09-20",
+    "Gender": "Female",
+    "Email": "patricia.gomez@example.com",
+    "Phone": "213-555-4478",
+    "ZIP": "90017",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2021-01-01",
+    "EnrollmentEnd": "2023-06-30",
+    "PCPID": "PCP_002",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Osteoarthritis"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Osteoarthritis"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Acetaminophen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 160,
+    "WeightKg": 68,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Standard",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Retired and not currently enrolled in any plan.",
+    "HospitalVisits": 0,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00003",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": false,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "NOT_ELIGIBLE",
+    "llm_reasoning": "Not enrolled in plan, so not eligible for screening measure.",
+    "description": "Female age 60, not enrolled, no mammogram or exclusions.",
+    "Name": "Angela Brooks",
+    "DOB": "1965-02-18",
+    "Gender": "Female",
+    "Email": "angela.brooks@example.com",
+    "Phone": "404-555-2299",
+    "ZIP": "30309",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2022-01-01",
+    "EnrollmentEnd": "2023-12-31",
+    "PCPID": "PCP_003",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Type 2 Diabetes"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Type 2 Diabetes"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Sulfa Drugs"
+    ],
+    "Medications": [
+      "Metformin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 170,
+    "WeightKg": 80,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 6.0,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Manages diabetes but not currently enrolled in plan.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00004",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": false,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "NOT_ELIGIBLE",
+    "llm_reasoning": "Not enrolled during measurement year, so not eligible.",
+    "description": "Female age 68, not enrolled, no mammogram or exclusions.",
+    "Name": "Margaret Nguyen",
+    "DOB": "1957-07-05",
+    "Gender": "Female",
+    "Email": "margaret.nguyen@example.com",
+    "Phone": "206-555-7788",
+    "ZIP": "98109",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2021-01-01",
+    "EnrollmentEnd": "2023-03-31",
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 162,
+    "WeightKg": 72,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 7.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Lives independently but not enrolled in plan.",
+    "HospitalVisits": 0,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00005",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": false,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "NOT_ELIGIBLE",
+    "llm_reasoning": "Not enrolled, so not eligible for denominator.",
+    "description": "Non-binary individual assigned female at birth, age 55, not enrolled.",
+    "Name": "Jordan Lee",
+    "DOB": "1970-11-10",
+    "Gender": "Non-binary",
+    "Email": "jordan.lee@example.com",
+    "Phone": "617-555-3344",
+    "ZIP": "02118",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2022-01-01",
+    "EnrollmentEnd": "2023-12-31",
+    "PCPID": "PCP_005",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Asthma"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Asthma"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Albuterol"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 168,
+    "WeightKg": 75,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Moderate",
+    "DietType": "Standard",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Non-binary person not currently enrolled in plan.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00006",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": false,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "NOT_ELIGIBLE",
+    "llm_reasoning": "Not enrolled during measurement year, so not eligible.",
+    "description": "Non-binary individual assigned female at birth, age 72, not enrolled.",
+    "Name": "Taylor Morgan",
+    "DOB": "1953-03-15",
+    "Gender": "Non-binary",
+    "Email": "taylor.morgan@example.com",
+    "Phone": "512-555-9988",
+    "ZIP": "78701",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2021-01-01",
+    "EnrollmentEnd": "2023-06-30",
+    "PCPID": "PCP_006",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Aspirin"
+    ],
+    "Medications": [
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 166,
+    "WeightKg": 74,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 7.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Lives independently, not enrolled in plan.",
+    "HospitalVisits": 0,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00007",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "bilateral_mastectomy"
+    ],
+    "excl_bilateral_mastectomy": true,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Member excluded due to documented bilateral mastectomy.",
+    "description": "Female age 58 with history of bilateral mastectomy, enrolled in Medicaid, excluded from BCS-E.",
+    "Name": "Laura Mitchell",
+    "DOB": "1967-09-15",
+    "Gender": "Female",
+    "Email": "laura.mitchell@example.com",
+    "Phone": "312-555-1023",
+    "ZIP": "60611",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2020-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_001",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Bilateral Mastectomy"
+    ],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 165,
+    "WeightKg": 70,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Maintains light exercise and follows up regularly with oncology.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00008",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "bilateral_mastectomy"
+    ],
+    "excl_bilateral_mastectomy": true,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to bilateral mastectomy documented in surgical history.",
+    "description": "Female age 60 with bilateral mastectomy, enrolled in Medicare, excluded from BCS-E.",
+    "Name": "Patricia Gomez",
+    "DOB": "1965-03-22",
+    "Gender": "Female",
+    "Email": "patricia.gomez@example.com",
+    "Phone": "415-555-2045",
+    "ZIP": "94110",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2019-05-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_002",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Bilateral Mastectomy"
+    ],
+    "Allergies": [
+      "Sulfa Drugs"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 160,
+    "WeightKg": 68,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 6.5,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Walks daily and attends cancer survivor support group.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00009",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "bilateral_mastectomy"
+    ],
+    "excl_bilateral_mastectomy": true,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to bilateral mastectomy; no remaining breast tissue for screening.",
+    "description": "Non-binary individual age 55, assigned female at birth, with bilateral mastectomy, excluded from BCS-E.",
+    "Name": "Jordan Lee",
+    "DOB": "1970-11-05",
+    "Gender": "Non-binary",
+    "Email": "jordan.lee@example.com",
+    "Phone": "206-555-3344",
+    "ZIP": "98109",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2021-02-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_003",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Bilateral Mastectomy"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 170,
+    "WeightKg": 75,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 7.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Maintains balanced diet and attends regular oncology follow-ups.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00010",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "unilateral_mastectomy_both_sides"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": true,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to unilateral mastectomy on both sides documented in history.",
+    "description": "Female age 63 with unilateral mastectomy on both sides, enrolled in Medicaid, excluded from BCS-E.",
+    "Name": "Angela Carter",
+    "DOB": "1962-07-19",
+    "Gender": "Female",
+    "Email": "angela.carter@example.com",
+    "Phone": "512-555-7788",
+    "ZIP": "78701",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2018-03-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Unilateral Mastectomy (Right)",
+      "Unilateral Mastectomy (Left)"
+    ],
+    "Allergies": [
+      "Aspirin"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 162,
+    "WeightKg": 72,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 6.8,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Attends oncology follow-ups and maintains low-fat diet.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00011",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "unilateral_mastectomy_both_sides"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": true,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to unilateral mastectomy on both sides; no remaining breast tissue.",
+    "description": "Female age 59 with unilateral mastectomy on both sides, enrolled in Medicare, excluded from BCS-E.",
+    "Name": "Deborah Nguyen",
+    "DOB": "1966-02-10",
+    "Gender": "Female",
+    "Email": "deborah.nguyen@example.com",
+    "Phone": "702-555-9922",
+    "ZIP": "89109",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2019-06-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_005",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Unilateral Mastectomy (Left)",
+      "Unilateral Mastectomy (Right)"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 168,
+    "WeightKg": 74,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 7.2,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Maintains healthy diet and attends oncology follow-ups.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00012",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "unilateral_mastectomy_both_sides"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": true,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to history of unilateral mastectomy on both sides.",
+    "description": "Non-binary individual aged 58 with prior unilateral mastectomies on both breasts, enrolled in Medicaid.",
+    "Name": "Jordan Avery",
+    "DOB": "1967-04-15",
+    "Gender": "Non-binary",
+    "Email": "jordan.avery@example.com",
+    "Phone": "312-555-0182",
+    "ZIP": "60611",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2020-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_003",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Unilateral Mastectomy (Left)",
+      "Unilateral Mastectomy (Right)"
+    ],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 168,
+    "WeightKg": 70,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Maintains light exercise and balanced diet post-surgery.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00013",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "hospice_or_palliative"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": true,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to hospice or palliative care enrollment.",
+    "description": "Female aged 63 receiving palliative care for metastatic cancer, enrolled in Medicaid.",
+    "Name": "Linda Morales",
+    "DOB": "1962-09-10",
+    "Gender": "Female",
+    "Email": "linda.morales@example.com",
+    "Phone": "213-555-0145",
+    "ZIP": "90012",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2019-05-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Terminal Illness"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Metastatic Breast Cancer"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Morphine",
+      "Ondansetron"
+    ],
+    "Immunizations": [
+      "Influenza"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 160,
+    "WeightKg": 80,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Standard",
+    "SleepHoursAvg": 5.5,
+    "StressLevel": "High",
+    "LifestyleNotes": "Limited mobility and under hospice supervision.",
+    "HospitalVisits": 4,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00014",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "hospice_or_palliative"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": true,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to hospice or palliative care enrollment.",
+    "description": "Female aged 60 in hospice care for end-stage COPD, enrolled in Medicaid.",
+    "Name": "Patricia Nguyen",
+    "DOB": "1965-02-20",
+    "Gender": "Female",
+    "Email": "patricia.nguyen@example.com",
+    "Phone": "512-555-0199",
+    "ZIP": "78701",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2021-03-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_002",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Terminal Illness"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "End-stage COPD"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Sulfa Drugs"
+    ],
+    "Medications": [
+      "Albuterol",
+      "Prednisone"
+    ],
+    "Immunizations": [
+      "Influenza"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 162,
+    "WeightKg": 85,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 6.0,
+    "StressLevel": "High",
+    "LifestyleNotes": "Receives home hospice care with oxygen support.",
+    "HospitalVisits": 5,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00015",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "hospice_or_palliative"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": true,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to hospice or palliative care enrollment.",
+    "description": "Non-binary individual aged 55 receiving palliative care for advanced heart failure, enrolled in Medicaid.",
+    "Name": "Taylor Brooks",
+    "DOB": "1970-07-12",
+    "Gender": "Non-binary",
+    "Email": "taylor.brooks@example.com",
+    "Phone": "404-555-0177",
+    "ZIP": "30309",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2020-06-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_006",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Terminal Illness"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Advanced Heart Failure"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Furosemide",
+      "Carvedilol"
+    ],
+    "Immunizations": [
+      "Influenza"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 170,
+    "WeightKg": 90,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 5.0,
+    "StressLevel": "High",
+    "LifestyleNotes": "Under palliative management for heart failure symptoms.",
+    "HospitalVisits": 3,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00016",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "gender_affirming_chest_surgery"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": true,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to gender-affirming chest surgery with gender dysphoria diagnosis.",
+    "description": "Transgender man aged 54 with prior gender-affirming chest surgery, enrolled in Medicaid.",
+    "Name": "Alex Morgan",
+    "DOB": "1971-11-03",
+    "Gender": "Female",
+    "Email": "alex.morgan@example.com",
+    "Phone": "206-555-0133",
+    "ZIP": "98101",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2018-02-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_005",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Gender Dysphoria"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Gender Dysphoria"
+    ],
+    "Surgeries": [
+      "Gender-Affirming Chest Surgery (CPT 19318)"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Testosterone Cypionate"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Tetanus"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 172,
+    "WeightKg": 78,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Active",
+    "DietType": "Standard",
+    "SleepHoursAvg": 7.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Engages in regular exercise and follows up with endocrinology for hormone therapy.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00017",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "gender_affirming_chest_surgery"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": true,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to documented gender-affirming chest surgery with CPT 19318 and gender dysphoria diagnosis.",
+    "description": "52-year-old enrolled patient assigned female at birth who underwent gender-affirming chest surgery; excluded from BCS-E measure.",
+    "Name": "Jordan Avery",
+    "DOB": "1973-05-14",
+    "Gender": "Female",
+    "Email": "jordan.avery@example.com",
+    "Phone": "312-555-0198",
+    "ZIP": "60611",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2020-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Gender Dysphoria"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Gender Dysphoria"
+    ],
+    "Surgeries": [
+      "Gender-Affirming Chest Surgery (CPT 19318)"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Sertraline"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Tdap"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 168,
+    "WeightKg": 70,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Active",
+    "DietType": "Standard",
+    "SleepHoursAvg": 7.5,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Maintains active lifestyle and regular follow-up for gender-affirming care.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00018",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "gender_affirming_chest_surgery"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": true,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to gender-affirming chest surgery documented with CPT 19318 and gender dysphoria ICD code.",
+    "description": "60-year-old non-binary enrolled patient clinically classified female for care use, excluded due to gender-affirming chest surgery.",
+    "Name": "Alex Morgan",
+    "DOB": "1965-09-22",
+    "Gender": "Non-binary",
+    "Email": "alex.morgan@example.com",
+    "Phone": "415-555-0142",
+    "ZIP": "94110",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2019-03-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_002",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Gender Dysphoria"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Gender Dysphoria"
+    ],
+    "Surgeries": [
+      "Gender-Affirming Chest Surgery (CPT 19318)"
+    ],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Fluoxetine"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 170,
+    "WeightKg": 68,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Moderate",
+    "DietType": "Vegetarian",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Engages in regular therapy and maintains balanced lifestyle post-surgery.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00019",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "deceased"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": true,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded because the member is deceased during the measurement year.",
+    "description": "63-year-old female enrolled patient who passed away in 2025; excluded from BCS-E measure.",
+    "Name": "Linda Thompson",
+    "DOB": "1962-02-10",
+    "Gender": "Female",
+    "Email": "linda.thompson@example.com",
+    "Phone": "617-555-0134",
+    "ZIP": "02118",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2018-06-01",
+    "EnrollmentEnd": "2025-03-15",
+    "PCPID": "PCP_001",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Sulfa Drugs"
+    ],
+    "Medications": [
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 165,
+    "WeightKg": 72,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 6.0,
+    "StressLevel": "High",
+    "LifestyleNotes": "Had limited mobility and chronic hypertension before passing.",
+    "HospitalVisits": 3,
+    "MissedAppointments": 2,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00020",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "deceased"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": true,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded because the patient is deceased during the measurement period.",
+    "description": "58-year-old enrolled patient assigned female at birth who died in 2024; excluded from BCS-E measure.",
+    "Name": "Patricia Gomez",
+    "DOB": "1967-07-08",
+    "Gender": "Female",
+    "Email": "patricia.gomez@example.com",
+    "Phone": "305-555-0176",
+    "ZIP": "33133",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2021-02-01",
+    "EnrollmentEnd": "2024-11-20",
+    "PCPID": "PCP_006",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Type 2 Diabetes"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Type 2 Diabetes"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Metformin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Tdap"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 160,
+    "WeightKg": 80,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 5.5,
+    "StressLevel": "High",
+    "LifestyleNotes": "Had poorly controlled diabetes and limited physical activity before death.",
+    "HospitalVisits": 4,
+    "MissedAppointments": 3,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00021",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "deceased"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": true,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded because the member is deceased during the measurement year.",
+    "description": "54-year-old non-binary enrolled patient clinically classified female for care use who passed away in 2025; excluded from BCS-E measure.",
+    "Name": "Taylor Reed",
+    "DOB": "1971-03-19",
+    "Gender": "Non-binary",
+    "Email": "taylor.reed@example.com",
+    "Phone": "206-555-0189",
+    "ZIP": "98103",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2020-05-01",
+    "EnrollmentEnd": "2025-01-10",
+    "PCPID": "PCP_009",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Chronic Kidney Disease"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Chronic Kidney Disease"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Losartan"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 172,
+    "WeightKg": 78,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 6.0,
+    "StressLevel": "High",
+    "LifestyleNotes": "Had chronic kidney disease and limited physical activity before death.",
+    "HospitalVisits": 5,
+    "MissedAppointments": 2,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00022",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "bilateral_mastectomy"
+    ],
+    "excl_bilateral_mastectomy": true,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to documented bilateral mastectomy.",
+    "description": "Female aged 70 with history of bilateral mastectomy, enrolled in Medicare, excluded from breast cancer screening measure.",
+    "Name": "Margaret Hill",
+    "DOB": "1955-03-12",
+    "Gender": "Female",
+    "Email": "margaret.hill@example.com",
+    "Phone": "312-555-0182",
+    "ZIP": "60611",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2010-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_001",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Bilateral Mastectomy"
+    ],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 165,
+    "WeightKg": 70,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Maintains a low-fat diet and attends regular oncology follow-ups.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00023",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "bilateral_mastectomy"
+    ],
+    "excl_bilateral_mastectomy": true,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded because of bilateral mastectomy history.",
+    "description": "Female aged 68 with prior bilateral mastectomy, enrolled in Medicare, excluded from screening.",
+    "Name": "Linda Carter",
+    "DOB": "1957-07-22",
+    "Gender": "Female",
+    "Email": "linda.carter@example.com",
+    "Phone": "415-555-0193",
+    "ZIP": "94109",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2012-05-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_002",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Bilateral Mastectomy"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 160,
+    "WeightKg": 68,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 6.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Walks daily and follows a low-fat diet post-cancer treatment.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00024",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "bilateral_mastectomy"
+    ],
+    "excl_bilateral_mastectomy": true,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to bilateral mastectomy procedure.",
+    "description": "Non-binary individual aged 69, assigned female at birth, with bilateral mastectomy, excluded from screening.",
+    "Name": "Alex Morgan",
+    "DOB": "1956-11-05",
+    "Gender": "Non-binary",
+    "Email": "alex.morgan@example.com",
+    "Phone": "206-555-0144",
+    "ZIP": "98101",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2015-03-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_003",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Bilateral Mastectomy"
+    ],
+    "Allergies": [
+      "Sulfa Drugs"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 170,
+    "WeightKg": 75,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Moderate",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 7.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Maintains moderate exercise and balanced diet post-surgery.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00025",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "unilateral_mastectomy_both_sides"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": true,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to unilateral mastectomy on both sides.",
+    "description": "Female aged 72 with unilateral mastectomy on both sides, enrolled in Medicare, excluded from screening.",
+    "Name": "Patricia Lopez",
+    "DOB": "1953-09-18",
+    "Gender": "Female",
+    "Email": "patricia.lopez@example.com",
+    "Phone": "305-555-0177",
+    "ZIP": "33133",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2009-06-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Unilateral Mastectomy (Right)",
+      "Unilateral Mastectomy (Left)"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 162,
+    "WeightKg": 72,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 6.8,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Attends oncology follow-ups and maintains a low-fat diet.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00026",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "unilateral_mastectomy_both_sides"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": true,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded because of unilateral mastectomy performed on both breasts.",
+    "description": "Female aged 67 with history of unilateral mastectomy on both sides, excluded from screening.",
+    "Name": "Susan Reed",
+    "DOB": "1958-02-10",
+    "Gender": "Female",
+    "Email": "susan.reed@example.com",
+    "Phone": "702-555-0133",
+    "ZIP": "89109",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2011-04-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_005",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Unilateral Mastectomy (Left)",
+      "Unilateral Mastectomy (Right)"
+    ],
+    "Allergies": [
+      "Aspirin"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 168,
+    "WeightKg": 74,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 7.2,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Maintains light exercise and regular oncology visits.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00027",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "unilateral_mastectomy_both_sides"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": true,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Excluded due to unilateral mastectomy on both breasts.",
+    "description": "Non-binary individual aged 70, assigned female at birth, with unilateral mastectomy on both sides, excluded from screening.",
+    "Name": "Jordan Taylor",
+    "DOB": "1955-12-30",
+    "Gender": "Non-binary",
+    "Email": "jordan.taylor@example.com",
+    "Phone": "512-555-0166",
+    "ZIP": "78701",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2013-07-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_006",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "History of Breast Cancer"
+    ],
+    "PastConditions": [
+      "Breast Cancer"
+    ],
+    "CurrentConditions": [
+      "History of Breast Cancer"
+    ],
+    "Surgeries": [
+      "Unilateral Mastectomy (Left)",
+      "Unilateral Mastectomy (Right)"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Tamoxifen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 167,
+    "WeightKg": 73,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Moderate",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Engages in moderate physical activity and maintains a balanced diet.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00028",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "hospice_or_palliative"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": true,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Member is in hospice care, excluding her from breast cancer screening.",
+    "description": "Female aged 70 enrolled in Medicare, currently receiving hospice care.",
+    "Name": "Margaret Hill",
+    "DOB": "1955-03-12",
+    "Gender": "Female",
+    "Email": "margaret.hill@example.com",
+    "Phone": "312-555-0182",
+    "ZIP": "60611",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2010-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Terminal Illness"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Metastatic Cancer"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Morphine"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 160,
+    "WeightKg": 70,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Standard",
+    "SleepHoursAvg": 5.0,
+    "StressLevel": "High",
+    "LifestyleNotes": "Limited mobility and under hospice supervision.",
+    "HospitalVisits": 4,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00029",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "hospice_or_palliative"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": true,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Patient is receiving palliative care, excluding her from screening.",
+    "description": "Female aged 68 with advanced illness under palliative care.",
+    "Name": "Linda Carter",
+    "DOB": "1957-07-22",
+    "Gender": "Female",
+    "Email": "linda.carter@example.com",
+    "Phone": "213-555-0145",
+    "ZIP": "90024",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2012-05-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_002",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Terminal Illness"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "End-stage COPD"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Oxycodone"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 162,
+    "WeightKg": 68,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Standard",
+    "SleepHoursAvg": 4.5,
+    "StressLevel": "High",
+    "LifestyleNotes": "Homebound with palliative support team.",
+    "HospitalVisits": 5,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00030",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "hospice_or_palliative"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": true,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Non-binary member in hospice care is excluded from screening.",
+    "description": "Non-binary individual aged 72 receiving hospice care.",
+    "Name": "Alex Morgan",
+    "DOB": "1953-11-05",
+    "Gender": "Non-binary",
+    "Email": "alex.morgan@example.com",
+    "Phone": "646-555-0199",
+    "ZIP": "10019",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2009-03-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_006",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Terminal Illness"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Stage IV Heart Failure"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Sulfa Drugs"
+    ],
+    "Medications": [
+      "Furosemide"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 170,
+    "WeightKg": 75,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 5.5,
+    "StressLevel": "High",
+    "LifestyleNotes": "Lives in assisted facility under hospice supervision.",
+    "HospitalVisits": 4,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00031",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "gender_affirming_chest_surgery"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": true,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Member had gender-affirming chest surgery, excluding from screening.",
+    "description": "Female aged 67 with history of gender dysphoria and chest reconstruction surgery.",
+    "Name": "Taylor Brooks",
+    "DOB": "1958-02-14",
+    "Gender": "Female",
+    "Email": "taylor.brooks@example.com",
+    "Phone": "415-555-0177",
+    "ZIP": "94110",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2015-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_003",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Gender Dysphoria"
+    ],
+    "PastConditions": [
+      "Gender Dysphoria"
+    ],
+    "CurrentConditions": [
+      "Gender Dysphoria"
+    ],
+    "Surgeries": [
+      "Gender-Affirming Chest Surgery (CPT 19318)"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Estradiol"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 168,
+    "WeightKg": 72,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Standard",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Active in LGBTQ+ community, post-surgical follow-up completed.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00032",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "gender_affirming_chest_surgery"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": true,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Patient had chest reconstruction for gender affirmation, excluding from screening.",
+    "description": "Female aged 70 with gender dysphoria and prior chest surgery.",
+    "Name": "Jordan Lee",
+    "DOB": "1955-09-30",
+    "Gender": "Female",
+    "Email": "jordan.lee@example.com",
+    "Phone": "206-555-0133",
+    "ZIP": "98109",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2011-06-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_005",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Gender Dysphoria"
+    ],
+    "PastConditions": [
+      "Gender Dysphoria"
+    ],
+    "CurrentConditions": [
+      "Gender Dysphoria"
+    ],
+    "Surgeries": [
+      "Gender-Affirming Chest Surgery (CPT 19318)"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Testosterone"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 172,
+    "WeightKg": 80,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Moderate",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 7.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Maintains regular endocrinology follow-ups post-surgery.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00033",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "gender_affirming_chest_surgery"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": true,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Non-binary member had gender-affirming chest surgery, excluding from screening.",
+    "description": "Non-binary individual aged 69 with gender dysphoria and chest surgery history.",
+    "Name": "Casey Rivera",
+    "DOB": "1956-12-18",
+    "Gender": "Non-binary",
+    "Email": "casey.rivera@example.com",
+    "Phone": "305-555-0166",
+    "ZIP": "33133",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2013-02-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_007",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Gender Dysphoria"
+    ],
+    "PastConditions": [
+      "Gender Dysphoria"
+    ],
+    "CurrentConditions": [
+      "Gender Dysphoria"
+    ],
+    "Surgeries": [
+      "Gender-Affirming Chest Surgery (CPT 19318)"
+    ],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Testosterone Gel"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 165,
+    "WeightKg": 70,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Active",
+    "DietType": "Vegetarian",
+    "SleepHoursAvg": 7.8,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Engages in regular physical activity and gender-affirming care follow-up.",
+    "HospitalVisits": 0,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00034",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "deceased"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": true,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Member is deceased, thus excluded from measure.",
+    "description": "Deceased female aged 70, enrolled in Medicare, excluded from BCS-E.",
+    "Name": "Margaret Hill",
+    "DOB": "1955-03-12",
+    "Gender": "Female",
+    "Email": "margaret.hill@example.com",
+    "Phone": "312-555-0198",
+    "ZIP": "60611",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2010-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 162,
+    "WeightKg": 68,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 6.0,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Patient was deceased; no active lifestyle data.",
+    "HospitalVisits": 2,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00035",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "deceased"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": true,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Patient is deceased, making her excluded from screening eligibility.",
+    "description": "Deceased female aged 72, enrolled in Medicare, excluded from BCS-E.",
+    "Name": "Patricia Gomez",
+    "DOB": "1953-07-22",
+    "Gender": "Female",
+    "Email": "patricia.gomez@example.com",
+    "Phone": "213-555-0142",
+    "ZIP": "90017",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2012-05-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_002",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Type 2 Diabetes"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Type 2 Diabetes"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Metformin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 160,
+    "WeightKg": 70,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 5.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Patient deceased; no ongoing care or lifestyle data.",
+    "HospitalVisits": 3,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00036",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "deceased"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": true,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Member is deceased, thus excluded from measure denominator.",
+    "description": "Deceased non-binary individual aged 68, enrolled in Medicare, excluded from BCS-E.",
+    "Name": "Jordan Lee",
+    "DOB": "1957-11-05",
+    "Gender": "Non-binary",
+    "Email": "jordan.lee@example.com",
+    "Phone": "646-555-0183",
+    "ZIP": "10019",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2015-03-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_006",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Chronic Kidney Disease"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Chronic Kidney Disease"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Sulfa Drugs"
+    ],
+    "Medications": [
+      "Losartan"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 170,
+    "WeightKg": 75,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 6.0,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Deceased; no active lifestyle data available.",
+    "HospitalVisits": 2,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00037",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "frailty_advanced_illness"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": true,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Member has documented frailty and advanced illness, excluding her from screening.",
+    "description": "Frail elderly female aged 73 with advanced illness, excluded from BCS-E.",
+    "Name": "Helen Carter",
+    "DOB": "1952-02-18",
+    "Gender": "Female",
+    "Email": "helen.carter@example.com",
+    "Phone": "404-555-0177",
+    "ZIP": "30309",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2008-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_003",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Congestive Heart Failure",
+      "Frailty Syndrome"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Congestive Heart Failure",
+      "Frailty Syndrome"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Furosemide",
+      "Metoprolol"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 158,
+    "WeightKg": 80,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 5.0,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Limited mobility and frailty restrict physical activity.",
+    "HospitalVisits": 4,
+    "MissedAppointments": 1,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00038",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "frailty_advanced_illness"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": true,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Patient has frailty and advanced illness, excluding her from screening eligibility.",
+    "description": "Female aged 70 with frailty and chronic illness, excluded from BCS-E.",
+    "Name": "Linda Nguyen",
+    "DOB": "1955-09-30",
+    "Gender": "Female",
+    "Email": "linda.nguyen@example.com",
+    "Phone": "512-555-0134",
+    "ZIP": "78701",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2011-06-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_005",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "COPD",
+      "Frailty Syndrome"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "COPD",
+      "Frailty Syndrome"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Aspirin"
+    ],
+    "Medications": [
+      "Albuterol",
+      "Tiotropium"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 160,
+    "WeightKg": 85,
+    "SmokingStatus": "Current",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Standard",
+    "SleepHoursAvg": 4.5,
+    "StressLevel": "High",
+    "LifestyleNotes": "Limited physical activity due to frailty and chronic lung disease.",
+    "HospitalVisits": 5,
+    "MissedAppointments": 2,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00039",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "frailty_advanced_illness"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": true,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Member has frailty and advanced illness, excluding them from screening.",
+    "description": "Non-binary individual aged 68 with frailty and advanced illness, excluded from BCS-E.",
+    "Name": "Taylor Morgan",
+    "DOB": "1957-04-25",
+    "Gender": "Non-binary",
+    "Email": "taylor.morgan@example.com",
+    "Phone": "206-555-0166",
+    "ZIP": "98109",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2014-02-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_007",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Parkinson\u2019s Disease",
+      "Frailty Syndrome"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Parkinson\u2019s Disease",
+      "Frailty Syndrome"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Carbidopa-Levodopa"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 165,
+    "WeightKg": 78,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Standard",
+    "SleepHoursAvg": 5.0,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Mobility limited by frailty and Parkinson\u2019s symptoms.",
+    "HospitalVisits": 4,
+    "MissedAppointments": 1,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00040",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "institutional_snp_or_ltc_66plus"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": true,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Member aged 70 is in a long-term care facility, meeting institutional SNP exclusion criteria.",
+    "description": "70-year-old female enrolled in Medicare, residing in a long-term care facility, excluded from BCS-E measure.",
+    "Name": "Margaret Hill",
+    "DOB": "1955-03-12",
+    "Gender": "Female",
+    "Email": "margaret.hill@example.com",
+    "Phone": "312-555-1842",
+    "ZIP": "60611",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2020-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Hypertension",
+      "Osteoarthritis"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension",
+      "Osteoarthritis"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Lisinopril",
+      "Acetaminophen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 162,
+    "WeightKg": 78,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 6.0,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Lives in a nursing facility with limited mobility and structured diet.",
+    "HospitalVisits": 3,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00041",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "institutional_snp_or_ltc_66plus"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": true,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Member aged 68 resides in a skilled nursing facility, meeting institutional SNP exclusion.",
+    "description": "68-year-old female with chronic conditions living in a skilled nursing facility, excluded from BCS-E.",
+    "Name": "Patricia Gomez",
+    "DOB": "1957-07-22",
+    "Gender": "Female",
+    "Email": "patricia.gomez@example.com",
+    "Phone": "213-555-9021",
+    "ZIP": "90012",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2019-05-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_006",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Type 2 Diabetes",
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Type 2 Diabetes",
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Metformin",
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 160,
+    "WeightKg": 82,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 6.5,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Resident of skilled nursing facility with diabetic diet and limited physical activity.",
+    "HospitalVisits": 4,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00042",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": true,
+    "active_exclusions": [
+      "institutional_snp_or_ltc_66plus"
+    ],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": true,
+    "care_gap_status": "EXCLUDED",
+    "llm_reasoning": "Non-binary member aged 72 resides in long-term care, excluded under institutional SNP criteria.",
+    "description": "72-year-old non-binary individual assigned female at birth, living in long-term care, excluded from BCS-E.",
+    "Name": "Alex Morgan",
+    "DOB": "1953-11-05",
+    "Gender": "Non-binary",
+    "Email": "alex.morgan@example.com",
+    "Phone": "646-555-3378",
+    "ZIP": "10019",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2018-03-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_009",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "COPD",
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "COPD",
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Sulfa drugs"
+    ],
+    "Medications": [
+      "Albuterol",
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [],
+    "PriorScreenings": {
+      "Mammogram": "N/A"
+    },
+    "HeightCm": 168,
+    "WeightKg": 85,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Sedentary",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 5.5,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Lives in assisted care facility with respiratory therapy and limited mobility.",
+    "HospitalVisits": 5,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00043",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": true,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "COMPLIANT",
+    "llm_reasoning": "Member is enrolled, has no exclusions, and completed a mammogram within the measurement window.",
+    "description": "Compliant female aged 58 with recent mammogram and no exclusions.",
+    "Name": "Laura Mitchell",
+    "DOB": "1967-05-12",
+    "Gender": "Female",
+    "Email": "laura.mitchell@example.com",
+    "Phone": "312-555-1043",
+    "ZIP": "60611",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2020-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_001",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 55
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 48
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "2024-11-10"
+    },
+    "HeightCm": 165,
+    "WeightKg": 68,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Moderate",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 7.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Maintains regular exercise and adheres to low-sodium diet for blood pressure control.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00044",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": true,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "COMPLIANT",
+    "llm_reasoning": "Enrolled female with no exclusions and documented mammogram CPT code.",
+    "description": "Compliant female aged 60 with mammogram completed in 2024.",
+    "Name": "Patricia Gomez",
+    "DOB": "1965-03-22",
+    "Gender": "Female",
+    "Email": "patricia.gomez@example.com",
+    "Phone": "213-555-2044",
+    "ZIP": "90017",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2019-06-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_002",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Type 2 Diabetes"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Type 2 Diabetes"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Metformin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 55
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 48
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "2024-10-15"
+    },
+    "HeightCm": 160,
+    "WeightKg": 72,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Moderate",
+    "LifestyleNotes": "Follows diabetic diet and attends regular preventive screenings.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00045",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": true,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "COMPLIANT",
+    "llm_reasoning": "Non-binary individual assigned female at birth, enrolled and completed mammogram.",
+    "description": "Compliant non-binary individual aged 54 with mammogram completed in 2025.",
+    "Name": "Jordan Lee",
+    "DOB": "1971-09-05",
+    "Gender": "Non-binary",
+    "Email": "jordan.lee@example.com",
+    "Phone": "646-555-3045",
+    "ZIP": "10003",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2021-02-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_003",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Hypertension",
+      "Hyperlipidemia"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension",
+      "Hyperlipidemia"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Sulfa Drugs"
+    ],
+    "Medications": [
+      "Lisinopril",
+      "Atorvastatin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 55
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 48
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "2025-01-20"
+    },
+    "HeightCm": 170,
+    "WeightKg": 75,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Active",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 8.0,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Maintains active lifestyle and adheres to preventive care schedule.",
+    "HospitalVisits": 0,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00046",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": true,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "COMPLIANT",
+    "llm_reasoning": "Medicare-enrolled female aged 70 with recent mammogram and no exclusions.",
+    "description": "Compliant Medicare female aged 70 with mammogram completed in 2024.",
+    "Name": "Margaret Thompson",
+    "DOB": "1955-07-18",
+    "Gender": "Female",
+    "Email": "margaret.thompson@example.com",
+    "Phone": "617-555-4046",
+    "ZIP": "02118",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2018-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Hypertension",
+      "Osteoarthritis"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension",
+      "Osteoarthritis"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Lisinopril",
+      "Ibuprofen"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 55
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 48
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "2024-12-05"
+    },
+    "HeightCm": 162,
+    "WeightKg": 70,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Walks daily and keeps up with preventive screenings.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00047",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": true,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "COMPLIANT",
+    "llm_reasoning": "Enrolled female aged 68 with mammogram CPT code and no exclusions.",
+    "description": "Compliant female aged 68 with mammogram completed in 2025.",
+    "Name": "Helen Carter",
+    "DOB": "1957-02-09",
+    "Gender": "Female",
+    "Email": "helen.carter@example.com",
+    "Phone": "305-555-5047",
+    "ZIP": "33133",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2017-05-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_005",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Type 2 Diabetes",
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Type 2 Diabetes",
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Aspirin"
+    ],
+    "Medications": [
+      "Metformin",
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 55
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 48
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "2025-02-01"
+    },
+    "HeightCm": 158,
+    "WeightKg": 74,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Moderate",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 7.5,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Manages diabetes well and keeps up with preventive care.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00048",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": true,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "COMPLIANT",
+    "llm_reasoning": "Non-binary individual assigned female at birth, enrolled and completed mammogram.",
+    "description": "Compliant non-binary individual aged 72 with mammogram completed in 2024.",
+    "Name": "Alex Morgan",
+    "DOB": "1953-11-30",
+    "Gender": "Non-binary",
+    "Email": "alex.morgan@example.com",
+    "Phone": "206-555-6048",
+    "ZIP": "98109",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2016-03-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_006",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Hypertension",
+      "Hyperlipidemia"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension",
+      "Hyperlipidemia"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Lisinopril",
+      "Atorvastatin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 55
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 48
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "2024-10-25"
+    },
+    "HeightCm": 168,
+    "WeightKg": 73,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Active",
+    "DietType": "Low-fat",
+    "SleepHoursAvg": 8.0,
+    "StressLevel": "Low",
+    "LifestyleNotes": "Active lifestyle with regular preventive screenings and balanced diet.",
+    "HospitalVisits": 0,
+    "MissedAppointments": 0,
+    "FollowUpRequired": false
+  },
+  {
+    "persona_id": "BCS_P00049",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "OPEN_GAP",
+    "llm_reasoning": "Enrolled female aged 52\u201365 without mammogram or exclusions, so care gap is open.",
+    "description": "52\u201365-year-old enrolled female missing mammogram screening.",
+    "Name": "Laura Mitchell",
+    "DOB": "1970-09-15",
+    "Gender": "Female",
+    "Email": "laura.mitchell@example.com",
+    "Phone": "312-555-1045",
+    "ZIP": "60611",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2020-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_001",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Hypertension",
+      "Type 2 Diabetes"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension",
+      "Type 2 Diabetes"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Penicillin"
+    ],
+    "Medications": [
+      "Lisinopril",
+      "Metformin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 55
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 48
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "None"
+    },
+    "HeightCm": 165,
+    "WeightKg": 78,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 6.5,
+    "StressLevel": "High",
+    "LifestyleNotes": "Struggles to maintain regular screenings due to work stress and diabetes management.",
+    "HospitalVisits": 2,
+    "MissedAppointments": 3,
+    "FollowUpRequired": true
+  },
+  {
+    "persona_id": "BCS_P00050",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "OPEN_GAP",
+    "llm_reasoning": "Enrolled woman aged 52\u201365 with no mammogram record and no exclusions, so gap is open.",
+    "description": "Enrolled 60-year-old woman missing mammogram screening.",
+    "Name": "Patricia Gomez",
+    "DOB": "1965-03-22",
+    "Gender": "Female",
+    "Email": "patricia.gomez@example.com",
+    "Phone": "505-555-2299",
+    "ZIP": "87110",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2019-06-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_002",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Sulfa Drugs"
+    ],
+    "Medications": [
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 58
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 50
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "None"
+    },
+    "HeightCm": 160,
+    "WeightKg": 70,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "High",
+    "LifestyleNotes": "Needs reminder for preventive screenings; manages hypertension with medication.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 2,
+    "FollowUpRequired": true
+  },
+  {
+    "persona_id": "BCS_P00051",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB1",
+    "age_band_label": "Age 52-65",
+    "min_age": 52,
+    "max_age": 65,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "OPEN_GAP",
+    "llm_reasoning": "Non-binary individual with female clinical sex parameter, enrolled and missing mammogram, so open gap.",
+    "description": "Non-binary person aged 55 with female clinical sex parameter missing mammogram.",
+    "Name": "Jordan Lee",
+    "DOB": "1970-12-05",
+    "Gender": "Non-binary",
+    "Email": "jordan.lee@example.com",
+    "Phone": "206-555-7788",
+    "ZIP": "98109",
+    "InsuranceType": "Medicaid",
+    "EnrollmentStart": "2021-02-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_003",
+    "PlanID": "PLAN_MC_001",
+    "ChronicConditions": [
+      "Type 2 Diabetes"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Type 2 Diabetes"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Metformin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 57
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 49
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "None"
+    },
+    "HeightCm": 170,
+    "WeightKg": 85,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 6.0,
+    "StressLevel": "High",
+    "LifestyleNotes": "Manages diabetes but has not scheduled preventive screenings recently.",
+    "HospitalVisits": 2,
+    "MissedAppointments": 3,
+    "FollowUpRequired": true
+  },
+  {
+    "persona_id": "BCS_P00052",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC1",
+    "gender_criteria_label": "AdministrativeGender=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "OPEN_GAP",
+    "llm_reasoning": "Enrolled woman aged 66\u201374 without mammogram or exclusions, so care gap is open.",
+    "description": "67-year-old enrolled woman overdue for mammogram screening.",
+    "Name": "Margaret Johnson",
+    "DOB": "1958-04-10",
+    "Gender": "Female",
+    "Email": "margaret.johnson@example.com",
+    "Phone": "404-555-9922",
+    "ZIP": "30309",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2018-01-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_004",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Hypertension",
+      "Type 2 Diabetes"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension",
+      "Type 2 Diabetes"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "Aspirin"
+    ],
+    "Medications": [
+      "Lisinopril",
+      "Metformin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 60
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 52
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "None"
+    },
+    "HeightCm": 162,
+    "WeightKg": 80,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 6.5,
+    "StressLevel": "High",
+    "LifestyleNotes": "Retired and managing diabetes; needs outreach for preventive screening.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 2,
+    "FollowUpRequired": true
+  },
+  {
+    "persona_id": "BCS_P00053",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC2",
+    "gender_criteria_label": "SexAssignedAtBirth=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "OPEN_GAP",
+    "llm_reasoning": "Enrolled woman aged 66\u201374 with no mammogram record and no exclusions, so gap is open.",
+    "description": "70-year-old woman enrolled in Medicare missing mammogram screening.",
+    "Name": "Helen Carter",
+    "DOB": "1955-11-02",
+    "Gender": "Female",
+    "Email": "helen.carter@example.com",
+    "Phone": "512-555-6677",
+    "ZIP": "78701",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2017-05-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_005",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Hypertension"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Hypertension"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Lisinopril"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 59
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 50
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "None"
+    },
+    "HeightCm": 158,
+    "WeightKg": 72,
+    "SmokingStatus": "Never",
+    "AlcoholUse": "Moderate",
+    "ExerciseFrequency": "Light",
+    "DietType": "Low-sodium",
+    "SleepHoursAvg": 7.0,
+    "StressLevel": "High",
+    "LifestyleNotes": "Lives independently but often forgets preventive appointments.",
+    "HospitalVisits": 1,
+    "MissedAppointments": 3,
+    "FollowUpRequired": true
+  },
+  {
+    "persona_id": "BCS_P00054",
+    "measure": "BCS-E",
+    "gender_criteria_code": "GC3",
+    "gender_criteria_label": "SexParamClinicalUse=Female",
+    "age_band_code": "AB2",
+    "age_band_label": "Age 66-74",
+    "min_age": 66,
+    "max_age": 74,
+    "is_enrolled": true,
+    "mammogram_via_cpt": false,
+    "has_any_exclusion": false,
+    "active_exclusions": [],
+    "excl_bilateral_mastectomy": false,
+    "excl_unilateral_mastectomy_both_sides": false,
+    "excl_hospice_or_palliative": false,
+    "excl_frailty_advanced_illness": false,
+    "excl_gender_affirming_chest_surgery": false,
+    "excl_deceased": false,
+    "excl_institutional_snp_or_ltc_66plus": false,
+    "care_gap_status": "OPEN_GAP",
+    "llm_reasoning": "Non-binary individual with female clinical sex parameter, enrolled and missing mammogram, so open gap.",
+    "description": "Non-binary Medicare member aged 68 missing mammogram screening.",
+    "Name": "Taylor Morgan",
+    "DOB": "1957-07-19",
+    "Gender": "Non-binary",
+    "Email": "taylor.morgan@example.com",
+    "Phone": "415-555-3344",
+    "ZIP": "94110",
+    "InsuranceType": "Medicare",
+    "EnrollmentStart": "2019-03-01",
+    "EnrollmentEnd": null,
+    "PCPID": "PCP_006",
+    "PlanID": "PLAN_MA_001",
+    "ChronicConditions": [
+      "Type 2 Diabetes"
+    ],
+    "PastConditions": [],
+    "CurrentConditions": [
+      "Type 2 Diabetes"
+    ],
+    "Surgeries": [],
+    "Allergies": [
+      "None"
+    ],
+    "Medications": [
+      "Metformin"
+    ],
+    "Immunizations": [
+      "Influenza",
+      "Pneumococcal",
+      "Shingrix"
+    ],
+    "FamilyHistory": [
+      {
+        "relation": "Mother",
+        "condition": "Breast Cancer",
+        "age_at_diagnosis": 56
+      },
+      {
+        "relation": "Sister",
+        "condition": "Ovarian Cancer",
+        "age_at_diagnosis": 47
+      }
+    ],
+    "PriorScreenings": {
+      "Mammogram": "None"
+    },
+    "HeightCm": 168,
+    "WeightKg": 83,
+    "SmokingStatus": "Former",
+    "AlcoholUse": "None",
+    "ExerciseFrequency": "Light",
+    "DietType": "Diabetic",
+    "SleepHoursAvg": 6.0,
+    "StressLevel": "High",
+    "LifestyleNotes": "Manages diabetes but has not completed preventive screenings this year.",
+    "HospitalVisits": 2,
+    "MissedAppointments": 2,
+    "FollowUpRequired": true
+  }
+]

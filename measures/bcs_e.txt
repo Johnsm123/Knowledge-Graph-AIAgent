@@ -1,0 +1,77 @@
+MEASURE: BCS-E — Breast Cancer Screening
+
+DESCRIPTION:
+Percentage of women 42–74 years of age who had a mammogram to screen for breast cancer.
+
+ELIGIBILITY (DENOMINATOR):
+- Age: 42–74 years as of December 31 of the measurement year
+- Gender: Female (Administrative, Birth, or Clinical Use)
+- Enrollment: Must be continuously enrolled during the measurement year
+- Insurance: Commercial, Medicaid, Medicare
+
+COMPLIANCE WINDOW (NUMERATOR):
+- October 1 two years prior through December 31 of the measurement year
+- Member must have at least ONE mammography claim in this window
+
+MAMMOGRAPHY CPT CODES (Compliance):
+77061, 77062, 77063, 77065, 77066, 77067
+
+AGE BANDS:
+- AB1: 42–65 years
+- AB2: 66–74 years
+
+GENDER CRITERIA:
+- GC1: Administrative Gender = Female
+- GC2: Sex Assigned at Birth = Female
+- GC3: Sex Parameter for Clinical Use = Female
+
+EXCLUSIONS:
+
+1. bilateral_mastectomy
+   ICD-10-PCS: 0HTV0ZZ
+   ICD-10-CM: Z90.13
+
+2. unilateral_mastectomy_both_sides
+   CPT: 19180, 19181, 19182, 19183, 19184, 19185, 19186, 19187, 19188, 19189,
+        19190, 19191, 19192, 19193, 19194, 19195, 19196, 19197, 19198, 19199,
+        19200, 19201, 19202, 19203, 19204, 19205, 19206, 19207, 19208, 19209,
+        19210, 19211, 19212, 19213, 19214, 19215, 19216, 19217, 19218, 19219,
+        19220, 19221, 19222, 19223, 19224, 19225, 19226, 19227, 19228, 19229,
+        19300, 19301, 19302, 19303, 19304, 19305, 19306, 19307
+   ICD-10-CM: Z90.11, Z90.12
+   ICD-10-PCS: 0HTU0ZZ, 0HTT0ZZ
+
+3. gender_affirming_chest_surgery
+   CPT: 19318
+   ICD-10-CM: F64.1, F64.2, F64.8, F64.9, Z87.890
+
+4. hospice_or_palliative
+   Note: Member enrolled in hospice or receiving palliative care during measurement year
+   ICD-10-CM: Z51.5
+
+5. frailty_advanced_illness
+   Note: Applies to members age 66+ with frailty indicator plus advanced illness diagnosis
+   Age restriction: AB2 only (age 66+)
+
+6. deceased
+   Note: Member deceased during measurement year
+
+7. institutional_snp_or_ltc_66plus
+   Note: Member in institutional SNP or long-term care, age 66+
+   Age restriction: AB2 only (age 66+)
+
+CARE GAP STATUSES:
+- COMPLIANT: Enrolled female age 42-74, mammogram CPT found in lookback window, no exclusion
+- OPEN_GAP: Enrolled female age 42-74, no mammogram found, no exclusion
+- EXCLUDED: Meets one or more exclusion criteria
+- NOT_ELIGIBLE: Gender not Female OR age outside 42-74 OR not enrolled
+
+NEO4J RULE PROPERTIES:
+Measure.id = "BCS-E"
+CareGapRule.min_age = 42
+CareGapRule.max_age = 74
+CareGapRule.applicable_gender = "Female"
+CareGapRule.lookback_years = 2
+CareGapRule.lookback_start_month = 10
+CareGapRule.lookback_start_day = 1
+CareGapRule.measurement_year = 2026

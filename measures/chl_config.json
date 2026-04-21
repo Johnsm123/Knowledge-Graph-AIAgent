@@ -1,0 +1,73 @@
+{
+  "measure_id": "CHL",
+  "measure_name": "Chlamydia Screening",
+  "eligible_age_min": 16,
+  "eligible_age_max": 24,
+  "eligible_gender": "Female",
+  "measurement_year": 2025,
+  "lookback_years": 0,
+  "lookback_start_month": 1,
+  "lookback_start_day": 1,
+  "compliance_codes": {
+    "CPT": [
+      "87110",
+      "87270",
+      "87320",
+      "87490",
+      "87491",
+      "87492",
+      "87810"
+    ],
+    "LOINC": [],
+    "HCPCS": []
+  },
+  "exclusion_codes": {
+    "Required exclusions": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Required exclusions apply as defined in general HEDIS specifications (e.g., hospice, death during measurement year)."
+    },
+    "Sex assigned male at birth": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Exclude members whose sex assigned at birth is male."
+    }
+  },
+  "ab2_only_exclusions": [],
+  "age_bands": [
+    {
+      "code": "AB1",
+      "min": 16,
+      "max": 20
+    },
+    {
+      "code": "AB2",
+      "min": 21,
+      "max": 24
+    }
+  ],
+  "gender_criteria": [
+    {
+      "code": "GC1",
+      "description": "AdministrativeGender=Female"
+    },
+    {
+      "code": "GC2",
+      "description": "SexAssignedAtBirth=Female"
+    },
+    {
+      "code": "GC3",
+      "description": "SexParamClinicalUse=Female"
+    }
+  ],
+  "gap_statuses": [
+    "OPEN_GAP",
+    "COMPLIANT",
+    "EXCLUDED",
+    "NOT_ELIGIBLE"
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "measure_id": "BCS-E",
+  "measure_name": "Breast Cancer Screening",
+  "eligible_age_min": 50,
+  "eligible_age_max": 74,
+  "eligible_gender": "Female",
+  "measurement_year": 2025,
+  "lookback_years": 2,
+  "lookback_start_month": 10,
+  "lookback_start_day": 1,
+  "compliance_codes": {
+    "CPT": [
+      "77061",
+      "77062",
+      "77063",
+      "77065",
+      "77066",
+      "77067"
+    ],
+    "LOINC": [],
+    "HCPCS": []
+  },
+  "exclusion_codes": {
+    "Bilateral Mastectomy": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [
+        "0HTV0ZZ"
+      ],
+      "HCPCS": [],
+      "note": ""
+    },
+    "History of Bilateral Mastectomy": {
+      "CPT": [],
+      "ICD10CM": [
+        "Z90.13"
+      ],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": ""
+    },
+    "Unilateral Mastectomy with Bilateral Modifier": {
+      "CPT": [
+        "19180",
+        "19200",
+        "19220",
+        "19240",
+        "19303",
+        "19304",
+        "19305",
+        "19306",
+        "19307"
+      ],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Requires modifier 50"
+    },
+    "Unilateral Mastectomy with Left/Right Side Modifier": {
+      "CPT": [
+        "19180",
+        "19200",
+        "19220",
+        "19240",
+        "19303",
+        "19304",
+        "19305",
+        "19306",
+        "19307"
+      ],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Requires modifier LT or RT"
+    },
+    "Left and Right Unilateral Mastectomy": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [
+        "0HTU0ZZ",
+        "0HTT0ZZ"
+      ],
+      "HCPCS": [],
+      "note": ""
+    },
+    "Absence of Both Right and Left Breast": {
+      "CPT": [],
+      "ICD10CM": [
+        "Z90.11",
+        "Z90.12"
+      ],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": ""
+    },
+    "Palliative Care Encounter": {
+      "CPT": [],
+      "ICD10CM": [
+        "Z51.5"
+      ],
+      "ICD10PCS": [],
+      "HCPCS": [
+        "G9054",
+        "M1017"
+      ],
+      "note": ""
+    },
+    "Gender-Affirming Chest Surgery": {
+      "CPT": [
+        "19318"
+      ],
+      "ICD10CM": [
+        "F64.1",
+        "F64.2",
+        "F64.8",
+        "Z87.890"
+      ],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Requires CPT 19318 and one ICD-10 code for gender dysphoria"
+    }
+  },
+  "ab2_only_exclusions": [],
+  "age_bands": [
+    {
+      "code": "AB1",
+      "min": 50,
+      "max": 65
+    },
+    {
+      "code": "AB2",
+      "min": 66,
+      "max": 74
+    }
+  ],
+  "gender_criteria": [
+    {
+      "code": "GC1",
+      "description": "AdministrativeGender=Female"
+    },
+    {
+      "code": "GC2",
+      "description": "SexAssignedAtBirth=Female"
+    },
+    {
+      "code": "GC3",
+      "description": "SexParamClinicalUse=Female"
+    }
+  ],
+  "gap_statuses": [
+    "OPEN_GAP",
+    "COMPLIANT",
+    "EXCLUDED",
+    "NOT_ELIGIBLE"
+  ]
+}

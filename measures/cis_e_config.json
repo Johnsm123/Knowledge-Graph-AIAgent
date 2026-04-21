@@ -1,0 +1,79 @@
+{
+  "measure_id": "CIS-E",
+  "measure_name": "Childhood Immunization Status",
+  "eligible_age_min": 0,
+  "eligible_age_max": 2,
+  "eligible_gender": "Any",
+  "measurement_year": 2025,
+  "lookback_years": 2,
+  "lookback_start_month": 1,
+  "lookback_start_day": 1,
+  "compliance_codes": {
+    "CPT": [
+      "90697",
+      "90698",
+      "90700",
+      "90723",
+      "90644",
+      "90647",
+      "90648",
+      "90748",
+      "90740",
+      "90744",
+      "90747",
+      "90707",
+      "90710",
+      "90670",
+      "90716",
+      "90633",
+      "90655",
+      "90657",
+      "90660",
+      "90661",
+      "90672",
+      "90674",
+      "90685",
+      "90686",
+      "90687",
+      "90688",
+      "90689",
+      "90756",
+      "90681",
+      "90680"
+    ],
+    "LOINC": [],
+    "HCPCS": [
+      "G0010",
+      "G0009"
+    ]
+  },
+  "exclusion_codes": {
+    "Required Exclusions": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Members who had a contraindication for a specific vaccine are excluded from the denominator for all antigen rates and the combination rates. Exclusion must be met prior to the child\u2019s 2nd birthday."
+    }
+  },
+  "ab2_only_exclusions": [],
+  "age_bands": [
+    {
+      "code": "AB1",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "code": "AB2",
+      "min": 2,
+      "max": 2
+    }
+  ],
+  "gender_criteria": [],
+  "gap_statuses": [
+    "OPEN_GAP",
+    "COMPLIANT",
+    "EXCLUDED",
+    "NOT_ELIGIBLE"
+  ]
+}

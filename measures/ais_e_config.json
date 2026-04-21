@@ -1,0 +1,86 @@
+{
+  "measure_id": "AIS-E",
+  "measure_name": "Adult Immunization Status",
+  "eligible_age_min": 19,
+  "eligible_age_max": 120,
+  "eligible_gender": "Any",
+  "measurement_year": 2025,
+  "lookback_years": 0,
+  "lookback_start_month": 1,
+  "lookback_start_day": 1,
+  "compliance_codes": {
+    "CPT": [
+      "90653",
+      "90662",
+      "90694",
+      "90756",
+      "90674",
+      "90689",
+      "90688",
+      "90686",
+      "90630",
+      "90682",
+      "90661",
+      "90658",
+      "90656",
+      "90654",
+      "90673",
+      "90672",
+      "90660",
+      "90714",
+      "90715",
+      "90743",
+      "90739",
+      "90759",
+      "90746",
+      "90740",
+      "90747",
+      "90744",
+      "90750",
+      "90670",
+      "90671",
+      "90677",
+      "90732"
+    ],
+    "LOINC": [],
+    "HCPCS": [
+      "G0009"
+    ]
+  },
+  "exclusion_codes": {
+    "Required Exclusions": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Members excluded per general HEDIS required exclusions (e.g., hospice, death during measurement year)."
+    },
+    "Vaccine Contraindication": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Members who had a contraindication for a specific vaccine are excluded."
+    }
+  },
+  "ab2_only_exclusions": [],
+  "age_bands": [
+    {
+      "code": "AB1",
+      "min": 19,
+      "max": 65
+    },
+    {
+      "code": "AB2",
+      "min": 66,
+      "max": 120
+    }
+  ],
+  "gender_criteria": [],
+  "gap_statuses": [
+    "OPEN_GAP",
+    "COMPLIANT",
+    "EXCLUDED",
+    "NOT_ELIGIBLE"
+  ]
+}

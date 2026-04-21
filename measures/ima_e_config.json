@@ -1,0 +1,75 @@
+{
+  "measure_id": "IMA-E",
+  "measure_name": "Immunizations for Adolescents",
+  "eligible_age_min": 13,
+  "eligible_age_max": 13,
+  "eligible_gender": "Any",
+  "measurement_year": 2025,
+  "lookback_years": 4,
+  "lookback_start_month": 1,
+  "lookback_start_day": 1,
+  "compliance_codes": {
+    "CPT": [
+      "90619",
+      "90623",
+      "90733",
+      "90734",
+      "90715",
+      "90649",
+      "90650",
+      "90651"
+    ],
+    "LOINC": [],
+    "HCPCS": []
+  },
+  "exclusion_codes": {
+    "Required Exclusions": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Required exclusions apply to all measures per HEDIS general rules (e.g., death, hospice, advanced illness)."
+    },
+    "Hospice": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Members who are in hospice are excluded."
+    },
+    "Anaphylactic Reaction to Vaccine": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Members who have an anaphylactic reaction to any particular vaccine or its components anytime on or before their 13th birthday."
+    },
+    "Tdap Encephalopathy Adverse Effect": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Members who have encephalopathy with a vaccine adverse-effect code on or before their 13th birthday."
+    }
+  },
+  "ab2_only_exclusions": [],
+  "age_bands": [
+    {
+      "code": "AB1",
+      "min": 13,
+      "max": 13
+    },
+    {
+      "code": "AB2",
+      "min": 14,
+      "max": 18
+    }
+  ],
+  "gender_criteria": [],
+  "gap_statuses": [
+    "OPEN_GAP",
+    "COMPLIANT",
+    "EXCLUDED",
+    "NOT_ELIGIBLE"
+  ]
+}

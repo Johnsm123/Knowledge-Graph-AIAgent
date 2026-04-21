@@ -1,0 +1,162 @@
+{
+  "measure_id": "COL-E",
+  "measure_name": "Colorectal Cancer Screening",
+  "eligible_age_min": 45,
+  "eligible_age_max": 75,
+  "eligible_gender": "Any",
+  "measurement_year": 2025,
+  "lookback_years": 9,
+  "lookback_start_month": 1,
+  "lookback_start_day": 1,
+  "compliance_codes": {
+    "CPT": [
+      "44388",
+      "44389",
+      "44390",
+      "44391",
+      "44392",
+      "44394",
+      "44401",
+      "44402",
+      "44403",
+      "44404",
+      "44405",
+      "44406",
+      "44407",
+      "44408",
+      "45378",
+      "45379",
+      "45380",
+      "45381",
+      "45382",
+      "45384",
+      "45385",
+      "45386",
+      "45388",
+      "45389",
+      "45390",
+      "45391",
+      "45392",
+      "45393",
+      "45398",
+      "74261",
+      "74262",
+      "74263",
+      "81528",
+      "45330",
+      "45331",
+      "45332",
+      "45333",
+      "45334",
+      "45335",
+      "45337",
+      "45338",
+      "45339",
+      "45340",
+      "45341",
+      "45342",
+      "45346",
+      "45347",
+      "45349",
+      "45350",
+      "82270",
+      "82274"
+    ],
+    "LOINC": [],
+    "HCPCS": [
+      "G0105",
+      "G0121",
+      "G0104",
+      "G0328",
+      "G0464"
+    ]
+  },
+  "exclusion_codes": {
+    "History of colorectal cancer": {
+      "CPT": [],
+      "ICD10CM": [
+        "C18.0",
+        "C18.1",
+        "C18.2",
+        "C18.3",
+        "C18.4",
+        "C18.5",
+        "C18.6",
+        "C18.7",
+        "C18.8",
+        "C18.9",
+        "C19",
+        "C20",
+        "C21.2",
+        "C21.8",
+        "C78.5",
+        "Z85.038",
+        "Z85.048"
+      ],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": ""
+    },
+    "Total colectomy": {
+      "CPT": [
+        "44150",
+        "44151",
+        "44152",
+        "44153",
+        "44155",
+        "44156",
+        "44157",
+        "44158",
+        "44210",
+        "44211",
+        "44212"
+      ],
+      "ICD10CM": [],
+      "ICD10PCS": [
+        "0DTE0ZZ",
+        "0DTE4ZZ",
+        "0DTE8ZZ",
+        "0DTE7ZZ"
+      ],
+      "HCPCS": [],
+      "note": ""
+    },
+    "I-SNP or long-term institutionalized (age 66+)": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Medicare members ages 66 and older enrolled in I-SNP or living long-term in an institution"
+    },
+    "Frailty and advanced illness (age 66+)": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Members age 66 and older with frailty and advanced illness"
+    }
+  },
+  "ab2_only_exclusions": [
+    "I-SNP or long-term institutionalized (age 66+)",
+    "Frailty and advanced illness (age 66+)"
+  ],
+  "age_bands": [
+    {
+      "code": "AB1",
+      "min": 45,
+      "max": 65
+    },
+    {
+      "code": "AB2",
+      "min": 66,
+      "max": 75
+    }
+  ],
+  "gender_criteria": [],
+  "gap_statuses": [
+    "OPEN_GAP",
+    "COMPLIANT",
+    "EXCLUDED",
+    "NOT_ELIGIBLE"
+  ]
+}

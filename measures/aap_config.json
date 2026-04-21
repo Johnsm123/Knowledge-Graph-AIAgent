@@ -1,0 +1,87 @@
+{
+  "measure_id": "AAP",
+  "measure_name": "Adults\u2019 Access to Preventive/Ambulatory Health Services",
+  "eligible_age_min": 20,
+  "eligible_age_max": 120,
+  "eligible_gender": "Any",
+  "measurement_year": 2025,
+  "lookback_years": 1,
+  "lookback_start_month": 1,
+  "lookback_start_day": 1,
+  "compliance_codes": {
+    "CPT": [
+      "99202\u201399205",
+      "99211\u201399215",
+      "99242\u201399245",
+      "99304\u201399310",
+      "99315",
+      "99316",
+      "99318",
+      "99324\u201399328",
+      "99334\u201399337",
+      "99341",
+      "99345",
+      "99347\u201399350",
+      "99381\u201399387",
+      "99391\u201399397",
+      "99401\u201399404",
+      "99411",
+      "99412",
+      "99429",
+      "99444",
+      "99457",
+      "99458",
+      "99483",
+      "98966\u201398968",
+      "98969",
+      "98970\u201398972",
+      "98980",
+      "98981",
+      "99421\u201399423",
+      "99441\u201399443"
+    ],
+    "LOINC": [],
+    "HCPCS": [
+      "G0402",
+      "G0438",
+      "G0439",
+      "G0463",
+      "T1015",
+      "S0620",
+      "S0621",
+      "G0071",
+      "G2010",
+      "G2012",
+      "G2250\u2013G2252"
+    ]
+  },
+  "exclusion_codes": {
+    "Required Exclusions": {
+      "CPT": [],
+      "ICD10CM": [],
+      "ICD10PCS": [],
+      "HCPCS": [],
+      "note": "Members with hospice services or who died during the measurement year are excluded per general HEDIS required exclusions."
+    }
+  },
+  "ab2_only_exclusions": [],
+  "age_bands": [
+    {
+      "code": "AB1",
+      "min": 20,
+      "max": 64
+    },
+    {
+      "code": "AB2",
+      "min": 65,
+      "max": 120
+    }
+  ],
+  "gender_criteria": [],
+  "gap_statuses": [
+    "OPEN_GAP",
+    "COMPLIANT",
+    "EXCLUDED",
+    "NOT_ELIGIBLE"
+  ]
+}
