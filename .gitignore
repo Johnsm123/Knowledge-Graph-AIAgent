@@ -1,34 +1,101 @@
-# Environment variables - NEVER commit this
+# ──────────────────────────────────────────────────────────────────────
+# Secrets — NEVER COMMIT
+# ──────────────────────────────────────────────────────────────────────
 .env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+mobile/.env
+mobile/.env.local
 
-# Virtual environment
+# Firebase credentials (backend + mobile)
+firebase-admin.json
+mobile/google-services.json
+mobile/GoogleService-Info.plist
+
+# Any stray credential / key files
+*.pem
+*.key
+*_credentials.json
+*-admin-key.json
+
+# ──────────────────────────────────────────────────────────────────────
+# Python
+# ──────────────────────────────────────────────────────────────────────
 venv/
 .venv/
-
-# Python cache
+env/
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Output files
+# ──────────────────────────────────────────────────────────────────────
+# Node / JavaScript
+# ──────────────────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+mobile/node_modules/
+
+# ──────────────────────────────────────────────────────────────────────
+# Build output
+# ──────────────────────────────────────────────────────────────────────
+frontend/dist/
+frontend/build/
+mobile/dist/
+mobile/web-build/
+mobile/.expo/
+mobile/.expo-shared/
+mobile/android/build/
+mobile/ios/build/
+
+# Deployment artifacts
+deploy.zip
+*.tar.gz
+*.apk
+*.aab
+
+# ──────────────────────────────────────────────────────────────────────
+# Logs + caches
+# ──────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ──────────────────────────────────────────────────────────────────────
+# Project-specific output directories
+# ──────────────────────────────────────────────────────────────────────
 output/
 work/
 
+# ──────────────────────────────────────────────────────────────────────
+# Large reference documents (keep locally, don't push to GitHub)
+# ──────────────────────────────────────────────────────────────────────
+*.pdf
+
+# ──────────────────────────────────────────────────────────────────────
+# OS files
+# ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ──────────────────────────────────────────────────────────────────────
 # IDE
+# ──────────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Logs
-*.log
-
-# Node modules
-node_modules/
-frontend/node_modules/
-
-# Build outputs
-frontend/dist/
-frontend/build/
-
-# Package lock files (optional - keep if you want consistent installs)
-# package-lock.json
-# frontend/package-lock.json
+# ──────────────────────────────────────────────────────────────────────
+# Azure CLI temp
+# ──────────────────────────────────────────────────────────────────────
+.azure/

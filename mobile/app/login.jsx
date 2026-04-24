@@ -1,9 +1,11 @@
 import { useState } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
+  KeyboardAvoidingView, Platform, Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { requestOtp } from "../src/lib/api";
+import { COG, TYPE, FORM, BTN_FILLED, S } from "../src/lib/brand";
 
 export default function Login() {
   const [memberId, setMemberId] = useState("");
@@ -19,48 +21,59 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await requestOtp(trimmed);
-      Alert.alert("Code Sent", `We sent a 6-digit code to ${res.email_hint || "your email"}.`);
+      Alert.alert("Code sent", `A 6-digit code was emailed to ${res.email_hint || "your registered email"}.`);
       router.push({ pathname: "/verify", params: { memberId: trimmed } });
     } catch (e) {
-      Alert.alert("Error", e.message);
+      Alert.alert("Unable to send", e.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <Text style={styles.title}>Cognizant Care</Text>
-      <Text style={styles.subtitle}>Enter your Member ID to get started</Text>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={styles.brandRow}>
+        <View style={styles.logoDot} />
+        <Text style={styles.brand}>Cognizant</Text>
+      </View>
+      <Text style={styles.heading}>Welcome back.</Text>
+      <Text style={styles.sub}>Sign in with your Member ID to access your care plan.</Text>
+
+      <Text style={FORM.label}>Member ID</Text>
       <TextInput
         style={styles.input}
-        placeholder="M0001"
-        placeholderTextColor="#9ca3af"
+        placeholder="e.g. M0011"
+        placeholderTextColor={COG.grayMedium}
         value={memberId}
         onChangeText={setMemberId}
         autoCapitalize="characters"
         autoCorrect={false}
       />
-      <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? "Sending..." : "Send Code"}</Text>
+
+      <TouchableOpacity style={[styles.cta, loading && { opacity: 0.6 }]} onPress={handleSubmit} disabled={loading}>
+        <Text style={styles.ctaText}>{loading ? "Sending..." : "Send activation code"}</Text>
       </TouchableOpacity>
+
+      <Text style={styles.footnote}>
+        Your code is delivered to the email on your member record. Codes expire in 10 minutes.
+      </Text>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: "#fff", justifyContent: "center" },
-  title: { fontSize: 28, fontWeight: "700", color: "#0033a0", textAlign: "center", marginBottom: 8 },
-  subtitle: { fontSize: 14, color: "#6b7280", textAlign: "center", marginBottom: 32 },
-  input: {
-    borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 14,
-    fontSize: 16, backgroundColor: "#f9fafb", marginBottom: 18,
+  container: { flex: 1, padding: 28, backgroundColor: COG.white, justifyContent: "center" },
+  brandRow: { flexDirection: "row", alignItems: "center", marginBottom: S.xxl },
+  logoDot: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: COG.tealLight, marginRight: 10,
+    borderWidth: 2, borderColor: COG.primary,
   },
-  button: {
-    backgroundColor: "#0033a0", paddingVertical: 14, borderRadius: 8, alignItems: "center",
-  },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  brand: { ...TYPE.h5, color: COG.primary, fontWeight: "700" },
+  heading: { ...TYPE.h3, marginBottom: 6 },
+  sub: { ...TYPE.body, color: COG.grayDark, marginBottom: S.xxl },
+  input: { ...FORM.input, marginBottom: S.xl, fontSize: 18, letterSpacing: 0.5 },
+  cta: { ...BTN_FILLED.container },
+  ctaText: { ...BTN_FILLED.text },
+  footnote: { ...TYPE.tiny, textAlign: "center", marginTop: S.xl, paddingHorizontal: 8 },
 });

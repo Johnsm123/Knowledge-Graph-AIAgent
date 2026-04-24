@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator,
 } from "react-native";
-import { listAppointments, bookAppointment, getMe } from "../../src/lib/api";
+import { listAppointments, bookAppointment, getMe, cancelAppointment } from "../../src/lib/api";
+import { COG, TYPE, FORM, BTN_FILLED, S, CARD } from "../../src/lib/brand";
 
 export default function Appointments() {
   const [appts, setAppts] = useState([]);
@@ -29,71 +30,153 @@ export default function Appointments() {
 
   const handleBook = async () => {
     if (!measureId || !date || !time) {
-      Alert.alert("Missing", "Please fill measure, date, and time");
+      Alert.alert("Missing info", "Please pick a screening, date, and time.");
       return;
     }
     setBooking(true);
     try {
-      await bookAppointment({ measure_id: measureId, appointment_date: date, appointment_time: time });
-      Alert.alert("Booked", "Your appointment is confirmed.");
+      await bookAppointment({ measure_id: measureId.toUpperCase(), appointment_date: date, appointment_time: time });
+      Alert.alert("Booking confirmed", "A confirmation email has been sent to you.");
       setMeasureId(""); setDate(""); setTime("");
       load();
     } catch (e) {
-      Alert.alert("Error", e.message);
+      Alert.alert("Unable to book", e.message);
     } finally {
       setBooking(false);
     }
   };
 
-  if (loading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#0033a0" /></View>;
-  }
+  if (loading) return (
+    <View style={styles.center}><ActivityIndicator size="large" color={COG.primary} /></View>
+  );
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Book Appointment</Text>
-        <Text style={styles.hint}>Open gaps: {gaps.map(g => g.measure_id).join(", ") || "none"}</Text>
-        <TextInput style={styles.input} placeholder="Measure ID (e.g. BCS)"
-          value={measureId} onChangeText={setMeasureId} autoCapitalize="characters" />
-        <TextInput style={styles.input} placeholder="Date (YYYY-MM-DD)"
-          value={date} onChangeText={setDate} />
-        <TextInput style={styles.input} placeholder="Time (HH:MM)"
-          value={time} onChangeText={setTime} />
-        <TouchableOpacity style={styles.button} onPress={handleBook} disabled={booking}>
-          <Text style={styles.buttonText}>{booking ? "Booking..." : "Book"}</Text>
-        </TouchableOpacity>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: S.xl }}>
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Manual booking</Text>
+        <View style={styles.card}>
+          <Text style={styles.cardHint}>
+            Prefer a guided flow with map + nearby labs? Open the <Text style={{ fontWeight: "700" }}>Assistant</Text> tab.
+          </Text>
+
+          <Text style={[FORM.label, { marginTop: S.md }]}>Open care gaps</Text>
+          <View style={styles.gapChips}>
+            {gaps.length === 0
+              ? <Text style={TYPE.tiny}>No open gaps</Text>
+              : gaps.map((g, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={[styles.chip, measureId === g.measure_id && styles.chipActive]}
+                  onPress={() => setMeasureId(g.measure_id)}
+                >
+                  <Text style={[styles.chipText, measureId === g.measure_id && styles.chipTextActive]}>
+                    {g.measure_id}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+          </View>
+
+          <Text style={[FORM.label, { marginTop: S.md }]}>Measure ID</Text>
+          <TextInput style={FORM.input} placeholder="e.g. BCS" placeholderTextColor={COG.grayMedium}
+            value={measureId} onChangeText={setMeasureId} autoCapitalize="characters" />
+
+          <Text style={[FORM.label, { marginTop: S.md }]}>Date</Text>
+          <TextInput style={FORM.input} placeholder="YYYY-MM-DD" placeholderTextColor={COG.grayMedium}
+            value={date} onChangeText={setDate} />
+
+          <Text style={[FORM.label, { marginTop: S.md }]}>Time</Text>
+          <TextInput style={FORM.input} placeholder="HH:MM (24-hour)" placeholderTextColor={COG.grayMedium}
+            value={time} onChangeText={setTime} />
+
+          <TouchableOpacity
+            style={[BTN_FILLED.container, { marginTop: S.lg }, booking && { opacity: 0.6 }]}
+            onPress={handleBook} disabled={booking}
+          >
+            <Text style={BTN_FILLED.text}>{booking ? "Booking..." : "Confirm booking"}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Your Appointments ({appts.length})</Text>
-        {appts.length === 0 ? (
-          <Text style={styles.row}>No appointments yet.</Text>
-        ) : appts.map((a, i) => (
-          <View key={i} style={styles.apptRow}>
-            <Text style={styles.apptDate}>{a.appointment_date} {a.appointment_time}</Text>
-            <Text style={styles.apptMeta}>{a.measure_id} · {a.status}</Text>
-          </View>
-        ))}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Your appointments <Text style={{ color: COG.grayDark, fontWeight: "400" }}>({appts.length})</Text></Text>
+        <View style={styles.card}>
+          {appts.length === 0 ? (
+            <Text style={TYPE.body}>No appointments yet. Book one above or ask the assistant.</Text>
+          ) : appts.map((a, i) => (
+            <View key={i} style={[styles.apptRow, i === appts.length - 1 && { borderBottomWidth: 0 }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.apptTitle}>{a.screening_name || a.measure_id}</Text>
+                <Text style={styles.apptMeta}>{a.appointment_date} · {a.appointment_time}</Text>
+                {a.lab_location ? <Text style={styles.apptLoc}>{a.lab_location}</Text> : null}
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <View style={[
+                  styles.statusPill,
+                  a.status === "Completed" && { backgroundColor: COG.green },
+                  a.status === "Cancelled" && { backgroundColor: COG.grayMedium },
+                  a.status === "No Show"   && { backgroundColor: COG.red },
+                ]}>
+                  <Text style={styles.statusText}>{a.status || "Scheduled"}</Text>
+                </View>
+                {(a.status === "Scheduled" || !a.status) && (
+                  <TouchableOpacity
+                    style={styles.cancelBtn}
+                    onPress={() => {
+                      Alert.alert(
+                        "Cancel appointment?",
+                        `${a.screening_name || a.measure_id} on ${a.appointment_date} at ${a.appointment_time}`,
+                        [
+                          { text: "Keep it", style: "cancel" },
+                          { text: "Cancel", style: "destructive", onPress: async () => {
+                            try {
+                              await cancelAppointment(a.appointment_id);
+                              load();
+                            } catch (e) { Alert.alert("Error", e.message); }
+                          }},
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          ))}
+        </View>
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f3f4f6" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f3f4f6" },
-  card: { margin: 16, padding: 16, backgroundColor: "#fff", borderRadius: 12, elevation: 2 },
-  cardTitle: { fontSize: 16, fontWeight: "700", color: "#0033a0", marginBottom: 10 },
-  hint: { fontSize: 12, color: "#6b7280", marginBottom: 10 },
-  row: { fontSize: 14, color: "#374151" },
-  input: {
-    borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 12,
-    fontSize: 14, backgroundColor: "#f9fafb", marginBottom: 10,
+  container: { flex: 1, backgroundColor: COG.grayLightest },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COG.grayLightest },
+  section: { paddingHorizontal: S.lg, paddingTop: S.xl },
+  sectionLabel: { ...TYPE.small, fontWeight: "700", color: COG.grayDark, marginBottom: S.sm, textTransform: "uppercase", letterSpacing: 0.5 },
+  card: { ...CARD },
+  cardHint: { ...TYPE.tiny, color: COG.grayDark, lineHeight: 16 },
+  gapChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 999, borderWidth: 1, borderColor: COG.blueDark,
+    backgroundColor: COG.white,
   },
-  button: { backgroundColor: "#0033a0", paddingVertical: 12, borderRadius: 8, alignItems: "center", marginTop: 4 },
-  buttonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  apptRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
-  apptDate: { fontSize: 14, fontWeight: "600", color: "#111827" },
-  apptMeta: { fontSize: 12, color: "#6b7280", marginTop: 2 },
+  chipActive: { backgroundColor: COG.blueDark },
+  chipText: { fontSize: 12, fontWeight: "700", color: COG.blueDark, letterSpacing: 0.3 },
+  chipTextActive: { color: COG.white },
+  apptRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COG.grayLighter,
+  },
+  apptTitle: { fontSize: 15, fontWeight: "600", color: COG.primary },
+  apptMeta: { fontSize: 12, color: COG.grayDark, marginTop: 2 },
+  apptLoc: { fontSize: 11, color: COG.blueDark, marginTop: 2 },
+  statusPill: {
+    backgroundColor: COG.blueDark, paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusText: { color: COG.white, fontSize: 10, fontWeight: "700", letterSpacing: 0.3 },
+  cancelBtn: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  cancelText: { color: COG.red, fontSize: 11, fontWeight: "700" },
 });

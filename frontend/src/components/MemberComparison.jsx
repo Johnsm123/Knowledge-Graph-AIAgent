@@ -3,7 +3,7 @@ import { X, TrendingUp, TrendingDown, Users, Target, CheckCircle, AlertCircle, A
 import axios from 'axios';
 import './MemberComparison.css';
 
-const API_BASE = 'http://localhost:5001/api/v1';
+import { API_BASE } from '../lib/apiBase';
 
 function MemberComparison({ member, onClose }) {
   const [comparisonData, setComparisonData] = useState(null);

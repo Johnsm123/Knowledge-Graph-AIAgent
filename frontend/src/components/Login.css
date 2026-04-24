@@ -31,13 +31,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin: 0 auto 22px;
+  gap: 14px;
+  margin: 0 auto 26px;
   width: fit-content;
+  line-height: 1;
 }
 
 .login-logo img {
-  height: 40px;
+  height: 44px;
   width: auto;
   object-fit: contain;
   display: block;
@@ -45,12 +46,13 @@
 }
 
 .login-logo-text {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   color: #0033a0;
-  letter-spacing: -0.5px;
-  line-height: 1;
-  display: inline-block;
+  letter-spacing: -0.4px;
+  line-height: 44px;
+  display: inline-flex;
+  align-items: center;
   white-space: nowrap;
 }
 

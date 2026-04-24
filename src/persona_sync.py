@@ -465,10 +465,10 @@ def get_dashboard_graph():
              "name": ms.get("name", ms["measure_id"]),
              "measure_id": ms["measure_id"]})
 
-    # Members (limit 12 for overview)
+    # All synced members (reference DB)
     members = ref.run_query("""
         MATCH (m:Member)
-        WITH m ORDER BY m.synced_at DESC LIMIT 12
+        WITH m ORDER BY m.synced_at DESC
         OPTIONAL MATCH (m)-[:HAS_PCP]->(prov:Provider)
         OPTIONAL MATCH (m)-[:HAS_PERSONA]->(p:Persona)
         OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)-[:FOR_MEASURE]->(ms:Measure)

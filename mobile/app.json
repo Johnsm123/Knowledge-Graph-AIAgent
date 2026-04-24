@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0033a0"
+      "backgroundColor": "#000048"
     },
     "scheme": "cogcare",
     "assetBundlePatterns": ["**/*"],
@@ -20,9 +20,10 @@
     "android": {
       "package": "com.cognizant.care",
       "versionCode": 1,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0033a0"
+        "backgroundColor": "#000048"
       },
       "permissions": ["NOTIFICATIONS"]
     },
@@ -32,12 +33,18 @@
       [
         "expo-notifications",
         {
-          "color": "#0033a0"
+          "color": "#000048"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Cognizant Care uses your location to find nearby screening labs for you."
         }
       ]
     ],
     "extra": {
-      "apiBaseUrl": "http://10.118.16.26:5001"
+      "apiBaseUrl": "https://cognizant-care-api.azurewebsites.net"
     }
   }
 }

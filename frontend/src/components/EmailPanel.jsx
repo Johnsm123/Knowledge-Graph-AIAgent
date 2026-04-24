@@ -6,7 +6,7 @@ import {
 import axios from 'axios';
 import './EmailPanel.css';
 
-const API_BASE = 'http://localhost:5001/api/v1';
+import { API_BASE } from '../lib/apiBase';
 const SENDER_ADDRESS = 'DoNotReply@06a748f5-010f-4c29-973a-d4dbe949e546.azurecomm.net';
 
 export default function EmailPanel({ member, onClose }) {

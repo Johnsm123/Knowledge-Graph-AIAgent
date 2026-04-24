@@ -7,9 +7,10 @@ import {
 import axios from 'axios';
 import AddMember from './AddMember';
 import Neo4jGraph from './Neo4jGraph';
+import { useRealtimeEvents } from '../hooks/useRealtimeEvents';
 import './Dashboard.css';
 
-const API_BASE = 'http://localhost:5001/api/v1';
+import { API_BASE } from '../lib/apiBase';
 const PAGE_SIZE = 12;
 
 // ── Category helpers ──────────────────────────────────────────────────────────
@@ -109,6 +110,12 @@ function Dashboard({ onMemberSelect }) {
 
   useEffect(() => { fetchDashboardData(); fetchReferenceGraph(); }, []);
   useEffect(() => { setPage(1); }, [category, search, sortBy]);
+
+  useRealtimeEvents({
+    appointment_booked: () => { fetchDashboardData(); fetchReferenceGraph(); },
+    care_gap_updated:   () => { fetchDashboardData(); fetchReferenceGraph(); },
+    profile_updated:    () => { fetchDashboardData(); fetchReferenceGraph(); },
+  });
 
   const fetchDashboardData = async () => {
     try {

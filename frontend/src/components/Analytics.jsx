@@ -4,7 +4,7 @@ import { TrendingUp, Users, Activity, Target, Download } from 'lucide-react';
 import axios from 'axios';
 import './Analytics.css';
 
-const API_BASE = 'http://localhost:5001/api/v1';
+import { API_BASE } from '../lib/apiBase';
 
 const COLORS = {
   primary: '#000048',

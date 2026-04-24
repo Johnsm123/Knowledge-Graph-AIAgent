@@ -1197,6 +1197,60 @@
   color: var(--cog-primary);
 }
 
+/* Readability overrides for markdown rendered inside dark AI bubbles */
+.chat-message.ai_agent .chat-markdown,
+.chat-message.ai_agent .agent-markdown {
+  color: #ffffff;
+}
+.chat-message.ai_agent .chat-markdown h1,
+.chat-message.ai_agent .chat-markdown h2,
+.chat-message.ai_agent .chat-markdown h3,
+.chat-message.ai_agent .chat-markdown h4,
+.chat-message.ai_agent .agent-markdown h1,
+.chat-message.ai_agent .agent-markdown h2,
+.chat-message.ai_agent .agent-markdown h3,
+.chat-message.ai_agent .agent-markdown h4 {
+  color: #ffffff;
+  border-bottom-color: rgba(255, 255, 255, 0.28);
+}
+.chat-message.ai_agent .chat-markdown strong,
+.chat-message.ai_agent .agent-markdown strong {
+  color: #ffffff;
+}
+.chat-message.ai_agent .chat-markdown em,
+.chat-message.ai_agent .agent-markdown em {
+  color: #dbe5ff;
+}
+.chat-message.ai_agent .chat-markdown a,
+.chat-message.ai_agent .agent-markdown a {
+  color: #9ec2ff;
+  text-decoration: underline;
+}
+.chat-message.ai_agent .chat-markdown ul li::before,
+.chat-message.ai_agent .agent-markdown ul li::before {
+  color: #9ec2ff;
+}
+.chat-message.ai_agent .chat-markdown code,
+.chat-message.ai_agent .agent-markdown code {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+.chat-message.ai_agent .chat-markdown table,
+.chat-message.ai_agent .agent-markdown table {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.chat-message.ai_agent .chat-markdown th,
+.chat-message.ai_agent .agent-markdown th {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+.chat-message.ai_agent .chat-markdown td,
+.chat-message.ai_agent .agent-markdown td {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
 /* ── Chat header context line ────────────────────────────────────────────── */
 .chat-header-info {
   display: flex;

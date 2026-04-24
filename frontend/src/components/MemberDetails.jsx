@@ -6,9 +6,10 @@ import axios from 'axios';
 import MemberComparison from './MemberComparison';
 import EmailPanel from './EmailPanel';
 import Neo4jGraph from './Neo4jGraph';
+import { useRealtimeEvents } from '../hooks/useRealtimeEvents';
 import './MemberDetails.css';
 
-const API_BASE = 'http://localhost:5001/api/v1';
+import { API_BASE } from '../lib/apiBase';
 
 // Defined outside MemberDetails to keep a stable reference across re-renders.
 // react-markdown v10 removed the `className` prop — use a wrapper div instead.
@@ -222,8 +223,22 @@ function MemberDetails({ member, onBack }) {
 
   useEffect(() => {
     if (member) { fetchMemberDetails(); fetchPersonaGraph(); }
+  }, [member]);
+
+  useRealtimeEvents({
+    appointment_booked: (payload) => {
+      if (payload?.member_id === member?.member_id) fetchMemberDetails();
+    },
+    profile_updated: (payload) => {
+      if (payload?.member_id === member?.member_id) fetchMemberDetails();
+    },
+    care_gap_updated: (payload) => {
+      if (payload?.member_id === member?.member_id) fetchMemberDetails();
+    },
+  });
+  // keep original useEffect deps intact below; no-op body preserves original semantics
+  useEffect(() => {
     return () => {
-      // Clean up any open SSE connection when unmounting
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }

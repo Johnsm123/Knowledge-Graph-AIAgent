@@ -16,11 +16,27 @@ from src.care_gap_neo4j import (
     replace_family_history, replace_medical_history,
 )
 from src.neo4j_connection import get_knowledge_graph, get_reference_graph
+from flask_socketio import SocketIO, join_room
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 agent_system = None
 logger = logging.getLogger(__name__)
+
+
+@socketio.on("join_portal")
+def _on_join_portal(_data=None):
+    """Portal clients join the 'portal' room to receive live updates."""
+    join_room("portal")
+
+
+def emit_portal_event(event: str, payload: dict):
+    """Broadcast a real-time update to the web portal."""
+    try:
+        socketio.emit(event, payload, to="portal")
+    except Exception as exc:
+        logger.warning(f"[SOCKET] emit {event} failed: {exc}")
 
 
 def get_agents():

@@ -17,7 +17,8 @@
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.1",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

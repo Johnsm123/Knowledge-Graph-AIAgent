@@ -69,6 +69,16 @@ export async function listAppointments() {
   return res.json();
 }
 
+export async function cancelAppointment(appointmentId) {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/appointments/${encodeURIComponent(appointmentId)}/cancel`, {
+    method: "POST",
+    headers: await authHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Cancel failed");
+  return data;
+}
+
 export async function bookAppointment(payload) {
   const res = await fetch(`${API_BASE}/api/v1/mobile/appointments`, {
     method: "POST",
@@ -80,15 +90,45 @@ export async function bookAppointment(payload) {
   return data;
 }
 
-export async function sendChat(message) {
+export async function sendChat(message, userLocation) {
+  const body = { message };
+  if (userLocation?.lat && userLocation?.lng) body.user_location = userLocation;
   const res = await fetch(`${API_BASE}/api/v1/mobile/chat`, {
     method: "POST",
     headers: await authHeaders(),
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(body),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Chat failed");
-  return data.reply;
+  return { reply: data.reply, attachment: data.attachment || null };
+}
+
+export async function listAvailableSlots() {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/slots`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error("Slots fetch failed");
+  return res.json();
+}
+
+export async function findNearbyLabs({ lat, lng, measureId }) {
+  const qs = new URLSearchParams({ lat, lng, measure_id: measureId || "" });
+  const res = await fetch(`${API_BASE}/api/v1/mobile/labs/nearby?${qs}`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error("Nearby labs failed");
+  return res.json();
+}
+
+export async function updateProfile(updates) {
+  const res = await fetch(`${API_BASE}/api/v1/mobile/member/me`, {
+    method: "PATCH",
+    headers: await authHeaders(),
+    body: JSON.stringify(updates),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Profile update failed");
+  return data;
 }
 
 export async function registerPushToken(fcmToken) {
@@ -98,4 +138,17 @@ export async function registerPushToken(fcmToken) {
     body: JSON.stringify({ fcm_token: fcmToken }),
   });
   return res.ok;
+}
+
+export async function fetchProactiveMessages() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/mobile/chat/proactive`, {
+      headers: await authHeaders(),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.messages || [];
+  } catch (_) {
+    return [];
+  }
 }
