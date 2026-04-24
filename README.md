@@ -1,32 +1,4 @@
 # Care Gap Management System with Neo4j Knowledge Graph 
-ph-AIAgent\mobile>npm install -g @expo/ngrok@^4.1.0
-npm warn deprecated uuid@3.4.0: Please upgrade  to version 7 or higher.  Older versions may use Math.random() in certain circumstances, which is known to be problematic.  See https://v8.dev/blog/math-random for details.
-
-added 36 packages in 7s
-
-9 packages are looking for funding
-  run `npm fund` for details
-
-C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile>npx expo start --tunnel
-Starting project at C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile
-Starting Metro Bundler
-CommandError: ngrok tunnel took too long to connect.
-
-C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile>npx expo start --tunnel
-Starting project at C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile
-Starting Metro Bundler
-Error while reading cache, falling back to a full crawl:
- Error: Unable to deserialize cloned data due to invalid or unsupported version.
-    at deserialize (node:v8:468:7)
-    at DiskCacheManager.read (C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile\node_modules\metro-file-map\src\cache\DiskCacheManager.js:60:33)      
-    at FileMap.read (C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile\node_modules\metro-file-map\src\index.js:284:14)
-    at C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile\node_modules\metro-file-map\src\index.js:202:25
-    at DependencyGraph.ready (C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile\node_modules\metro\src\node-haste\DependencyGraph.js:88:5)
-    at Bundler.ready (C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile\node_modules\metro\src\Bundler.js:62:5)
-    at IncrementalBundler.ready (C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile\node_modules\metro\src\IncrementalBundler.js:302:5)
-    at Server.ready (C:\Users\2416789\Downloads\Knowledge-Graph-AI\Knowledge-Graph-AIAgent\mobile\node_modules\metro\src\Server.js:1305:5)
-CommandError: ngrok tunnel took too long to connect.
-
 A sophisticated AI system for healthcare quality measure compliance, care gap detection, and member outreach using **AutoGen** SelectorGroupChat multi-agent framework and **Neo4j Aura** knowledge graph database.
 
 ## 🏥 Features
