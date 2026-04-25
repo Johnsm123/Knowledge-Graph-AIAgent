@@ -1,31 +1,54 @@
 import { useEffect, useRef, useState } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, Keyboard,
 } from "react-native";
+import { useHeaderHeight } from "@react-navigation/elements";
 import * as Location from "expo-location";
 import { sendChat, fetchProactiveMessages } from "../../src/lib/api";
 import { COG, TYPE, S } from "../../src/lib/brand";
 import ChatAttachment from "../../src/components/ChatAttachment";
+import CogMark from "../../src/components/CogMark";
 
 const QUICK_PROMPTS = [
   "Show my open care gaps",
   "Book a screening",
   "My upcoming appointments",
+  "Who is my doctor?",
   "Update my phone number",
 ];
+
+// Contextual quick-reply hints per attachment type OR recent bot keywords.
+// These are rendered as tappable chips directly under the bot's reply.
+function suggestedReplies({ attachment, botText }) {
+  if (attachment?.type === "labs")             return ["Show me more labs", "Any with better ratings?"];
+  if (attachment?.type === "slots")            return ["Show more times", "Prefer weekend slots"];
+  if (attachment?.type === "booking_confirmed") return ["Thanks!", "Can I add directions to my calendar?"];
+  if (attachment?.type === "location_prompt")   return ["Skip location — show any labs"];
+  if (attachment?.type === "profile_summary")  return ["Update my phone", "Show my care gaps"];
+  if (attachment?.type === "gap_list")         return ["Tell me about the most urgent", "Book the first one"];
+  if (attachment?.type === "appointments_list") return ["Reschedule the next one", "Directions to next lab"];
+
+  // Keyword-based fallback on bot text
+  const t = (botText || "").toLowerCase();
+  if (t.includes("care gap")) return ["Book my top care gap", "Why do I need this screening?"];
+  if (t.includes("doctor") || t.includes("physician")) return ["How do I reach my doctor?", "Book with my doctor"];
+  if (t.includes("book"))    return ["Book my BCS screening", "Book my CDC screening"];
+  return ["Book a screening", "My care gaps", "Update my profile"];
+}
 
 export default function Chat() {
   const [messages, setMessages] = useState([
     {
       role: "bot",
-      text: "Hello — I'm your Cognizant Care assistant. I can book screenings at nearby labs, answer questions about your care gaps or profile, and update your contact details. What can I help with today?",
+      text: "Hi! I'm your Cognizant Care assistant. I can book screenings at nearby labs, answer questions about your care gaps or profile, and update your contact details. What would you like to do?",
     },
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const listRef = useRef(null);
+  const headerHeight = useHeaderHeight();
 
   useEffect(() => {
     (async () => {
@@ -37,7 +60,6 @@ export default function Chat() {
       } catch (_) {}
     })();
 
-    // Surface any queued proactive reminders as bot messages
     (async () => {
       const proactive = await fetchProactiveMessages();
       if (proactive.length) {
@@ -53,6 +75,7 @@ export default function Chat() {
   const send = async (text) => {
     const msg = (text ?? input).trim();
     if (!msg || sending) return;
+    Keyboard.dismiss();
     setMessages(prev => [...prev, { role: "user", text: msg }]);
     setInput("");
     setSending(true);
@@ -67,31 +90,55 @@ export default function Chat() {
     }
   };
 
-  const renderItem = ({ item }) => {
+  const renderItem = ({ item, index }) => {
     const isUser = item.role === "user";
+    const isLatestBot = !isUser && index === messages.length - 1;
+
     return (
       <View>
         <View style={[styles.row, { justifyContent: isUser ? "flex-end" : "flex-start" }]}>
-          {!isUser && <View style={styles.avatar}><Text style={styles.avatarText}>C</Text></View>}
+          {!isUser && <CogMark size={28} style={{ marginRight: 6 }} />}
           <View style={[styles.bubble, isUser ? styles.userBubble : styles.botBubble]}>
             <Text style={isUser ? styles.userText : styles.botText}>{item.text}</Text>
           </View>
         </View>
+
         {!isUser && item.attachment ? (
           <ChatAttachment attachment={item.attachment} onSelect={(msg) => send(msg)} />
+        ) : null}
+
+        {/* Contextual quick-reply chips under the latest bot message only */}
+        {isLatestBot && !sending ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            {suggestedReplies({ attachment: item.attachment, botText: item.text }).map((c, i) => (
+              <TouchableOpacity key={i} style={styles.chip} onPress={() => send(c)}>
+                <Text style={styles.chipText}>{c}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         ) : null}
       </View>
     );
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={80}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={headerHeight + (Platform.OS === "android" ? 12 : 0)}
+    >
       <FlatList
         ref={listRef}
         data={messages}
         keyExtractor={(_, i) => String(i)}
-        contentContainerStyle={{ padding: 14, paddingBottom: 80 }}
+        contentContainerStyle={{ padding: 14, paddingBottom: 24 }}
         renderItem={renderItem}
+        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        keyboardShouldPersistTaps="handled"
         ListFooterComponent={messages.length === 1 ? (
           <View style={styles.suggestWrap}>
             <Text style={styles.suggestLabel}>Try asking</Text>
@@ -119,8 +166,13 @@ export default function Chat() {
           value={input}
           onChangeText={setInput}
           multiline
+          blurOnSubmit={false}
         />
-        <TouchableOpacity style={[styles.sendBtn, (!input.trim() || sending) && { opacity: 0.5 }]} onPress={() => send()} disabled={sending || !input.trim()}>
+        <TouchableOpacity
+          style={[styles.sendBtn, (!input.trim() || sending) && { opacity: 0.5 }]}
+          onPress={() => send()}
+          disabled={sending || !input.trim()}
+        >
           <Text style={styles.sendText}>Send</Text>
         </TouchableOpacity>
       </View>
@@ -131,17 +183,8 @@ export default function Chat() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COG.grayLightest },
   row: { flexDirection: "row", alignItems: "flex-end", marginVertical: 4 },
-  avatar: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: COG.tealLight, alignItems: "center", justifyContent: "center",
-    marginRight: 6, borderWidth: 2, borderColor: COG.primary,
-  },
-  avatarText: { color: COG.primary, fontSize: 12, fontWeight: "800" },
   bubble: { maxWidth: "78%", padding: 12, borderRadius: 14 },
-  userBubble: {
-    backgroundColor: COG.primary,
-    borderBottomRightRadius: 4,
-  },
+  userBubble: { backgroundColor: COG.primary, borderBottomRightRadius: 4 },
   botBubble: {
     backgroundColor: COG.white, borderWidth: 1, borderColor: COG.grayLighter,
     borderBottomLeftRadius: 4,
@@ -164,6 +207,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   sendText: { color: COG.primary, fontWeight: "700", fontSize: 14 },
+
+  // Initial full-screen "try asking" list (first open)
   suggestWrap: { marginTop: 10 },
   suggestLabel: { ...TYPE.tiny, color: COG.grayDark, marginBottom: 8, marginLeft: 4 },
   suggestChip: {
@@ -172,4 +217,12 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   suggestText: { color: COG.blueDark, fontWeight: "600", fontSize: 13 },
+
+  // Contextual quick-reply chip row (horizontal, under each bot reply)
+  chipRow: { paddingLeft: 34, paddingVertical: 6, gap: 6 },
+  chip: {
+    backgroundColor: COG.grayLightest, borderWidth: 1, borderColor: COG.blueLight,
+    borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, marginRight: 6,
+  },
+  chipText: { color: COG.blueDark, fontWeight: "600", fontSize: 12 },
 });

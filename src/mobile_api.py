@@ -43,6 +43,8 @@ _TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30    # 30 days
 # In-memory OTP + push-token stores (replace with Neo4j / Redis in prod)
 _otp_store: dict[str, tuple[str, float]] = {}  # member_id -> (otp, expires_ts)
 _push_tokens: dict[str, str] = {}              # member_id -> fcm_token
+_chat_history: dict[str, list] = {}            # member_id -> Bedrock Converse messages (last ~20 turns)
+_CHAT_HISTORY_CAP = 40                         # keep last 40 messages (≈ 20 turns)
 
 
 # ── JWT-ish signed token (HS256-style HMAC, no external dep) ────────────────
@@ -236,7 +238,7 @@ def mobile_list_appointments():
 
 @mobile_bp.route("/api/v1/mobile/appointments/<appointment_id>/cancel", methods=["POST"])
 def mobile_cancel_appointment(appointment_id):
-    """Member-initiated cancel. Flips status to Cancelled + emits socket event."""
+    """Member-initiated cancel. Flips status, syncs reference DB timeline, emits socket event."""
     member_id, err = _require_auth()
     if err:
         return err
@@ -244,20 +246,37 @@ def mobile_cancel_appointment(appointment_id):
     rows = kg.run_query(
         """
         MATCH (a:Appointment {appointment_id: $aid, member_id: $mid})
-        SET a.status = 'Cancelled'
+        SET a.status = 'Cancelled', a.cancelled_at = $now, a.cancelled_by = 'member'
         RETURN a.appointment_id AS appointment_id, a.measure_id AS measure_id,
-               a.appointment_date AS appointment_date, a.appointment_time AS appointment_time
+               a.appointment_date AS appointment_date, a.appointment_time AS appointment_time,
+               a.care_gap_id AS care_gap_id
         """,
-        {"aid": appointment_id, "mid": member_id},
+        {"aid": appointment_id, "mid": member_id, "now": datetime.now().isoformat()},
     )
     if not rows:
         return jsonify({"error": "appointment not found"}), 404
+    appt = rows[0]
+
+    # Sync the cancellation to the reference DB so the portal timeline shows it
+    if appt.get("care_gap_id"):
+        try:
+            from src.persona_sync import sync_appointment_cancelled
+            sync_appointment_cancelled(
+                member_id=member_id,
+                care_gap_id=appt["care_gap_id"],
+                appointment_id=appointment_id,
+                appointment_date=appt.get("appointment_date", ""),
+                cancelled_by="member",
+            )
+        except Exception as exc:
+            _logger.warning(f"[MOBILE] cancel sync failed: {exc}")
 
     try:
         from src.care_gap_api import emit_portal_event
         emit_portal_event("appointment_booked", {
             "member_id": member_id,
             "appointment_id": appointment_id,
+            "measure_id": appt.get("measure_id"),
             "status": "Cancelled",
             "source": "mobile_cancel",
         })
@@ -288,6 +307,88 @@ def mobile_book_appointment():
     if "error" in result:
         return jsonify(result), 400
     return jsonify(result)
+
+
+def _send_mobile_booking_email(member_id: str, name: str, email: str, appt: dict) -> bool:
+    """Send the booking confirmation email directly via Azure Communication Services.
+
+    Returns True on success, False on failure (logs the reason). No silent swallows.
+    """
+    try:
+        from azure.communication.email import EmailClient
+        from config.settings import settings as cfg
+    except Exception as exc:
+        _logger.error(f"[MOBILE/email] ACS SDK import failed: {exc}")
+        return False
+
+    if not getattr(cfg, "azure_communication_connection_string", ""):
+        _logger.error("[MOBILE/email] AZURE_COMMUNICATION_CONNECTION_STRING is not configured")
+        return False
+    sender = getattr(cfg, "azure_communication_sender", "")
+    if not sender:
+        _logger.error("[MOBILE/email] AZURE_COMMUNICATION_SENDER is not configured")
+        return False
+    if not email or "@" not in email:
+        _logger.warning(f"[MOBILE/email] invalid recipient '{email}'")
+        return False
+
+    measure_name = appt.get("measure_name") or appt.get("measure_id") or "screening"
+    date_str = appt.get("date") or ""
+    time_str = appt.get("time") or ""
+    location = appt.get("lab_location") or ""
+    specialist = appt.get("lab_specialist") or ""
+    appt_id = appt.get("appointment_id") or ""
+
+    html = f"""
+<html><body style="font-family:Arial,sans-serif;color:#000048;max-width:640px;margin:auto;">
+<div style="background:#000048;padding:20px 28px;">
+  <h1 style="color:#FFFFFF;margin:0;font-size:20px;">Cognizant Care</h1>
+  <p style="color:#92BBE6;margin:4px 0 0;font-size:12px;">Appointment confirmation</p>
+</div>
+<div style="border:1px solid #E8E8E6;border-top:none;padding:28px;">
+  <p style="font-size:15px;">Dear <strong>{name}</strong>,</p>
+  <p style="font-size:15px;">Your <strong>{measure_name}</strong> appointment is confirmed.</p>
+  <table style="width:100%;border-collapse:collapse;margin:18px 0;">
+    <tr><td style="padding:8px 12px;background:#F7F7F5;width:35%;"><strong>Date</strong></td><td style="padding:8px 12px;">{date_str}</td></tr>
+    <tr><td style="padding:8px 12px;background:#F7F7F5;"><strong>Time</strong></td><td style="padding:8px 12px;">{time_str}</td></tr>
+    <tr><td style="padding:8px 12px;background:#F7F7F5;"><strong>Location</strong></td><td style="padding:8px 12px;">{location}</td></tr>
+    <tr><td style="padding:8px 12px;background:#F7F7F5;"><strong>Specialist</strong></td><td style="padding:8px 12px;">{specialist}</td></tr>
+    <tr><td style="padding:8px 12px;background:#F7F7F5;"><strong>Reference</strong></td><td style="padding:8px 12px;font-family:monospace;">{appt_id}</td></tr>
+  </table>
+  <div style="background:#FFF8E1;border-left:4px solid #E9C71D;padding:14px;margin-top:18px;">
+    <strong>Before you arrive:</strong>
+    <ul style="margin:6px 0;padding-left:18px;">
+      <li>Arrive 15 minutes early.</li>
+      <li>Bring photo ID and insurance card.</li>
+      <li>Wear comfortable clothing.</li>
+    </ul>
+  </div>
+  <p style="color:#53565A;font-size:11px;margin-top:18px;">
+    To reschedule or cancel, open the Cognizant Care mobile app or contact your care manager.
+  </p>
+</div></body></html>"""
+
+    try:
+        client = EmailClient.from_connection_string(cfg.azure_communication_connection_string)
+        message = {
+            "senderAddress": sender,
+            "recipients": {"to": [{"address": email, "displayName": name}]},
+            "content": {
+                "subject": f"Cognizant Care — {measure_name} appointment confirmed",
+                "plainText": (
+                    f"Dear {name},\n\nYour {measure_name} appointment is confirmed.\n"
+                    f"Date: {date_str}\nTime: {time_str}\nLocation: {location}\n"
+                    f"Specialist: {specialist}\nReference: {appt_id}\n"
+                ),
+                "html": html,
+            },
+        }
+        poller = client.begin_send(message)
+        poller.result()
+        return True
+    except Exception as exc:
+        _logger.error(f"[MOBILE/email] send failed for {email}: {exc}", exc_info=True)
+        return False
 
 
 def _perform_booking(member_id: str, data: dict, source: str = "manual") -> dict:
@@ -382,24 +483,27 @@ def _perform_booking(member_id: str, data: dict, source: str = "manual") -> dict
     except Exception:
         friendly_time = appt_time
 
-    # Confirmation email (reuse portal's sender)
-    member_email = profile.get("email", "")
+    # Confirmation email — fetch the LATEST email from the DB after recent updates
+    fresh_profile = get_member_profile(member_id) or {}
+    member_email = fresh_profile.get("email") or profile.get("email") or ""
+    member_name  = fresh_profile.get("name") or profile.get("name") or member_id
+    email_status = "skipped:no_email"
     if member_email:
-        try:
-            from src.member_portal import _send_booking_confirmation_email
-            _send_booking_confirmation_email(
-                member_id,
-                profile.get("name", member_id),
-                member_email,
-                [{
-                    "appointment_id": appointment_id,
-                    "measure_name": measure_name,
-                    "date": friendly_date,
-                    "time": friendly_time,
-                }],
-            )
-        except Exception as exc:
-            _logger.warning(f"[MOBILE] confirmation email failed: {exc}")
+        appt_summary = {
+            "appointment_id": appointment_id,
+            "measure_name": measure_name,
+            "date": friendly_date,
+            "time": friendly_time,
+            "lab_location": lab_location,
+            "lab_specialist": lab_specialist,
+        }
+        if _send_mobile_booking_email(member_id, member_name, member_email, appt_summary):
+            email_status = f"sent:{member_email}"
+            _logger.info(f"[MOBILE/booking] confirmation email sent to {member_email} for {appointment_id}")
+        else:
+            email_status = "failed"
+    else:
+        _logger.warning(f"[MOBILE/booking] no email on profile for {member_id}; skipping confirmation")
 
     payload = {
         "appointment_id": appointment_id,
@@ -414,6 +518,8 @@ def _perform_booking(member_id: str, data: dict, source: str = "manual") -> dict
         "lab_specialist": lab_specialist,
         "status": "Scheduled",
         "source": source,
+        "email_status": email_status,
+        "email_sent_to": member_email if email_status.startswith("sent") else "",
     }
 
     # Real-time push to portal
@@ -536,8 +642,12 @@ def mobile_update_profile():
 
     kg = get_knowledge_graph()
     sets = ", ".join(f"m.{k} = ${k}" for k in updates)
-    updates["mid"] = member_id
-    kg.run_query(f"MATCH (m:Member {{member_id: $mid}}) SET {sets} RETURN m", updates)
+    params = {**updates, "mid": member_id}
+    ok = kg.execute_write(f"MATCH (m:Member {{member_id: $mid}}) SET {sets}", params)
+    if not ok:
+        _logger.error(f"[MOBILE/profile] write failed for {member_id} with fields {list(updates)}")
+        return jsonify({"error": "write failed"}), 500
+    _logger.info(f"[MOBILE/profile] {member_id} updated fields: {list(updates)}")
 
     profile = get_member_profile(member_id) or {}
     try:
@@ -549,6 +659,16 @@ def mobile_update_profile():
 
 
 # ── Conversational agent ─────────────────────────────────────────────────────
+
+@mobile_bp.route("/api/v1/mobile/chat/reset", methods=["POST"])
+def mobile_chat_reset():
+    """Clear chat memory for this member (sign-out, 'new topic' button, etc.)."""
+    member_id, err = _require_auth()
+    if err:
+        return err
+    _chat_history.pop(member_id, None)
+    return jsonify({"status": "reset"})
+
 
 @mobile_bp.route("/api/v1/mobile/chat/proactive", methods=["GET"])
 def mobile_chat_proactive():
@@ -592,8 +712,22 @@ def mobile_chat():
 _TOOL_SPEC = [
     {
         "toolSpec": {
+            "name": "show_my_profile",
+            "description": "Display the patient's profile summary (name, age, plan, doctor, contact info) as a structured card grid in the app. Call this when the user wants to see or verify profile details.",
+            "inputSchema": {"json": {"type": "object", "properties": {}}},
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "show_my_appointments",
+            "description": "Display the patient's upcoming and recent appointments as a structured list card in the app.",
+            "inputSchema": {"json": {"type": "object", "properties": {}}},
+        }
+    },
+    {
+        "toolSpec": {
             "name": "list_my_open_care_gaps",
-            "description": "List this member's open (non-compliant) care gaps with measure_id and friendly name.",
+            "description": "List this member's open (non-compliant) care gaps with measure_id and friendly name. The app will render them as tappable cards.",
             "inputSchema": {"json": {"type": "object", "properties": {}}},
         }
     },
@@ -656,6 +790,42 @@ _TOOL_SPEC = [
 
 def _dispatch_tool(member_id: str, tool_name: str, tool_input: dict, user_location: dict | None) -> dict:
     """Execute a single agent tool call and return a JSON-serialisable result."""
+    if tool_name == "show_my_profile":
+        p = get_member_profile(member_id) or {}
+        ext = get_member_extended_profile(member_id) or {}
+        return {
+            "profile": {
+                "member_id": member_id,
+                "name": p.get("name"),
+                "age": p.get("age"),
+                "gender": p.get("gender"),
+                "dob": p.get("dob"),
+                "phone": p.get("phone"),
+                "email": p.get("email"),
+                "address": p.get("address"),
+                "plan": p.get("plan_name") or p.get("plan"),
+                "primary_care_physician": p.get("pcp_name") or p.get("pcp_id"),
+            },
+            "lifestyle": ext.get("lifestyle", {}),
+        }
+
+    if tool_name == "show_my_appointments":
+        kg = get_knowledge_graph()
+        rows = kg.run_query(
+            """
+            MATCH (a:Appointment {member_id: $mid})
+            RETURN a.appointment_id AS appointment_id, a.measure_id AS measure_id,
+                   a.screening_name AS screening_name,
+                   a.appointment_date AS appointment_date, a.appointment_time AS appointment_time,
+                   a.lab_location AS lab_location, a.lab_specialist AS lab_specialist,
+                   a.status AS status
+            ORDER BY a.appointment_date DESC, a.appointment_time DESC
+            LIMIT 15
+            """,
+            {"mid": member_id},
+        ) or []
+        return {"appointments": rows}
+
     if tool_name == "list_my_open_care_gaps":
         return {"open_gaps": get_member_open_gaps(member_id) or []}
 
@@ -789,24 +959,37 @@ def _run_member_chat(member_id: str, user_msg: str, user_location: dict | None =
     system_prompt = (
         "You are the Cognizant Care mobile health assistant for ONE specific patient. "
         "CRITICAL: Never output XML-style tags like <thinking>, <reasoning>, <scratchpad>, <plan>, or any "
-        "internal chain-of-thought. Respond with ONLY the final answer as plain text or bullets. "
-        "You MUST answer questions about THIS patient using the context below. "
-        "When the patient asks about themselves (age, plan, doctor, care gaps, upcoming appointments, "
-        "medical/family history, lifestyle), answer directly from the context. Do NOT say 'I don't have information' "
-        "unless the field is truly empty in the context.\n\n"
+        "internal chain-of-thought. Respond with ONLY the final answer as plain text or bullets.\n\n"
         f"PATIENT CONTEXT (authoritative):\n{json.dumps(context, default=str)[:7000]}\n\n"
-        "Never reveal or compare data from other patients. "
-        "When the patient wants to book a screening, follow this flow strictly: "
-        "(1) Ask which care gap/screening they want from their open_care_gaps list. "
-        "(2) Call find_nearby_labs to show nearby options (requires GPS). If find_nearby_labs returns "
-        "'location_unavailable', ask the patient to enable location permission in the Cognizant Care app and retry. "
-        "(3) Ask which lab they prefer (the app will show them a map with pins + a list). "
-        "(4) Call list_available_slots and let them pick a date/time from the on-screen picker. "
-        "(5) Recap: measure + date + time + lab, then ask 'Shall I confirm this booking? (yes/no)'. "
-        "(6) Only call book_appointment after explicit 'yes'. "
-        "After booking, tell the patient a confirmation email has been sent and it's visible in the portal. "
-        "For profile updates, confirm the exact new value before calling update_my_profile. "
-        "Keep replies concise, warm, and mobile-friendly (<150 words). Use bullet points for lists."
+        "WHEN TO CALL WHICH TOOL:\n"
+        "- User asks about THEIR profile / name / age / plan / doctor / phone / email / address → call show_my_profile (renders card grid).\n"
+        "- User asks about THEIR care gaps / screenings they need / what's overdue → call list_my_open_care_gaps (renders gap cards).\n"
+        "- User asks about THEIR upcoming or past appointments → call show_my_appointments (renders list).\n"
+        "- User wants to BOOK a screening → use the booking flow below.\n"
+        "- User wants to UPDATE contact info → confirm new value, then call update_my_profile.\n"
+        "Never reveal data from other patients. Always call these tools when relevant so the app renders rich cards instead of plain text.\n\n"
+        "BOOKING FLOW (strict):\n"
+        "(1) Ask which care gap they want (or call list_my_open_care_gaps first).\n"
+        "(2) Call find_nearby_labs to show nearby options. If it returns 'location_unavailable', ask them to enable "
+        "location (the app renders an Enable-location button).\n"
+        "(3) Ask which lab they prefer from the on-screen map/list.\n"
+        "(4) Call list_available_slots and let them pick from the on-screen picker.\n"
+        "(5) Recap: measure + date + time + lab; ask 'Shall I confirm this booking? (yes/no)'.\n"
+        "(6) Only call book_appointment after explicit 'yes'.\n"
+        "After booking succeeds, tell them a confirmation email was sent and the care team has been notified.\n\n"
+        "CRITICAL BOOKING RULES:\n"
+        "- ALL labs returned by find_nearby_labs are VALID, approved providers. NEVER refuse to book at a lab "
+        "the user selected from the find_nearby_labs results — those are pre-vetted nearby options from our system. "
+        "- NEVER say 'I can't book outside our system' or 'contact the clinic directly' — our system supports booking "
+        "at any lab the user selected. Call book_appointment with the selected lab's details.\n"
+        "- If the user refers to a previous message (e.g. 'the first one', 'that lab', 'the 9 AM slot'), use the "
+        "most recent lab or slot you presented, not a generic fallback.\n"
+        "- DO NOT list available time slots in your text reply after calling list_available_slots. The mobile app "
+        "renders an interactive on-screen picker. Just say a brief one-liner like 'Pick a date and time below.' \n"
+        "- DO NOT list lab options in your text reply after calling find_nearby_labs. The mobile app renders an "
+        "interactive map + lab cards. Just say a brief one-liner like 'I found nearby labs — tap one to select.'\n\n"
+        "Keep replies concise, warm, mobile-friendly (<150 words). Use bullet points for lists. "
+        "Always pair a tool call with a short natural-language sentence — never leave the response empty."
     )
 
     client = boto3.client(
@@ -816,7 +999,16 @@ def _run_member_chat(member_id: str, user_msg: str, user_location: dict | None =
         aws_secret_access_key=settings.aws_secret_access_key,
     )
 
-    messages = [{"role": "user", "content": [{"text": user_msg}]}]
+    # Load this member's prior conversation and append the new user turn.
+    history = _chat_history.setdefault(member_id, [])
+    history.append({"role": "user", "content": [{"text": user_msg}]})
+    # Trim: Bedrock requires messages to start with 'user'; drop oldest pairs when over cap
+    while len(history) > _CHAT_HISTORY_CAP:
+        history.pop(0)
+        # If the oldest is now not a user turn, drop it too so the sequence stays valid
+        while history and history[0].get("role") != "user":
+            history.pop(0)
+    messages = history
     attachment: dict | None = None  # last structured UI payload (labs, slots, booking_confirmed)
     for _ in range(6):  # up to 6 tool-use iterations
         resp = client.converse(
@@ -833,8 +1025,12 @@ def _run_member_chat(member_id: str, user_msg: str, user_location: dict | None =
         if stop != "tool_use":
             texts = [b.get("text", "") for b in out.get("content", []) if "text" in b]
             joined = " ".join(texts).strip()
+            cleaned = _clean_agent_reply(joined)
+            # If we're surfacing an interactive picker, strip any duplicate text dumps from the reply
+            if attachment and attachment.get("type") in ("slots", "labs"):
+                cleaned = _strip_picker_text_dump(cleaned, attachment["type"])
             return {
-                "reply": _clean_agent_reply(joined) or "I didn't catch that — could you rephrase?",
+                "reply": cleaned or "I didn't catch that — could you rephrase?",
                 "attachment": attachment,
             }
 
@@ -847,7 +1043,13 @@ def _run_member_chat(member_id: str, user_msg: str, user_location: dict | None =
                 result = _dispatch_tool(member_id, name, input_, user_location)
 
                 # Capture structured UI attachments per tool
-                if name == "find_nearby_labs":
+                if name == "show_my_profile" and "profile" in result:
+                    attachment = {"type": "profile_summary", "profile": result["profile"], "lifestyle": result.get("lifestyle", {})}
+                elif name == "show_my_appointments" and "appointments" in result:
+                    attachment = {"type": "appointments_list", "items": result["appointments"]}
+                elif name == "list_my_open_care_gaps" and "open_gaps" in result:
+                    attachment = {"type": "gap_list", "items": result["open_gaps"]}
+                elif name == "find_nearby_labs":
                     if "labs" in result:
                         attachment = {
                             "type": "labs",
@@ -884,6 +1086,40 @@ def _run_member_chat(member_id: str, user_msg: str, user_location: dict | None =
         "reply": "I'm having trouble completing that right now. Please try again or use the Appointments tab to book directly.",
         "attachment": attachment,
     }
+
+
+def _strip_picker_text_dump(text: str, kind: str) -> str:
+    """When an interactive picker (slots/labs) is rendered, remove any text-list duplicates
+    so the chat doesn't show a redundant bulleted dump of times/labs above the picker UI."""
+    import re
+    if not text:
+        return text
+    lines = text.split("\n")
+    kept = []
+    for ln in lines:
+        s = ln.strip()
+        if kind == "slots":
+            # Drop lines that look like a time-list bullet:  "- 8:00 AM", "* 09:30", "8:00 AM", "Monday April 27"
+            if re.match(r"^[-*•]?\s*\d{1,2}[:.]?\d{0,2}\s*(am|pm)?\s*$", s, re.IGNORECASE):
+                continue
+            if re.match(r"^[-*•]\s*\d{1,2}:\d{2}\s*(am|pm)?\s*$", s, re.IGNORECASE):
+                continue
+            # Header lines like "Monday, April 27, 2026" or "Available Slots:"
+            if re.match(r"^(monday|tuesday|wednesday|thursday|friday|saturday|sunday),", s, re.IGNORECASE):
+                continue
+            if re.match(r"^(available|here are|the following)\s+(slots|times)", s, re.IGNORECASE):
+                continue
+        if kind == "labs":
+            if re.match(r"^[-*•\d.]+\s+(LAB|Lab|Dr\.|Hospital|Clinic|Diagnostic)", s):
+                continue
+        kept.append(ln)
+    out = "\n".join(kept).strip()
+    # Collapse 3+ blank lines
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    # If we stripped everything, fall back to a short prompt
+    if not out:
+        out = "Pick a slot below to continue." if kind == "slots" else "Pick a lab below to continue."
+    return out
 
 
 def _clean_agent_reply(text: str) -> str:

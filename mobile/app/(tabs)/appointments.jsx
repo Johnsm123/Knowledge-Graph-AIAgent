@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator,
 } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { listAppointments, bookAppointment, getMe, cancelAppointment } from "../../src/lib/api";
+import { subscribeRealtime } from "../../src/lib/realtime";
 import { COG, TYPE, FORM, BTN_FILLED, S, CARD } from "../../src/lib/brand";
 
 export default function Appointments() {
@@ -26,7 +28,13 @@ export default function Appointments() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const unsub = subscribeRealtime(() => load());
+    return () => unsub();
+  }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, []));
 
   const handleBook = async () => {
     if (!measureId || !date || !time) {

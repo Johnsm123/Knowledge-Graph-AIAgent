@@ -16,11 +16,119 @@ try {
 
 export default function ChatAttachment({ attachment, onSelect }) {
   if (!attachment) return null;
-  if (attachment.type === "labs")               return <LabsAttachment  data={attachment} onSelect={onSelect} />;
-  if (attachment.type === "slots")              return <SlotsAttachment data={attachment} onSelect={onSelect} />;
-  if (attachment.type === "booking_confirmed")  return <BookingConfirmed data={attachment} />;
-  if (attachment.type === "location_prompt")    return <LocationPrompt   data={attachment} onSelect={onSelect} />;
+  if (attachment.type === "labs")               return <LabsAttachment    data={attachment} onSelect={onSelect} />;
+  if (attachment.type === "slots")              return <SlotsAttachment   data={attachment} onSelect={onSelect} />;
+  if (attachment.type === "booking_confirmed")  return <BookingConfirmed  data={attachment} />;
+  if (attachment.type === "location_prompt")    return <LocationPrompt    data={attachment} onSelect={onSelect} />;
+  if (attachment.type === "profile_summary")    return <ProfileSummary    data={attachment} onSelect={onSelect} />;
+  if (attachment.type === "gap_list")           return <GapList           data={attachment} onSelect={onSelect} />;
+  if (attachment.type === "appointments_list") return <AppointmentsList   data={attachment} onSelect={onSelect} />;
   return null;
+}
+
+// ── Profile summary: tappable card grid ─────────────────────────────────────
+
+function ProfileSummary({ data, onSelect }) {
+  const p = data.profile || {};
+  const fields = [
+    { key: "name",    label: "Name",       value: p.name },
+    { key: "age",     label: "Age",        value: p.age  != null ? String(p.age) : null },
+    { key: "gender",  label: "Gender",     value: p.gender },
+    { key: "plan",    label: "Plan",       value: p.plan },
+    { key: "doctor",  label: "Doctor",     value: p.primary_care_physician },
+    { key: "phone",   label: "Phone",      value: p.phone,   drill: "Update my phone number" },
+    { key: "email",   label: "Email",      value: p.email,   drill: "Update my email" },
+    { key: "address", label: "Address",    value: p.address, drill: "Update my address" },
+  ];
+  return (
+    <View style={styles.attachment}>
+      <Text style={styles.sectionHdr}>Your profile</Text>
+      <View style={styles.grid}>
+        {fields.map((f) => (
+          <TouchableOpacity
+            key={f.key}
+            style={styles.gridCell}
+            activeOpacity={f.drill ? 0.6 : 1}
+            onPress={() => f.drill && onSelect?.(f.drill)}
+          >
+            <Text style={styles.gridLabel}>{f.label}</Text>
+            <Text style={styles.gridValue} numberOfLines={2}>{f.value || "—"}</Text>
+            {f.drill ? <Text style={styles.gridDrill}>Tap to update</Text> : null}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ── Gap list: tappable cards with "Book this" button ────────────────────────
+
+function GapList({ data, onSelect }) {
+  const items = data.items || [];
+  if (!items.length) {
+    return (
+      <View style={styles.attachment}>
+        <Text style={styles.sectionHdr}>Open care gaps</Text>
+        <Text style={styles.emptyText}>You have no open care gaps. Great job staying on top of your health.</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.attachment}>
+      <Text style={styles.sectionHdr}>Open care gaps ({items.length})</Text>
+      {items.map((g, i) => (
+        <View key={i} style={[styles.gapCard, i === items.length - 1 && { borderBottomWidth: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.gapName}>{g.measure_name || g.measure_id}</Text>
+            <Text style={styles.gapMeasure}>{g.measure_id}</Text>
+            {g.description ? <Text style={styles.gapDesc} numberOfLines={2}>{g.description}</Text> : null}
+          </View>
+          <TouchableOpacity
+            style={styles.gapBtn}
+            onPress={() => onSelect?.(`Book my ${g.measure_name || g.measure_id} screening`)}
+          >
+            <Text style={styles.gapBtnText}>Book</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ── Appointments list ───────────────────────────────────────────────────────
+
+function AppointmentsList({ data, onSelect }) {
+  const items = data.items || [];
+  if (!items.length) {
+    return (
+      <View style={styles.attachment}>
+        <Text style={styles.sectionHdr}>Appointments</Text>
+        <Text style={styles.emptyText}>No appointments yet. Ask me to book one.</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.attachment}>
+      <Text style={styles.sectionHdr}>Your appointments ({items.length})</Text>
+      {items.map((a, i) => (
+        <View key={i} style={[styles.apptCard, i === items.length - 1 && { borderBottomWidth: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.apptName}>{a.screening_name || a.measure_id}</Text>
+            <Text style={styles.apptMeta}>{a.appointment_date} · {a.appointment_time}</Text>
+            {a.lab_location ? <Text style={styles.apptLoc} numberOfLines={1}>{a.lab_location}</Text> : null}
+          </View>
+          <View style={[
+            styles.apptStatus,
+            a.status === "Completed" && { backgroundColor: COG.green },
+            a.status === "Cancelled" && { backgroundColor: COG.grayMedium },
+            a.status === "No Show"   && { backgroundColor: COG.red },
+          ]}>
+            <Text style={styles.apptStatusText}>{a.status || "Scheduled"}</Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 // ── Location permission prompt ──────────────────────────────────────────────
@@ -102,13 +210,26 @@ function LabsAttachment({ data, onSelect }) {
           <View style={{ flex: 1 }}>
             <Text style={styles.labName}>{l.name}</Text>
             {!!l.address && <Text style={styles.labAddr}>{l.address}</Text>}
-            {l.rating != null && (
-              <Text style={styles.labRating}>
-                ★ {Number(l.rating).toFixed(1)}
-                {l.open_now === true  ? "  ·  Open now"  : ""}
-                {l.open_now === false ? "  ·  Closed"   : ""}
-              </Text>
-            )}
+            <View style={styles.labMetaRow}>
+              {l.rating != null && (
+                <Text style={styles.labRating}>
+                  {"★".repeat(Math.round(Number(l.rating)))}
+                  <Text style={styles.labRatingNum}> {Number(l.rating).toFixed(1)}</Text>
+                </Text>
+              )}
+              {l.open_now === true  && <Text style={styles.openTag}>Open now</Text>}
+              {l.open_now === false && <Text style={styles.closedTag}>Closed</Text>}
+              <TouchableOpacity
+                onPress={() => {
+                  const url = l.lat && l.lng
+                    ? `https://www.google.com/maps/dir/?api=1&destination=${l.lat},${l.lng}`
+                    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.name + " " + (l.address || ""))}`;
+                  Linking.openURL(url);
+                }}
+              >
+                <Text style={styles.directionsLink}>Directions →</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           <View style={[styles.pickBtn, active === l.place_id && styles.pickBtnActive]}>
             <Text style={[styles.pickText, active === l.place_id && styles.pickTextActive]}>
@@ -284,4 +405,53 @@ const styles = StyleSheet.create({
   confirmedNote: { fontSize: 11, color: COG.grayDark, textAlign: "center", marginTop: 8 },
   locTitle: { fontSize: 13, fontWeight: "700", color: COG.primary, marginBottom: 4 },
   locBody:  { fontSize: 12, color: COG.grayDark, marginBottom: 8 },
+
+  // Lab card meta row (stars, open/closed, directions)
+  labMetaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginTop: 3, gap: 8 },
+  labRatingNum: { color: COG.grayDark, fontWeight: "400" },
+  openTag:   { fontSize: 10, fontWeight: "700", color: COG.green, letterSpacing: 0.3 },
+  closedTag: { fontSize: 10, fontWeight: "700", color: COG.red,   letterSpacing: 0.3 },
+  directionsLink: { fontSize: 11, fontWeight: "700", color: COG.blueDark, textDecorationLine: "underline" },
+
+  // Profile grid
+  grid: { flexDirection: "row", flexWrap: "wrap" },
+  gridCell: {
+    width: "50%",
+    paddingVertical: 10, paddingRight: 6,
+    borderBottomWidth: 1, borderBottomColor: COG.grayLighter,
+  },
+  gridLabel: { fontSize: 10, color: COG.grayDark, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: "700" },
+  gridValue: { fontSize: 13, color: COG.primary, fontWeight: "600", marginTop: 3 },
+  gridDrill: { fontSize: 10, color: COG.blueDark, marginTop: 2 },
+
+  // Gap card
+  gapCard: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COG.grayLighter,
+  },
+  gapName:   { fontSize: 14, fontWeight: "700", color: COG.primary },
+  gapMeasure:{ fontSize: 10, color: COG.grayDark, marginTop: 2, letterSpacing: 0.5 },
+  gapDesc:   { fontSize: 12, color: COG.grayDark, marginTop: 4, lineHeight: 16 },
+  gapBtn: {
+    backgroundColor: COG.tealLight,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
+    marginLeft: 8,
+  },
+  gapBtnText: { color: COG.primary, fontSize: 12, fontWeight: "800" },
+
+  emptyText: { fontSize: 13, color: COG.grayDark, paddingVertical: 6 },
+
+  // Appointment card
+  apptCard: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COG.grayLighter,
+  },
+  apptName: { fontSize: 13, fontWeight: "700", color: COG.primary },
+  apptMeta: { fontSize: 11, color: COG.grayDark, marginTop: 2 },
+  apptLoc:  { fontSize: 10, color: COG.blueDark, marginTop: 2 },
+  apptStatus: {
+    backgroundColor: COG.blueDark, paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 999,
+  },
+  apptStatusText: { color: COG.white, fontSize: 9, fontWeight: "800", letterSpacing: 0.3 },
 });

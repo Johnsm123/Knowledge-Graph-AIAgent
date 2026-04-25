@@ -312,6 +312,49 @@ def sync_appointment_booked(member_id: str, care_gap_id: str,
     logger.info(f"[PERSONA-SYNC] Appointment booked for gap {care_gap_id}")
 
 
+def sync_appointment_cancelled(member_id: str, care_gap_id: str,
+                               appointment_id: str = "", appointment_date: str = "",
+                               cancelled_by: str = "member"):
+    """Record an appointment cancellation in the reference DB so the timeline reflects it."""
+    ref = _ref()
+    now = datetime.now().isoformat()
+
+    if care_gap_id:
+        ref.execute_write("""
+            MATCH (g:CareGap {gap_id: $gid})
+            SET g.stage = 'appointment_cancelled',
+                g.last_cancelled_at = $now,
+                g.last_cancelled_appointment_id = $appt_id
+        """, {"gid": care_gap_id, "now": now, "appt_id": appointment_id})
+
+        _add_action(care_gap_id, "appointment_cancelled",
+                    f"Appointment cancelled by {cancelled_by} ({appointment_date or 'unknown date'})",
+                    stage="appointment_cancelled")
+
+    logger.info(f"[PERSONA-SYNC] Appointment {appointment_id} cancelled for gap {care_gap_id}")
+
+
+def sync_appointment_no_show(member_id: str, care_gap_id: str,
+                             appointment_id: str = "", appointment_date: str = ""):
+    """Record a no-show event in the reference DB timeline."""
+    ref = _ref()
+    now = datetime.now().isoformat()
+
+    if care_gap_id:
+        ref.execute_write("""
+            MATCH (g:CareGap {gap_id: $gid})
+            SET g.stage = 'appointment_no_show',
+                g.last_no_show_at = $now,
+                g.last_no_show_appointment_id = $appt_id
+        """, {"gid": care_gap_id, "now": now, "appt_id": appointment_id})
+
+        _add_action(care_gap_id, "appointment_no_show",
+                    f"Member missed appointment on {appointment_date or 'unknown date'}",
+                    stage="appointment_no_show")
+
+    logger.info(f"[PERSONA-SYNC] No-show recorded for {appointment_id} on gap {care_gap_id}")
+
+
 def sync_gap_closed(member_id: str, care_gap_id: str):
     """Mark a care gap as closed."""
     ref = _ref()

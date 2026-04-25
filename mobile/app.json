@@ -4,15 +4,17 @@
     "slug": "cognizant-care-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/ct-logo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/ct-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#000048"
     },
     "scheme": "cogcare",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cognizant.care"
@@ -22,10 +24,14 @@
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/ct-logo.png",
         "backgroundColor": "#000048"
       },
-      "permissions": ["NOTIFICATIONS"]
+      "permissions": [
+        "NOTIFICATIONS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -44,7 +50,12 @@
       ]
     ],
     "extra": {
-      "apiBaseUrl": "https://cognizant-care-api.azurewebsites.net"
-    }
+      "apiBaseUrl": "https://cognizant-care-api.azurewebsites.net",
+      "router": {},
+      "eas": {
+        "projectId": "a8e1dc85-8aff-443e-b878-cd838a7ebfe4"
+      }
+    },
+    "owner": "knowledgegraphaiagent"
   }
 }

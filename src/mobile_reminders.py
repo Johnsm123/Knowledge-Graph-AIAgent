@@ -262,13 +262,26 @@ def _query_appointments_for(target_date: str, status: str = "Scheduled") -> list
     return rows or []
 
 
-def _mark_no_show(appointment_id: str) -> None:
+def _mark_no_show(appointment_id: str, member_id: str = "", care_gap_id: str = "",
+                  appointment_date: str = "") -> None:
     from src.neo4j_connection import get_knowledge_graph
     kg = get_knowledge_graph()
     kg.run_query(
         "MATCH (a:Appointment {appointment_id: $id}) SET a.status = 'No Show' RETURN a",
         {"id": appointment_id},
     )
+    # Sync timeline event in reference DB
+    if care_gap_id:
+        try:
+            from src.persona_sync import sync_appointment_no_show
+            sync_appointment_no_show(
+                member_id=member_id,
+                care_gap_id=care_gap_id,
+                appointment_id=appointment_id,
+                appointment_date=appointment_date,
+            )
+        except Exception as exc:
+            _logger.warning(f"[REMINDER] no-show timeline sync failed: {exc}")
 
 
 # ── Scheduled job entrypoints ───────────────────────────────────────────────
@@ -300,14 +313,20 @@ def run_missed_sweep():
         RETURN a.appointment_id AS appointment_id, a.member_id AS member_id,
                a.measure_id AS measure_id, a.screening_name AS screening_name,
                a.appointment_date AS appointment_date, a.appointment_time AS appointment_time,
-               a.lab_location AS lab_location, a.status AS status
+               a.lab_location AS lab_location, a.status AS status,
+               a.care_gap_id AS care_gap_id
         """,
         {"cutoff": cutoff},
     ) or []
 
     _logger.info(f"[REMINDER/missed] {len(rows)} appointments past their time")
     for row in rows:
-        _mark_no_show(row["appointment_id"])
+        _mark_no_show(
+            appointment_id=row["appointment_id"],
+            member_id=row.get("member_id", ""),
+            care_gap_id=row.get("care_gap_id", "") or "",
+            appointment_date=row.get("appointment_date", ""),
+        )
         # Emit socket event so portal refreshes
         try:
             from src.care_gap_api import emit_portal_event

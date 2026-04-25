@@ -6,6 +6,7 @@ import {
 import { useRouter } from "expo-router";
 import { requestOtp } from "../src/lib/api";
 import { COG, TYPE, FORM, BTN_FILLED, S } from "../src/lib/brand";
+import CogLogo from "../src/components/CogLogo";
 
 export default function Login() {
   const [memberId, setMemberId] = useState("");
@@ -33,8 +34,7 @@ export default function Login() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={styles.brandRow}>
-        <View style={styles.logoDot} />
-        <Text style={styles.brand}>Cognizant</Text>
+        <CogLogo variant="dark" size={36} />
       </View>
       <Text style={styles.heading}>Welcome back.</Text>
       <Text style={styles.sub}>Sign in with your Member ID to access your care plan.</Text>
@@ -63,13 +63,7 @@ export default function Login() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 28, backgroundColor: COG.white, justifyContent: "center" },
-  brandRow: { flexDirection: "row", alignItems: "center", marginBottom: S.xxl },
-  logoDot: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: COG.tealLight, marginRight: 10,
-    borderWidth: 2, borderColor: COG.primary,
-  },
-  brand: { ...TYPE.h5, color: COG.primary, fontWeight: "700" },
+  brandRow: { alignItems: "flex-start", marginBottom: S.xxl },
   heading: { ...TYPE.h3, marginBottom: 6 },
   sub: { ...TYPE.body, color: COG.grayDark, marginBottom: S.xxl },
   input: { ...FORM.input, marginBottom: S.xl, fontSize: 18, letterSpacing: 0.5 },

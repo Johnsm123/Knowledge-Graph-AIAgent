@@ -3,6 +3,7 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { TrendingUp, Users, Activity, Target, Download } from 'lucide-react';
 import axios from 'axios';
 import './Analytics.css';
+import { useRealtimeEvents } from '../hooks/useRealtimeEvents';
 
 import { API_BASE } from '../lib/apiBase';
 
@@ -25,6 +26,12 @@ function Analytics() {
   useEffect(() => {
     fetchAnalyticsData();
   }, []);
+
+  useRealtimeEvents({
+    appointment_booked: () => fetchAnalyticsData(),
+    care_gap_updated:   () => fetchAnalyticsData(),
+    profile_updated:    () => fetchAnalyticsData(),
+  });
 
   const fetchAnalyticsData = async () => {
     try {

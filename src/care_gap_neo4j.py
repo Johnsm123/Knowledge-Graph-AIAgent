@@ -596,10 +596,12 @@ def get_member_profile(member_id: str):
         OPTIONAL MATCH (m)-[:ENROLLED_IN]->(b:BenefitPlan)
         OPTIONAL MATCH (m)-[:ASSIGNED_TO]->(p:Provider)
         RETURN m.name AS name, m.dob AS dob, m.gender AS gender,
-               m.age_str AS age_str, b.plan_id AS plan_id,
+               m.age_str AS age_str, m.age_str AS age,
+               b.plan_id AS plan_id, b.plan_id AS plan, b.plan_id AS plan_name,
                b.copay AS copay, b.preventive_covered AS preventive_covered,
                b.eligibility_rules AS eligibility_rules,
-               p.name AS pcp_name, p.specialty AS pcp_specialty,
+               p.name AS pcp_name, p.provider_id AS pcp_id,
+               p.specialty AS pcp_specialty,
                p.network_status AS pcp_network_status,
                m.chronic_conditions AS chronic_conditions,
                m.tobacco_use AS tobacco_use,
@@ -607,7 +609,8 @@ def get_member_profile(member_id: str):
                m.race AS race,
                m.language AS language,
                m.email AS email,
-               m.phone AS phone
+               m.phone AS phone,
+               m.address AS address
     """, {"member_id": member_id})
     return results[0] if results else {}
 

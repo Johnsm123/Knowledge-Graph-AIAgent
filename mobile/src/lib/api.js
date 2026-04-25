@@ -140,6 +140,15 @@ export async function registerPushToken(fcmToken) {
   return res.ok;
 }
 
+export async function resetChat() {
+  try {
+    await fetch(`${API_BASE}/api/v1/mobile/chat/reset`, {
+      method: "POST",
+      headers: await authHeaders(),
+    });
+  } catch (_) {}
+}
+
 export async function fetchProactiveMessages() {
   try {
     const res = await fetch(`${API_BASE}/api/v1/mobile/chat/proactive`, {
