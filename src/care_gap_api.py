@@ -66,6 +66,13 @@ def load_data():
     """Load/reload Excel data into Neo4j. Safe to call multiple times (MERGE)."""
     try:
         load_all()
+        # After bulk load, run hygiene so newly written gaps have canonical CPT/ICD
+        try:
+            from src.care_gap_cleanup import cleanup_all
+            stats = cleanup_all()
+            logger.info(f"[LOAD-DATA] post-load cleanup: {stats}")
+        except Exception as exc:
+            logger.warning(f"[LOAD-DATA] post-load cleanup skipped: {exc}")
         return jsonify({"status": "success", "message": "Data loaded into Neo4j"})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
@@ -373,6 +380,27 @@ def send_chat_message():
         })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/admin/cleanup-care-gaps", methods=["POST"])
+def admin_cleanup_care_gaps():
+    """Backfill primary CPT/ICD on every CareGap + delete duplicate (member, measure) gaps.
+
+    Idempotent. Run after data fixes or whenever care-gap fields look inconsistent.
+    Result includes counts of what was fixed.
+    """
+    try:
+        from src.care_gap_cleanup import cleanup_all
+        stats = cleanup_all()
+        # Notify any open portal sessions to refresh
+        try:
+            emit_portal_event("care_gap_updated", {"source": "admin_cleanup", "stats": stats})
+        except Exception:
+            pass
+        return jsonify({"status": "ok", "stats": stats})
+    except Exception as exc:
+        logger.error(f"admin_cleanup_care_gaps error: {exc}", exc_info=True)
+        return jsonify({"status": "error", "error": str(exc)}), 500
 
 
 def _get_hedis_codes(measure_id: str):
@@ -1828,6 +1856,15 @@ def bulk_upload_members():
                 "name": str(row.get("Name", "?")),
                 "error": str(exc),
             })
+
+    # After bulk upload, run hygiene so every newly created CareGap has
+    # canonical primary CPT/ICD codes from the golden reference.
+    try:
+        from src.care_gap_cleanup import cleanup_all
+        cleanup_stats = cleanup_all()
+        logger.info(f"[BULK-UPLOAD] post-upload cleanup: {cleanup_stats}")
+    except Exception as exc:
+        logger.warning(f"[BULK-UPLOAD] post-upload cleanup skipped: {exc}")
 
     return jsonify({
         "status": "success",

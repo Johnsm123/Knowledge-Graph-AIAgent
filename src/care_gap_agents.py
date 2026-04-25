@@ -478,6 +478,15 @@ def _get_screening_options_for_gap_check(measure: Dict) -> List[Dict]:
     return options
 
 
+def _get_primary_cpt_from_golden(measure_id: str) -> str:
+    """Return the canonical primary CPT for a measure straight from the golden reference."""
+    try:
+        from src.hedis_golden_reference import HEDIS_MEASURES
+        return HEDIS_MEASURES.get(measure_id, {}).get("primary_cpt", "") or ""
+    except Exception:
+        return ""
+
+
 def _get_primary_icd_for_gap(measure: Dict, member_icd_codes: List[str]) -> str:
     """
     Return the single most relevant ICD-10 code to store on the CareGap node.
@@ -870,6 +879,9 @@ HEREDITARY RISK FLAG: [YES/NO — if YES, one-line reason]""",
                     is_open=True,
                     created_on=datetime.now().strftime("%Y-%m-%d"),
                     closed_on="",
+                    primary_cpt_code=flat.get("primary_cpt", "") or
+                                     _get_primary_cpt_from_golden(flat["measure_id"]),
+                    primary_icd10=_get_primary_icd_for_gap(flat, icd_codes),
                 )
             else:
                 satisfied_measures.append(flat["measure_id"])

@@ -20,6 +20,15 @@ try:
 except Exception as exc:
     logger.warning(f"Mobile reminder scheduler failed to start: {exc}")
 
+# One-time hygiene pass on every container start: backfill primary CPT/ICD codes
+# from the golden reference and delete duplicate (member, measure) gaps. Idempotent.
+try:
+    from src.care_gap_cleanup import cleanup_all
+    stats = cleanup_all()
+    logger.info(f"[STARTUP] Care-gap hygiene complete: {stats}")
+except Exception as exc:
+    logger.warning(f"[STARTUP] care-gap cleanup skipped: {exc}")
+
 try:
     from src.persona_sync import bootstrap_persona_schema
     bootstrap_persona_schema()
