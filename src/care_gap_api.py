@@ -403,6 +403,57 @@ def admin_cleanup_care_gaps():
         return jsonify({"status": "error", "error": str(exc)}), 500
 
 
+@app.route("/api/v1/admin/audit-buggy-members", methods=["GET"])
+def admin_audit_buggy_members():
+    """List members with multi-CPT/ICD codes per gap, missing codes, or duplicate gaps.
+
+    NON-DESTRUCTIVE. Use this to preview what /admin/purge-buggy-members would delete.
+    """
+    try:
+        from src.care_gap_cleanup import find_buggy_members
+        buggy = find_buggy_members()
+        return jsonify({
+            "status": "ok",
+            "count": len(buggy),
+            "members": buggy,
+        })
+    except Exception as exc:
+        logger.error(f"admin_audit_buggy_members error: {exc}", exc_info=True)
+        return jsonify({"status": "error", "error": str(exc)}), 500
+
+
+@app.route("/api/v1/admin/purge-buggy-members", methods=["POST"])
+def admin_purge_buggy_members():
+    """Permanently delete members whose CareGap data is buggy from main + reference DBs.
+
+    Required body:  {"confirm": "DELETE"}
+    Optional query: ?dry_run=true   → audit only, no deletion (default false here)
+    """
+    body = request.get_json(silent=True) or {}
+    if body.get("confirm") != "DELETE":
+        return jsonify({
+            "status": "error",
+            "error": "Destructive op — POST body must include {\"confirm\": \"DELETE\"}",
+        }), 400
+
+    dry_run = (request.args.get("dry_run", "false").lower() == "true")
+    try:
+        from src.care_gap_cleanup import purge_buggy_members
+        result = purge_buggy_members(dry_run=dry_run)
+        if not dry_run and result.get("deleted"):
+            try:
+                emit_portal_event("members_purged", {
+                    "deleted_count": len(result["deleted"]),
+                    "deleted_ids": [d.get("member_id") for d in result["deleted"]],
+                })
+            except Exception:
+                pass
+        return jsonify({"status": "ok", **result})
+    except Exception as exc:
+        logger.error(f"admin_purge_buggy_members error: {exc}", exc_info=True)
+        return jsonify({"status": "error", "error": str(exc)}), 500
+
+
 def _get_hedis_codes(measure_id: str):
     """
     Return the single primary CPT code and primary ICD-10 code for a measure.

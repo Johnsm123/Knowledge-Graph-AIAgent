@@ -532,6 +532,8 @@ def _measure_to_flat_dict(measure_id: str, measure: Dict) -> Dict:
         "diagnosis_requirement": measure.get("diagnosis_requirement", ""),
         "cpt_codes":            _get_flat_cpt_for_measure(measure),
         "screening_options":    _get_screening_options_for_gap_check(measure),
+        "primary_cpt":          measure.get("primary_cpt", ""),
+        "primary_icd10":        measure.get("primary_icd10", ""),
     }
 
 
@@ -881,7 +883,7 @@ HEREDITARY RISK FLAG: [YES/NO — if YES, one-line reason]""",
                     closed_on="",
                     primary_cpt_code=flat.get("primary_cpt", "") or
                                      _get_primary_cpt_from_golden(flat["measure_id"]),
-                    primary_icd10=_get_primary_icd_for_gap(flat, icd_codes),
+                    primary_icd10=_get_primary_icd_for_gap(raw_measure, icd_codes),
                 )
             else:
                 satisfied_measures.append(flat["measure_id"])

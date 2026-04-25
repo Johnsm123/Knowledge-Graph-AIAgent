@@ -1197,10 +1197,48 @@
   color: var(--cog-primary);
 }
 
-/* Readability overrides for markdown rendered inside dark AI bubbles */
+/* Readability overrides for markdown rendered inside dark AI bubbles.
+   Global `p { color: var(--text-primary) }` from index.css would otherwise
+   beat `.chat-markdown { color: white }` via direct-element specificity,
+   producing dark text on the dark gradient bubble. Force white here. */
 .chat-message.ai_agent .chat-markdown,
-.chat-message.ai_agent .agent-markdown {
-  color: #ffffff;
+.chat-message.ai_agent .agent-markdown,
+.chat-message.ai_agent .message-bubble,
+.chat-message.ai_agent .message-content,
+.chat-message.ai_agent .chat-markdown p,
+.chat-message.ai_agent .agent-markdown p,
+.chat-message.ai_agent .message-bubble p,
+.chat-message.ai_agent .message-bubble li,
+.chat-message.ai_agent .message-bubble span {
+  color: #ffffff !important;
+}
+.chat-message.ai_agent .message-bubble .message-time {
+  color: rgba(255, 255, 255, 0.85) !important;
+  opacity: 1;
+}
+/* Care-manager (user) bubble — dark midnight bg, force white text too */
+.chat-message.care_manager .message-bubble,
+.chat-message.care_manager .message-bubble p,
+.chat-message.care_manager .message-bubble span,
+.chat-message.care_manager .chat-markdown,
+.chat-message.care_manager .chat-markdown p {
+  color: #ffffff !important;
+}
+.chat-message.care_manager .message-bubble .message-time {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+/* Chat input — guarantee dark text on white background regardless of any
+   inherited dark theme tokens. */
+.chat-input {
+  background: #ffffff;
+}
+.chat-input input {
+  background: #ffffff;
+  color: var(--text-primary);
+}
+.chat-input input::placeholder {
+  color: var(--cog-gray-medium);
+  opacity: 1;
 }
 .chat-message.ai_agent .chat-markdown h1,
 .chat-message.ai_agent .chat-markdown h2,
