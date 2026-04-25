@@ -1,0 +1,15 @@
+# EAS upload ignore list. When this file exists, EAS uses it INSTEAD of .gitignore.
+# We deliberately do NOT list google-services.json here, so it gets uploaded
+# to the build server even though it's gitignored at the project root.
+
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+android/build/
+ios/build/
+*.log
+.DS_Store
+.env
+.env.local

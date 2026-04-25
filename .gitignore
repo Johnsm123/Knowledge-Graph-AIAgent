@@ -9,10 +9,13 @@ frontend/.env.local
 mobile/.env
 mobile/.env.local
 
-# Firebase credentials (backend + mobile)
+# Firebase backend service-account key — TRUE secret, never commit
 firebase-admin.json
-mobile/google-services.json
-mobile/GoogleService-Info.plist
+
+# Note: mobile/google-services.json is intentionally NOT ignored.
+# It only contains client-side Firebase config (api_key, project_id, app_id) which
+# is embedded in every distributed APK and extractable by anyone — it is not a secret.
+# The TRUE secret for FCM push sending is firebase-admin.json above.
 
 # Any stray credential / key files
 *.pem

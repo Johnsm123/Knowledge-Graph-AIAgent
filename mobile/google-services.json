@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "894350967473",
+    "project_id": "cognizant-care",
+    "storage_bucket": "cognizant-care.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:894350967473:android:8284b2af551cccfcfd5890",
+        "android_client_info": {
+          "package_name": "com.cognizant.care"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBh0OmdEWLfG6GS8kfCOfJV-NpWWymXmgo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
