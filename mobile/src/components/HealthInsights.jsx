@@ -10,9 +10,24 @@ import { COG, TYPE, S, CARD } from "../lib/brand";
  * All values derive from props so the parent can re-render in real time.
  */
 export default function HealthInsights({ profile = {}, gaps = [], appointments = [] }) {
-  const totalGaps   = gaps.length;
-  const closedGaps  = gaps.filter((g) => (g.status || "").toLowerCase() === "closed").length;
-  const openGaps    = totalGaps - closedGaps;
+  // A measure is "covered" if either the gap is closed OR there is at least one Completed appointment for it.
+  const completedMeasures = new Set(
+    appointments.filter((a) => (a.status || "") === "Completed").map((a) => a.measure_id),
+  );
+
+  const isClosed = (g) =>
+    ((g.gap_status || g.status || "").toLowerCase() === "closed") ||
+    (g.is_open === false) ||
+    completedMeasures.has(g.measure_id);
+
+  // Total = open gaps received + measures we already covered via completed appts (de-duped)
+  const openGapMeasures = new Set(gaps.map((g) => g.measure_id).filter(Boolean));
+  const allMeasureIds   = new Set([...openGapMeasures, ...completedMeasures]);
+  const totalGaps       = allMeasureIds.size || gaps.length;
+  const closedGaps      = [...allMeasureIds].filter((mid) =>
+    completedMeasures.has(mid) || gaps.find((g) => g.measure_id === mid && isClosed(g))
+  ).length;
+  const openGaps    = Math.max(0, totalGaps - closedGaps);
   const compliance  = totalGaps === 0 ? 100 : Math.round((closedGaps / totalGaps) * 100);
 
   const counts = appointments.reduce(
@@ -29,15 +44,22 @@ export default function HealthInsights({ profile = {}, gaps = [], appointments =
   );
   const apptTotal = appointments.length;
 
-  // Per-measure progress (open vs total occurrences)
+  // Per-measure progress: count open gaps vs total (open + completed appointments).
   const byMeasure = {};
   for (const g of gaps) {
     const id = g.measure_id || "—";
     byMeasure[id] = byMeasure[id] || { open: 0, total: 0, name: g.measure_name || id };
     byMeasure[id].total++;
-    if ((g.status || "").toLowerCase() !== "closed") byMeasure[id].open++;
+    if (!isClosed(g)) byMeasure[id].open++;
   }
-  const measures = Object.entries(byMeasure).slice(0, 5);
+  // Also include measures that have completed appointments but no open gap left
+  for (const a of appointments) {
+    if ((a.status || "") !== "Completed") continue;
+    const id = a.measure_id;
+    if (!id || byMeasure[id]) continue;
+    byMeasure[id] = { open: 0, total: 1, name: a.screening_name || id };
+  }
+  const measures = Object.entries(byMeasure).slice(0, 6);
 
   return (
     <View style={styles.card}>
@@ -74,7 +96,7 @@ export default function HealthInsights({ profile = {}, gaps = [], appointments =
       {/* Row 3 — per-measure progress */}
       {measures.length > 0 && (
         <>
-          <Text style={[styles.sectionLabel, { marginTop: S.md }]}>Open gaps by screening</Text>
+          <Text style={[styles.sectionLabel, { marginTop: S.md }]}>Screening progress</Text>
           {measures.map(([id, m]) => {
             const closed = m.total - m.open;
             const pct = m.total === 0 ? 0 : Math.round((closed / m.total) * 100);
@@ -83,10 +105,12 @@ export default function HealthInsights({ profile = {}, gaps = [], appointments =
                 <View style={{ flex: 1 }}>
                   <Text style={styles.measureName}>{m.name}</Text>
                   <View style={styles.measureBar}>
-                    <View style={[styles.measureFill, { width: `${pct}%` }]} />
+                    <View style={[styles.measureFill, { width: `${pct}%`, backgroundColor: closed > 0 ? COG.green : COG.tealLight }]} />
                   </View>
                 </View>
-                <Text style={styles.measureCount}>{m.open}/{m.total}</Text>
+                <Text style={[styles.measureCount, closed > 0 && { color: COG.green }]}>
+                  {closed}/{m.total} {closed === m.total ? "✓" : ""}
+                </Text>
               </View>
             );
           })}

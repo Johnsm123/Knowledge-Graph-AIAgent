@@ -4,10 +4,10 @@
     "slug": "cognizant-care-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/ct-logo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/ct-logo.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#000048"
     },
@@ -24,7 +24,7 @@
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/ct-logo.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000048"
       },
       "permissions": [

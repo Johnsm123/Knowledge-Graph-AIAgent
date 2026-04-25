@@ -190,11 +190,58 @@ def _send_otp_email(profile: dict, otp: str):
 
 # ── Member-scoped data ───────────────────────────────────────────────────────
 
+def _reconcile_completed_gaps(member_id: str) -> int:
+    """Close any open CareGap that already has a 'Completed' Appointment for the same measure.
+
+    Returns the number of gaps reconciled. Idempotent — safe to call on every read.
+    """
+    kg = get_knowledge_graph()
+    rows = kg.run_query(
+        """
+        MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
+        WHERE coalesce(g.is_open, true) = true
+        WITH g, q, m
+        MATCH (a:Appointment {member_id: $mid, status: 'Completed'})
+        WHERE a.measure_id = q.measure_id
+        WITH g, q, a ORDER BY a.appointment_date DESC LIMIT 1
+        SET g.is_open = false,
+            g.closed_on = a.appointment_date,
+            g.gap_status = 'Closed'
+        RETURN g.care_gap_id AS gap_id, q.measure_id AS measure_id, a.appointment_id AS appointment_id
+        """,
+        {"mid": member_id},
+    ) or []
+    if rows:
+        _logger.info(f"[MOBILE/reconcile] {member_id}: closed {len(rows)} gap(s) due to completed appts: {rows}")
+        # Also push the closure to the reference DB so portal timeline reflects it
+        try:
+            from src.persona_sync import sync_gap_closed
+            for r in rows:
+                if r.get("gap_id"):
+                    sync_gap_closed(member_id=member_id, care_gap_id=r["gap_id"])
+        except Exception as exc:
+            _logger.warning(f"[MOBILE/reconcile] persona sync failed: {exc}")
+        # Emit a socket event so portal refreshes live
+        try:
+            from src.care_gap_api import emit_portal_event
+            emit_portal_event("care_gap_updated", {
+                "member_id": member_id,
+                "closed": [r.get("gap_id") for r in rows if r.get("gap_id")],
+                "source": "auto_reconcile",
+            })
+        except Exception:
+            pass
+    return len(rows)
+
+
 @mobile_bp.route("/api/v1/mobile/member/me", methods=["GET"])
 def mobile_member_me():
     member_id, err = _require_auth()
     if err:
         return err
+
+    # Auto-close any gap whose corresponding screening was already completed.
+    _reconcile_completed_gaps(member_id)
 
     profile = get_member_profile(member_id) or {}
     ext = get_member_extended_profile(member_id) or {}
@@ -827,6 +874,10 @@ def _dispatch_tool(member_id: str, tool_name: str, tool_input: dict, user_locati
         return {"appointments": rows}
 
     if tool_name == "list_my_open_care_gaps":
+        try:
+            _reconcile_completed_gaps(member_id)
+        except Exception:
+            pass
         return {"open_gaps": get_member_open_gaps(member_id) or []}
 
     if tool_name == "find_nearby_labs":
@@ -905,6 +956,13 @@ def _run_member_chat(member_id: str, user_msg: str, user_location: dict | None =
     """Tool-using member-scoped agent. Returns {reply, attachment} so the mobile UI can render interactive cards."""
     import boto3
     from config.settings import settings
+
+    # Reconcile before reading so the agent never sees a stale "open" gap whose
+    # appointment was already completed.
+    try:
+        _reconcile_completed_gaps(member_id)
+    except Exception as exc:
+        _logger.warning(f"[MOBILE/chat] reconcile failed: {exc}")
 
     profile = get_member_profile(member_id) or {}
     ext = get_member_extended_profile(member_id) or {}
