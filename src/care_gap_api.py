@@ -968,18 +968,326 @@ def delete_member(member_id):
 
 @app.route("/api/v1/providers/list", methods=["GET"])
 def get_providers():
-    """Get all providers for dropdown selection."""
+    """Get all providers for dropdown selection. Each provider includes the
+    list of members they're the PCP for, so the frontend explorer can show
+    related members when a provider is selected without a second round-trip.
+    """
     try:
         kg = get_knowledge_graph()
+        # Two simple queries, joined in Python — keeps Cypher straightforward
+        # and survives providers with empty rosters.
         providers = kg.run_query("""
             MATCH (p:Provider)
-            RETURN p.provider_id as provider_id,
-                   p.name as name,
-                   p.specialty as specialty,
-                   p.network_status as network_status
+            RETURN p.provider_id   AS provider_id,
+                   p.name          AS name,
+                   p.specialty     AS specialty,
+                   p.network_status AS network_status
             ORDER BY p.name
-        """, {})
+        """, {}) or []
+
+        # Roster via :ASSIGNED_TO relationship
+        rel_rows = kg.run_query("""
+            MATCH (m:Member)-[:ASSIGNED_TO]->(p:Provider)
+            RETURN p.provider_id AS provider_id,
+                   m.member_id   AS member_id,
+                   m.name        AS name,
+                   m.age_str     AS age_str,
+                   m.gender      AS gender
+        """, {}) or []
+        # Roster via pcp_id property (fallback for members not linked via relationship)
+        prop_rows = kg.run_query("""
+            MATCH (m:Member) WHERE m.pcp_id IS NOT NULL AND m.pcp_id <> ''
+            RETURN m.pcp_id    AS provider_id,
+                   m.member_id AS member_id,
+                   m.name      AS name,
+                   m.age_str   AS age_str,
+                   m.gender    AS gender
+        """, {}) or []
+
+        roster_by_pid: dict = {}
+        for r in rel_rows + prop_rows:
+            pid = r.get("provider_id")
+            mid = r.get("member_id")
+            if not pid or not mid:
+                continue
+            seen = roster_by_pid.setdefault(pid, {})
+            if mid not in seen:
+                seen[mid] = {
+                    "member_id": mid,
+                    "name":      r.get("name", ""),
+                    "age_str":   r.get("age_str", ""),
+                    "gender":    r.get("gender", ""),
+                }
+
+        for p in providers:
+            p["members"] = list(roster_by_pid.get(p.get("provider_id"), {}).values())
         return jsonify({"providers": providers})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/dashboard/main-graph", methods=["GET"])
+def dashboard_main_graph():
+    """Return the main knowledge graph in three pre-built shapes — one per
+    Knowledge-Explorer filter tab. The frontend renders the active subgraph
+    in a Neo4j-style force layout and filters it down to a single node + its
+    neighborhood when the user clicks a node.
+
+    Each subgraph has the form: { nodes: [{id, label, name, props}], edges: [{source, target, type}] }.
+    """
+    try:
+        from src.hedis_golden_reference import HEDIS_MEASURES
+        kg = get_knowledge_graph()
+
+        # ── 1. MEMBERS graph: Member → CareGap → QualityMeasure  +  Member → Provider
+        members_rows = kg.run_query("""
+            MATCH (m:Member)
+            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
+            WHERE coalesce(g.is_open, true) = true
+            WITH m,
+                 collect(DISTINCT q.measure_id) AS measure_ids,
+                 collect(DISTINCT {gid: g.care_gap_id, mid: q.measure_id}) AS gaps
+            OPTIONAL MATCH (p:Provider {provider_id: m.pcp_id})
+            RETURN m.member_id   AS member_id,
+                   m.name        AS name,
+                   m.gender      AS gender,
+                   m.age_str     AS age_str,
+                   m.pcp_id      AS pcp_id,
+                   p.name        AS pcp_name,
+                   [x IN measure_ids WHERE x IS NOT NULL] AS measure_ids,
+                   [x IN gaps WHERE x.gid IS NOT NULL]    AS gaps
+        """, {}) or []
+
+        m_nodes, m_edges = [], []
+        seen_measure_ids = set()
+        seen_provider_ids = set()
+        for r in members_rows:
+            mid = r["member_id"]
+            m_nodes.append({
+                "id":    f"M:{mid}",
+                "label": "Member",
+                "name":  f"{mid} — {r.get('name','')}",
+                "props": {
+                    "Member ID": mid,
+                    "Name":      r.get("name", ""),
+                    "Gender":    r.get("gender", ""),
+                    "Age":       r.get("age_str", ""),
+                    "PCP":       r.get("pcp_name", "") or r.get("pcp_id", ""),
+                },
+            })
+            # link to PCP if any
+            if r.get("pcp_id"):
+                pid = r["pcp_id"]
+                if pid not in seen_provider_ids:
+                    m_nodes.append({
+                        "id":    f"P:{pid}",
+                        "label": "Provider",
+                        "name":  r.get("pcp_name", pid),
+                        "props": {"Provider ID": pid, "Name": r.get("pcp_name", "") or pid},
+                    })
+                    seen_provider_ids.add(pid)
+                m_edges.append({"source": f"M:{mid}", "target": f"P:{pid}", "type": "HAS_PCP"})
+            # link to each open-gap measure
+            for measure_id in r.get("measure_ids", []) or []:
+                if not measure_id:
+                    continue
+                if measure_id not in seen_measure_ids:
+                    md = HEDIS_MEASURES.get(measure_id, {})
+                    m_nodes.append({
+                        "id":    f"Q:{measure_id}",
+                        "label": "Measure",
+                        "name":  f"{measure_id} · {md.get('name', measure_id)}",
+                        "props": {"Measure ID": measure_id, "Name": md.get("name", "")},
+                    })
+                    seen_measure_ids.add(measure_id)
+                m_edges.append({"source": f"M:{mid}", "target": f"Q:{measure_id}", "type": "OPEN_GAP"})
+
+        # ── 2. PROVIDERS graph: Provider → Member  (full roster)
+        # Members are linked to providers via either an :ASSIGNED_TO relationship
+        # OR by storing pcp_id as a property; we union both in Python so we
+        # don't lose providers with empty rosters and we keep Cypher simple.
+        prov_rows = kg.run_query("""
+            MATCH (p:Provider)
+            RETURN p.provider_id   AS provider_id,
+                   p.name          AS name,
+                   p.specialty     AS specialty,
+                   p.network_status AS network_status
+            ORDER BY p.name
+        """, {}) or []
+        rel_link_rows = kg.run_query("""
+            MATCH (m:Member)-[:ASSIGNED_TO]->(p:Provider)
+            RETURN p.provider_id AS pid, m.member_id AS member_id,
+                   m.name AS name, m.age_str AS age_str, m.gender AS gender
+        """, {}) or []
+        prop_link_rows = kg.run_query("""
+            MATCH (m:Member) WHERE m.pcp_id IS NOT NULL AND m.pcp_id <> ''
+            RETURN m.pcp_id AS pid, m.member_id AS member_id,
+                   m.name AS name, m.age_str AS age_str, m.gender AS gender
+        """, {}) or []
+        roster_by_pid: dict = {}
+        for r in rel_link_rows + prop_link_rows:
+            pid = r.get("pid"); mid = r.get("member_id")
+            if not pid or not mid:
+                continue
+            roster_by_pid.setdefault(pid, {})
+            roster_by_pid[pid].setdefault(mid, {
+                "member_id": mid, "name": r.get("name", ""),
+                "age_str":   r.get("age_str", ""),
+                "gender":    r.get("gender", ""),
+            })
+        # Re-shape to the same schema the rest of the function expects
+        for r in prov_rows:
+            r["roster"] = list(roster_by_pid.get(r.get("provider_id"), {}).values())
+
+        p_nodes, p_edges = [], []
+        seen_member_in_prov = set()
+        for r in prov_rows:
+            pid = r["provider_id"]
+            p_nodes.append({
+                "id":    f"P:{pid}",
+                "label": "Provider",
+                "name":  f"{pid} — {r.get('name','')}",
+                "props": {
+                    "Provider ID":    pid,
+                    "Name":           r.get("name", ""),
+                    "Specialty":      r.get("specialty", "") or "—",
+                    "Network status": r.get("network_status", "") or "—",
+                    "Members":        len(r.get("roster", []) or []),
+                },
+            })
+            for m in (r.get("roster") or []):
+                mid = m["member_id"]
+                if mid not in seen_member_in_prov:
+                    p_nodes.append({
+                        "id":    f"M:{mid}",
+                        "label": "Member",
+                        "name":  f"{mid} — {m.get('name','')}",
+                        "props": {
+                            "Member ID": mid,
+                            "Name":      m.get("name", ""),
+                            "Gender":    m.get("gender", ""),
+                            "Age":       m.get("age_str", ""),
+                        },
+                    })
+                    seen_member_in_prov.add(mid)
+                p_edges.append({"source": f"P:{pid}", "target": f"M:{mid}", "type": "HAS_MEMBER"})
+
+        # ── 3. MEASURES graph: Measure → AgeRange / Gender / CPT / ICD / Lookback / Exclusion
+        q_nodes, q_edges = [], []
+        for mid, md in HEDIS_MEASURES.items():
+            q_nodes.append({
+                "id":    f"Q:{mid}",
+                "label": "Measure",
+                "name":  f"{mid} · {md.get('name', mid)}",
+                "props": {
+                    "Measure ID":  mid,
+                    "Name":        md.get("name", ""),
+                    "Description": (md.get("description", "") or "")[:240],
+                },
+            })
+            # Age criteria leaf
+            ar = md.get("age_range", "")
+            if ar:
+                aid = f"AGE:{mid}"
+                q_nodes.append({"id": aid, "label": "AgeRange", "name": ar, "props": {"Age range": ar}})
+                q_edges.append({"source": f"Q:{mid}", "target": aid, "type": "AGE"})
+            # Gender leaf
+            gen = md.get("gender_requirement", "Any")
+            if gen and gen != "Any":
+                gid = f"GEN:{mid}"
+                q_nodes.append({"id": gid, "label": "Gender", "name": gen, "props": {"Gender requirement": gen}})
+                q_edges.append({"source": f"Q:{mid}", "target": gid, "type": "GENDER"})
+            # Lookback leaf
+            lb = md.get("lookback_months")
+            if lb:
+                lbid = f"LB:{mid}"
+                q_nodes.append({"id": lbid, "label": "Lookback", "name": f"{lb} months", "props": {"Lookback (months)": lb, "Description": md.get("lookback_description", "")}})
+                q_edges.append({"source": f"Q:{mid}", "target": lbid, "type": "LOOKBACK"})
+            # Primary CPT leaf
+            cpt = md.get("primary_cpt", "")
+            if cpt:
+                cid = f"CPT:{mid}"
+                q_nodes.append({"id": cid, "label": "CPT", "name": cpt, "props": {"Primary CPT": cpt}})
+                q_edges.append({"source": f"Q:{mid}", "target": cid, "type": "PRIMARY_CPT"})
+            # Primary ICD leaf
+            icd = md.get("primary_icd10", "")
+            if icd:
+                iid = f"ICD:{mid}"
+                q_nodes.append({"id": iid, "label": "ICD", "name": icd, "props": {"Primary ICD-10": icd}})
+                q_edges.append({"source": f"Q:{mid}", "target": iid, "type": "PRIMARY_ICD"})
+            # Diagnosis prereq leaf
+            diag = md.get("diagnosis_requirement", "")
+            if diag:
+                did = f"DIAG:{mid}"
+                q_nodes.append({"id": did, "label": "Prereq", "name": diag[:48], "props": {"Diagnosis prerequisite": diag}})
+                q_edges.append({"source": f"Q:{mid}", "target": did, "type": "DIAGNOSIS_REQ"})
+            # Exclusion leaves (one node per exclusion type)
+            for ex in (md.get("exclusions", {}) or {}).get("required", []) or []:
+                ex_type = ex.get("type", "")
+                if not ex_type:
+                    continue
+                exid = f"EX:{mid}:{ex_type}"
+                pretty = ex_type.replace("_", " ")
+                icd_codes = ", ".join((ex.get("icd10") or [])[:6])
+                q_nodes.append({
+                    "id": exid, "label": "Exclusion", "name": pretty,
+                    "props": {
+                        "Exclusion": pretty,
+                        "Description": ex.get("description", ""),
+                        "ICD-10": icd_codes or "—",
+                    },
+                })
+                q_edges.append({"source": f"Q:{mid}", "target": exid, "type": "EXCLUDES"})
+
+        return jsonify({
+            "members_graph":   {"nodes": m_nodes, "edges": m_edges},
+            "providers_graph": {"nodes": p_nodes, "edges": p_edges},
+            "measures_graph":  {"nodes": q_nodes, "edges": q_edges},
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/measures/list", methods=["GET"])
+def list_measures():
+    """Return all HEDIS measures with their rulebook metadata.
+
+    Frontend uses this to power the Quality Measure filter in the Knowledge
+    Explorer — selecting a measure shows its age range, gender, exclusions,
+    primary CPT/ICD, lookback window, and description.
+    """
+    try:
+        from src.hedis_golden_reference import HEDIS_MEASURES
+        out = []
+        for mid, m in HEDIS_MEASURES.items():
+            exclusions = []
+            for ex in (m.get("exclusions", {}) or {}).get("required", []) or []:
+                exclusions.append({
+                    "type":        ex.get("type", ""),
+                    "description": ex.get("description", ""),
+                    "icd10":       ex.get("icd10", []) or [],
+                    "cpt":         ex.get("cpt", []) or [],
+                })
+            out.append({
+                "measure_id":            mid,
+                "name":                  m.get("name", ""),
+                "description":           m.get("description", ""),
+                "age_range":             m.get("age_range", ""),
+                "min_age":               m.get("min_age"),
+                "max_age":               m.get("max_age"),
+                "gender_requirement":    m.get("gender_requirement", "Any"),
+                "diagnosis_requirement": m.get("diagnosis_requirement", ""),
+                "lookback_months":       m.get("lookback_months"),
+                "lookback_description":  m.get("lookback_description", ""),
+                "primary_cpt":           m.get("primary_cpt", ""),
+                "primary_icd10":         m.get("primary_icd10", ""),
+                "numerator_criteria":    m.get("numerator_criteria", ""),
+                "denominator_criteria":  m.get("denominator_criteria", ""),
+                "screening_options":     m.get("screening_options", []) or [],
+                "exclusions":            exclusions,
+                "product_lines":         m.get("product_lines", []) or [],
+            })
+        return jsonify({"measures": out, "count": len(out)})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 

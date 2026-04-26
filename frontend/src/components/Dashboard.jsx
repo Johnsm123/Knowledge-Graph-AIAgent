@@ -3,6 +3,7 @@ import {
   Users, AlertCircle, CheckCircle, TrendingUp, Activity, UserPlus,
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   SortAsc, SortDesc, Filter, Zap, Loader, Mail, Trash2, Calendar,
+  UserCog, Stethoscope, ClipboardList, RotateCcw,
 } from 'lucide-react';
 import axios from 'axios';
 import AddMember from './AddMember';
@@ -102,19 +103,20 @@ function Dashboard({ onMemberSelect }) {
   const [showAddMember, setShowAddMember] = useState(false);
   // Auto-process state: { [member_id]: { status, message, step } }
   const [processing, setProcessing]       = useState({});
-  // Reference graph state
-  const [refGraph, setRefGraph]           = useState(null);
-  const [refGraphLoading, setRefGraphLoading] = useState(false);
-  // Set of member IDs whose neighborhood is currently expanded
-  const [expandedMembers, setExpandedMembers] = useState(new Set());
+  // Knowledge Explorer — three pre-built subgraphs from /dashboard/main-graph
+  const [explorerTab, setExplorerTab]   = useState('members');   // members | providers | measures
+  const [graphs, setGraphs]             = useState({ members_graph: null, providers_graph: null, measures_graph: null });
+  const [explorerLoading, setExplorerLoading] = useState(false);
+  // Selected node id (string like "M:M0001" / "P:P1001" / "Q:BCS"). null = show all.
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
 
-  useEffect(() => { fetchDashboardData(); fetchReferenceGraph(); }, []);
+  useEffect(() => { fetchDashboardData(); fetchExplorerData(); }, []);
   useEffect(() => { setPage(1); }, [category, search, sortBy]);
 
   useRealtimeEvents({
-    appointment_booked: () => { fetchDashboardData(); fetchReferenceGraph(); },
-    care_gap_updated:   () => { fetchDashboardData(); fetchReferenceGraph(); },
-    profile_updated:    () => { fetchDashboardData(); fetchReferenceGraph(); },
+    appointment_booked: () => { fetchDashboardData(); },
+    care_gap_updated:   () => { fetchDashboardData(); },
+    profile_updated:    () => { fetchDashboardData(); },
   });
 
   const fetchDashboardData = async () => {
@@ -133,66 +135,103 @@ function Dashboard({ onMemberSelect }) {
     }
   };
 
-  const fetchReferenceGraph = async () => {
+  const fetchExplorerData = async () => {
     try {
-      setRefGraphLoading(true);
-      const res = await axios.get(`${API_BASE}/reference/graph`);
-      setRefGraph(res.data);
+      setExplorerLoading(true);
+      const res = await axios.get(`${API_BASE}/dashboard/main-graph`);
+      setGraphs({
+        members_graph:   res.data?.members_graph   || { nodes: [], edges: [] },
+        providers_graph: res.data?.providers_graph || { nodes: [], edges: [] },
+        measures_graph:  res.data?.measures_graph  || { nodes: [], edges: [] },
+      });
     } catch (err) {
-      console.error('Reference graph fetch error:', err);
+      console.error('Explorer graph fetch error:', err);
     } finally {
-      setRefGraphLoading(false);
+      setExplorerLoading(false);
     }
   };
 
-  // Members-only view with click-to-expand (Neo4j Browser style)
-  // Initially: show only Member nodes, no edges.
-  // On click of a Member: add that member's neighborhood (connected nodes + edges).
-  const filteredRefGraph = (() => {
-    if (!refGraph) return null;
-    const memberIds = new Set(
-      refGraph.nodes.filter(n => n.label === 'Member').map(n => n.id)
-    );
-    // Nodes we want to include = all members + any node connected to an expanded member
-    const visibleNodes = new Set(memberIds);
-    const visibleEdges = [];
-    if (expandedMembers.size > 0) {
-      refGraph.edges.forEach(e => {
-        const srcExpanded = expandedMembers.has(e.source);
-        const tgtExpanded = expandedMembers.has(e.target);
-        if (srcExpanded || tgtExpanded) {
-          visibleNodes.add(e.source);
-          visibleNodes.add(e.target);
-          visibleEdges.push(e);
-        }
-      });
-      // Also walk one more hop from any non-member node already added, so
-      // e.g. Persona → CareGap → Measure chains surface when expanding a member.
-      const nonMemberAdded = new Set(
-        [...visibleNodes].filter(id => !memberIds.has(id))
-      );
-      refGraph.edges.forEach(e => {
-        if (nonMemberAdded.has(e.source) || nonMemberAdded.has(e.target)) {
-          visibleNodes.add(e.source);
-          visibleNodes.add(e.target);
-          if (!visibleEdges.includes(e)) visibleEdges.push(e);
-        }
-      });
+  // Pick the active graph for the current tab.
+  const activeGraph = (() => {
+    const key = explorerTab === 'members' ? 'members_graph'
+              : explorerTab === 'providers' ? 'providers_graph'
+              : 'measures_graph';
+    return graphs[key] || { nodes: [], edges: [] };
+  })();
+
+  // The "primary" label per tab (what the user picks to drill into).
+  const primaryLabel = explorerTab === 'members'   ? 'Member'
+                     : explorerTab === 'providers' ? 'Provider'
+                     : 'Measure';
+
+  // Filter the active graph based on the current tab and selection.
+  //
+  // Default (no selection): show every PRIMARY node (Member / Provider / Measure)
+  // plus their direct edges to other primaries — gives a tab-wide overview.
+  //
+  // After selecting a primary node: show ONLY that node + its 1-hop neighbors
+  // (NOT a transitive BFS — that would pull back sibling members through a
+  // shared PCP or shared measure, which the user doesn't want).
+  //
+  // Special case for the MEMBERS tab on selection: also pull in each connected
+  // Measure's rule-attribute leaves (AgeRange / Gender / CPT / ICD / Exclusion)
+  // from the measures_graph so the user sees "the codes for this member's gaps".
+  const filteredGraph = (() => {
+    if (!selectedNodeId) {
+      // Default / reset state: show only the PRIMARY nodes for the active tab
+      // (Members, Providers, or Measures) with NO edges.  This gives a clean
+      // grid of just the records the user is filtering on — no provider /
+      // measure / leaf clutter mixed in.
+      return {
+        nodes: activeGraph.nodes.filter(n => n.label === primaryLabel),
+        edges: [],
+      };
     }
+    // 1-hop neighborhood of the selected node
+    const visible = new Set([selectedNodeId]);
+    for (const e of activeGraph.edges) {
+      if (e.source === selectedNodeId) visible.add(e.target);
+      if (e.target === selectedNodeId) visible.add(e.source);
+    }
+    let extraNodes = [];
+    let extraEdges = [];
+    // Members tab: enrich with measure leaves (CPT, ICD, AgeRange, Exclusion, etc.)
+    // pulled from the measures_graph for each measure the member has an OPEN_GAP to.
+    if (explorerTab === 'members') {
+      const mg = graphs.measures_graph || { nodes: [], edges: [] };
+      const measureIdsInScope = [...visible].filter(id => id.startsWith('Q:'));
+      const leafIds = new Set();
+      for (const e of mg.edges) {
+        if (measureIdsInScope.includes(e.source)) {
+          leafIds.add(e.target);
+          extraEdges.push(e);
+        }
+      }
+      extraNodes = mg.nodes.filter(n => leafIds.has(n.id));
+      leafIds.forEach(id => visible.add(id));
+    }
+    const nodesById = new Map();
+    for (const n of activeGraph.nodes) if (visible.has(n.id)) nodesById.set(n.id, n);
+    for (const n of extraNodes)        if (!nodesById.has(n.id)) nodesById.set(n.id, n);
     return {
-      nodes: refGraph.nodes.filter(n => visibleNodes.has(n.id)),
-      edges: visibleEdges,
+      nodes: [...nodesById.values()],
+      edges: [
+        ...activeGraph.edges.filter(e => visible.has(e.source) && visible.has(e.target)),
+        ...extraEdges,
+      ],
     };
   })();
 
-  const handleGraphNodeClick = (node) => {
-    if (node.label !== 'Member') return; // only members are expandable
-    setExpandedMembers(prev => {
-      const next = new Set(prev);
-      if (next.has(node.id)) next.delete(node.id); // toggle collapse
-      else next.add(node.id);
-      return next;
-    });
+  const resetExplorer = () => setSelectedNodeId(null);
+  const switchExplorerTab = (tab) => { setSelectedNodeId(null); setExplorerTab(tab); };
+
+  const handleExplorerNodeClick = (node) => {
+    if (!node) return;
+    // Only the PRIMARY node type drives the filter.
+    // (Clicking a leaf — Age, CPT, Exclusion — does nothing here.)
+    if (node.label === primaryLabel) {
+      setSelectedNodeId(prev => prev === node.id ? null : node.id);
+    }
   };
 
   // ── Auto-process handler (SSE) ──────────────────────────────────────────
@@ -409,66 +448,64 @@ function Dashboard({ onMemberSelect }) {
         </div>
       )}
 
-      {/* ── Persona-Based Care Gap Lifecycle Graph ── */}
-      <div className="reference-graph-section">
+      {/* ── Knowledge Explorer (Members / Providers / Measures filters) ── */}
+      <div className="explorer-section">
         <div className="section-header">
-          <h2><Activity size={20} className="graph-icon" /> Care Gap Lifecycle — Persona Visualization</h2>
-        </div>
-        <p className="section-subtitle">
-          Click any Member node to expand its Personas, Care Gaps, Measures, Providers and Actions — like the Neo4j Browser. Click again to collapse.
-        </p>
-
-        {/* Expansion controls */}
-        <div className="graph-filters">
-          <button
-            className="graph-filter-pill active"
-            style={{ cursor: 'default' }}
-          >
-            Members ({filteredRefGraph ? filteredRefGraph.nodes.filter(n => n.label === 'Member').length : 0})
-          </button>
-          {expandedMembers.size > 0 && (
-            <button
-              className="graph-filter-pill"
-              onClick={() => setExpandedMembers(new Set())}
-            >
-              Reset View ({expandedMembers.size} expanded)
+          <h2><Activity size={20} className="graph-icon" /> Knowledge Explorer</h2>
+          {selectedNodeId && (
+            <button className="explorer-reset-btn" onClick={resetExplorer} title="Show all items in this filter">
+              <RotateCcw size={14} /> Reset filter
             </button>
           )}
         </div>
+        <p className="section-subtitle">
+          Pick a filter tab below. Click any node in the graph to isolate that record and its connected parameters; click <strong>Reset filter</strong> to bring everything back.
+        </p>
 
-        {refGraphLoading ? (
-          <div className="graph-loading">
-            <Loader size={18} className="spinning" /> Loading persona graph…
-          </div>
-        ) : filteredRefGraph && filteredRefGraph.nodes.length > 0 ? (
-          <Neo4jGraph
-            nodes={filteredRefGraph.nodes}
-            edges={filteredRefGraph.edges}
-            width={1100}
-            height={550}
-            onNodeClick={handleGraphNodeClick}
-          />
+        {/* Filter tab pills */}
+        <div className="explorer-tabs">
+          <button
+            className={`explorer-tab ${explorerTab === 'members' ? 'active' : ''}`}
+            onClick={() => switchExplorerTab('members')}
+          >
+            <Users size={14} /> Members
+            <span className="tab-count">({(graphs.members_graph?.nodes || []).filter(n => n.label === 'Member').length})</span>
+          </button>
+          <button
+            className={`explorer-tab ${explorerTab === 'providers' ? 'active' : ''}`}
+            onClick={() => switchExplorerTab('providers')}
+          >
+            <Stethoscope size={14} /> Providers
+            <span className="tab-count">({(graphs.providers_graph?.nodes || []).filter(n => n.label === 'Provider').length})</span>
+          </button>
+          <button
+            className={`explorer-tab ${explorerTab === 'measures' ? 'active' : ''}`}
+            onClick={() => switchExplorerTab('measures')}
+          >
+            <ClipboardList size={14} /> Quality Measures
+            <span className="tab-count">({(graphs.measures_graph?.nodes || []).filter(n => n.label === 'Measure').length})</span>
+          </button>
+        </div>
+
+        {explorerLoading ? (
+          <div className="graph-loading"><Loader size={18} className="spinning" /> Loading…</div>
+        ) : filteredGraph.nodes.length === 0 ? (
+          <div className="graph-loading">No data yet for this filter.</div>
         ) : (
-          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-            <p style={{ marginBottom: 12 }}>No persona data yet. Upload members and run the analysis pipeline to see the care gap lifecycle visualization.</p>
-            <button
-              className="graph-filter-pill active"
-              style={{ cursor: 'pointer' }}
-              onClick={async () => {
-                try {
-                  setRefGraphLoading(true);
-                  await axios.post(`${API_BASE}/reference/sync-all`);
-                  await fetchReferenceGraph();
-                } catch (err) {
-                  console.error('Sync error:', err);
-                } finally {
-                  setRefGraphLoading(false);
-                }
-              }}
-            >
-              Sync Existing Members to Persona DB
-            </button>
-          </div>
+          <Neo4jGraph
+            nodes={filteredGraph.nodes}
+            edges={filteredGraph.edges}
+            width={1100}
+            height={560}
+            onNodeClick={handleExplorerNodeClick}
+          />
+        )}
+
+        {selectedNodeId && (
+          <p className="explorer-hint">
+            Showing <strong>{filteredGraph.nodes.length}</strong> connected node{filteredGraph.nodes.length === 1 ? '' : 's'}.
+            Click <strong>Reset filter</strong> above to see every {primaryLabel.toLowerCase()} again.
+          </p>
         )}
       </div>
 

@@ -3,13 +3,21 @@ import './Neo4jGraph.css';
 
 // ── Color palette per node label ─────────────────────────────────────────────
 const LABEL_COLORS = {
-  Member:   { bg: '#000048', text: '#fff' },
-  Persona:  { bg: '#26EFE9', text: '#000048' },
-  Measure:  { bg: '#E9C71D', text: '#000048' },
-  Provider: { bg: '#2DB81F', text: '#fff' },
-  CareGap:  { bg: '#B81F2D', text: '#fff' },
-  Action:   { bg: '#9333EA', text: '#fff' },
-  Default:  { bg: '#6B7280', text: '#fff' },
+  Member:    { bg: '#000048', text: '#fff' },
+  Persona:   { bg: '#26EFE9', text: '#000048' },
+  Measure:   { bg: '#E9C71D', text: '#000048' },
+  Provider:  { bg: '#2DB81F', text: '#fff' },
+  CareGap:   { bg: '#B81F2D', text: '#fff' },
+  Action:    { bg: '#9333EA', text: '#fff' },
+  // Knowledge Explorer leaf nodes
+  AgeRange:  { bg: '#0EA5E9', text: '#fff' },
+  Gender:    { bg: '#EC4899', text: '#fff' },
+  Lookback:  { bg: '#6366F1', text: '#fff' },
+  CPT:       { bg: '#14B8A6', text: '#fff' },
+  ICD:       { bg: '#F97316', text: '#fff' },
+  Exclusion: { bg: '#DC2626', text: '#fff' },
+  Prereq:    { bg: '#A855F7', text: '#fff' },
+  Default:   { bg: '#6B7280', text: '#fff' },
 };
 
 // Stage-based colors for CareGap nodes
@@ -35,9 +43,11 @@ const LABEL_RADIUS = {
   Member: 28,
   Measure: 32,
   Persona: 22,
-  Provider: 24,
+  Provider: 26,
   CareGap: 24,
   Action: 16,
+  // Knowledge Explorer leaves are smaller — they hang off a primary node
+  AgeRange: 18, Gender: 18, Lookback: 18, CPT: 18, ICD: 18, Exclusion: 20, Prereq: 18,
 };
 
 const REL_COLORS = {

@@ -96,10 +96,10 @@ def increment_retry(member_id: str) -> int:
         """,
         {"mid": member_id},
     )
-    return get_retry_count(member_id)
+    return get_retry_count(member_id) 
 
 
-def mark_unreachable(member_id: str):
+def mark_unreachable(member_id: str): 
     kg = get_knowledge_graph()
     kg.execute_write(
         """
