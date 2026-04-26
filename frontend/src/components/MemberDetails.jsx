@@ -1061,6 +1061,9 @@ function MemberDetails({ member, onBack }) {
               <div className="appointments-list">
                 {details.appointments.map(appt => {
                   const isCompleted = appt.status === 'Completed';
+                  const isNoShow    = appt.status === 'No Show' || appt.status === 'Cancelled_NoShow';
+                  const isCancelled = appt.status === 'Cancelled';
+                  const isScheduled = !isCompleted && !isNoShow && !isCancelled;
                   const booking = bookings[appt.care_gap_id] || {
                     appointment_id:   appt.appointment_id,
                     measure_name:     appt.screening_name || appt.measure_id,
@@ -1087,11 +1090,23 @@ function MemberDetails({ member, onBack }) {
                       return `${hr > 12 ? hr - 12 : hr || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}`;
                     } catch { return appt.appointment_time || ''; }
                   })();
+                  const cardClass = isCompleted
+                    ? 'appointment-card--completed'
+                    : isNoShow
+                    ? 'appointment-card--noshow'
+                    : isCancelled
+                    ? 'appointment-card--cancelled'
+                    : 'appointment-card--scheduled';
+                  const statusLabel = isCompleted ? 'Completed'
+                    : isNoShow ? 'Missed (No Show)'
+                    : isCancelled ? 'Cancelled'
+                    : 'Scheduled';
+                  const statusEmoji = isCompleted ? '✅' : isNoShow ? '⚠️' : isCancelled ? '🚫' : '📅';
                   return (
-                    <div key={appt.appointment_id} className={`appointment-card ${isCompleted ? 'appointment-card--completed' : 'appointment-card--scheduled'}`}>
+                    <div key={appt.appointment_id} className={`appointment-card ${cardClass}`}>
                       <div className="appointment-card-left">
                         <div className="appointment-card-icon">
-                          {isCompleted ? '✅' : '📅'}
+                          {statusEmoji}
                         </div>
                         <div className="appointment-card-info">
                           <div className="appointment-card-title">
@@ -1111,14 +1126,14 @@ function MemberDetails({ member, onBack }) {
                         </div>
                       </div>
                       <div className="appointment-card-right">
-                        <span className={`appointment-status-badge ${isCompleted ? 'completed' : 'scheduled'}`}>
-                          {isCompleted ? 'Completed' : 'Scheduled'}
+                        <span className={`appointment-status-badge ${isCompleted ? 'completed' : isNoShow ? 'noshow' : isCancelled ? 'cancelled' : 'scheduled'}`}>
+                          {statusLabel}
                         </span>
                         <div className="appointment-card-actions">
                           <button className="btn-view-booking" onClick={() => setViewBooking(booking)}>
                             View Details
                           </button>
-                          {!isCompleted && !completedGaps.has(appt.care_gap_id) && (
+                          {isScheduled && !completedGaps.has(appt.care_gap_id) && (
                             <button
                               className="btn-force-close-inline"
                               onClick={() => handleForceClose(booking)}
@@ -1126,6 +1141,18 @@ function MemberDetails({ member, onBack }) {
                               title="Force close — generates claim, closes care gap, increases outreach count"
                             >
                               {forceClosing ? 'Closing...' : '⚡ Force Close'}
+                            </button>
+                          )}
+                          {isNoShow && (
+                            <button
+                              className="btn-rebook-inline"
+                              onClick={() => {
+                                setSelectedGap(details?.open_gaps?.find(g => g.measure_id === appt.measure_id) || { measure_id: appt.measure_id, measure_name: appt.screening_name });
+                                setShowAppointmentModal(true);
+                              }}
+                              title="Re-open the gap and book a new appointment for the same screening"
+                            >
+                              🔁 Rebook
                             </button>
                           )}
                         </div>

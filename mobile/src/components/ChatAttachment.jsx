@@ -3,14 +3,11 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Linking
 import * as Location from "expo-location";
 import { COG, TYPE, S } from "../lib/brand";
 
-// Lazy-require react-native-maps so missing native module doesn't crash the whole app
-let MapView = null;
-let Marker = null;
-try {
-  const maps = require("react-native-maps");
-  MapView = maps.default;
-  Marker = maps.Marker;
-} catch (_) {}
+// NOTE: react-native-maps is intentionally NOT imported here.
+// In the EAS production APK the native module isn't linked (no Google Maps API key
+// + no config plugin in app.json), and rendering <MapView> would force-close
+// the app on Android. The labs flow uses a clean list + "Open in Google Maps"
+// CTA per lab card, which delegates to Linking.openURL — guaranteed to work.
 
 // ── Public entry ────────────────────────────────────────────────────────────
 
@@ -171,34 +168,28 @@ function LabsAttachment({ data, onSelect }) {
   const userLoc = data.user_location;
   const [active, setActive] = useState(null);
 
-  const region = useMemo(() => {
-    if (!userLoc?.lat) return null;
-    return { latitude: userLoc.lat, longitude: userLoc.lng, latitudeDelta: 0.045, longitudeDelta: 0.045 };
-  }, [userLoc]);
+  const openMapList = () => {
+    // Build a Google Maps search URL pre-populated with all returned labs near the user.
+    if (userLoc?.lat) {
+      Linking.openURL(`https://www.google.com/maps/search/diagnostic+lab/@${userLoc.lat},${userLoc.lng},14z`);
+    } else {
+      Linking.openURL("https://www.google.com/maps/search/diagnostic+lab/");
+    }
+  };
 
   return (
     <View style={styles.attachment}>
-      {MapView && region ? (
-        <MapView style={styles.map} initialRegion={region}>
-          <Marker coordinate={{ latitude: userLoc.lat, longitude: userLoc.lng }} title="You" pinColor={COG.tealLight} />
-          {items.map((l) => (l.lat && l.lng ? (
-            <Marker
-              key={l.place_id}
-              coordinate={{ latitude: l.lat, longitude: l.lng }}
-              title={l.name}
-              description={l.address}
-              pinColor={active === l.place_id ? COG.red : COG.primary}
-              onPress={() => setActive(l.place_id)}
-            />
-          ) : null))}
-        </MapView>
-      ) : (
-        <View style={styles.mapFallback}>
-          <Text style={TYPE.tiny}>
-            {MapView ? "Share location to see the map" : "Map preview unavailable in Expo Go. Labs list below works either way."}
+      <View style={styles.mapBanner}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.mapBannerTitle}>📍 Nearby diagnostic labs</Text>
+          <Text style={styles.mapBannerSub}>
+            {userLoc?.lat ? "We found these near your current location." : "Tap a lab below or open Google Maps for a visual view."}
           </Text>
         </View>
-      )}
+        <TouchableOpacity style={styles.mapBannerBtn} onPress={openMapList}>
+          <Text style={styles.mapBannerBtnText}>Open in Maps</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.sectionHdr}>Nearby labs ({items.length})</Text>
       {items.map((l) => (
@@ -351,11 +342,19 @@ const styles = StyleSheet.create({
     borderColor: COG.grayLighter,
     padding: 10,
   },
-  map: { width: "100%", height: 180, marginBottom: 8, borderRadius: 0 },
-  mapFallback: {
-    width: "100%", height: 80, backgroundColor: COG.grayLightest,
-    justifyContent: "center", alignItems: "center", marginBottom: 8,
+  mapBanner: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: COG.grayLightest,
+    borderWidth: 1, borderColor: COG.grayLighter,
+    padding: 10, marginBottom: 10, gap: 10,
   },
+  mapBannerTitle: { fontSize: 13, fontWeight: "700", color: COG.primary },
+  mapBannerSub:   { fontSize: 11, color: COG.grayDark, marginTop: 2, lineHeight: 14 },
+  mapBannerBtn: {
+    backgroundColor: COG.tealLight, borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 7,
+  },
+  mapBannerBtnText: { color: COG.primary, fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
   sectionHdr: {
     fontSize: 11, fontWeight: "700", color: COG.grayDark,
     textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6,

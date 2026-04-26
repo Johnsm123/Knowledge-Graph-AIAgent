@@ -2650,6 +2650,36 @@
   background: rgba(47,120,196,0.1);
   color: var(--cog-primary);
 }
+.appointment-status-badge.noshow {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+.appointment-status-badge.cancelled {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+.appointment-card--noshow {
+  border-left: 4px solid #dc2626;
+  background: linear-gradient(0deg, rgba(220,38,38,0.04), rgba(220,38,38,0.04));
+}
+.appointment-card--cancelled {
+  border-left: 4px solid #94a3b8;
+  opacity: 0.85;
+}
+.btn-rebook-inline {
+  padding: 6px 14px;
+  background: var(--cog-accent2-dark, #2F78C4);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-rebook-inline:hover {
+  background: var(--cog-primary);
+}
 .appointment-card-actions {
   display: flex;
   gap: 8px;

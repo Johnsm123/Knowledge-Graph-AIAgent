@@ -49,13 +49,24 @@ def find_no_show_appointments() -> list[dict]:
 
 
 def mark_appointment_no_show(appointment_id: str):
+    """Canonical status string is 'No Show' (used by portal + mobile).
+
+    Also reopens the linked CareGap so the member can rebook the same screening.
+    """
     kg = get_knowledge_graph()
     kg.execute_write(
         """
         MATCH (a:Appointment {appointment_id: $aid})
-        SET a.status = 'Cancelled_NoShow',
+        SET a.status = 'No Show',
             a.cancelled_at = datetime(),
             a.cancel_reason = 'Member did not complete screening on scheduled date'
+        WITH a
+        OPTIONAL MATCH (g:CareGap {care_gap_id: a.care_gap_id})
+        FOREACH (_ IN CASE WHEN g IS NULL THEN [] ELSE [1] END |
+            SET g.is_open = true,
+                g.gap_status = 'Open',
+                g.last_no_show_at = datetime()
+        )
         """,
         {"aid": appointment_id},
     )

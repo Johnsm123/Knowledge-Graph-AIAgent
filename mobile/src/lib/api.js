@@ -111,8 +111,13 @@ export async function listAvailableSlots() {
   return res.json();
 }
 
-export async function findNearbyLabs({ lat, lng, measureId }) {
-  const qs = new URLSearchParams({ lat, lng, measure_id: measureId || "" });
+export async function findNearbyLabs({ lat, lng, measureId, radius = 25000 }) {
+  const qs = new URLSearchParams({
+    lat: String(lat),
+    lng: String(lng),
+    measure_id: measureId || "",
+    radius: String(radius),
+  });
   const res = await fetch(`${API_BASE}/api/v1/mobile/labs/nearby?${qs}`, {
     headers: await authHeaders(),
   });

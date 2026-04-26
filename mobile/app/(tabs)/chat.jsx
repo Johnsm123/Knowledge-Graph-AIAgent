@@ -9,6 +9,7 @@ import { sendChat, fetchProactiveMessages } from "../../src/lib/api";
 import { COG, TYPE, S } from "../../src/lib/brand";
 import ChatAttachment from "../../src/components/ChatAttachment";
 import CogMark from "../../src/components/CogMark";
+import MarkdownText from "../../src/components/MarkdownText";
 
 const QUICK_PROMPTS = [
   "Show my open care gaps",
@@ -99,7 +100,11 @@ export default function Chat() {
         <View style={[styles.row, { justifyContent: isUser ? "flex-end" : "flex-start" }]}>
           {!isUser && <CogMark size={28} style={{ marginRight: 6 }} />}
           <View style={[styles.bubble, isUser ? styles.userBubble : styles.botBubble]}>
-            <Text style={isUser ? styles.userText : styles.botText}>{item.text}</Text>
+            {isUser ? (
+              <Text style={styles.userText}>{item.text}</Text>
+            ) : (
+              <MarkdownText text={item.text} style={styles.botText} />
+            )}
           </View>
         </View>
 

@@ -77,8 +77,14 @@ def _init_firebase() -> bool:
         return False
 
 
-def send_push(token: str, title: str, body: str, data: dict | None = None) -> bool:
-    """Send a push notification to a single device. Returns True on success."""
+def send_push(token: str, title: str, body: str, data: dict | None = None,
+              channel_id: str = "appointments") -> bool:
+    """Send a push notification to a single device. Returns True on success.
+
+    On Android we explicitly target a HIGH/MAX-importance channel so the
+    notification appears in the system drawer (drop-down) and as a heads-up
+    banner — even if the app is closed or the device is locked.
+    """
     if not token or not _init_firebase():
         return False
     try:
@@ -87,6 +93,18 @@ def send_push(token: str, title: str, body: str, data: dict | None = None) -> bo
             token=token,
             notification=messaging.Notification(title=title, body=body),
             data={k: str(v) for k, v in (data or {}).items()},
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    title=title,
+                    body=body,
+                    channel_id=channel_id,
+                    default_sound=True,
+                    default_vibrate_timings=True,
+                    visibility="public",
+                    notification_count=1,
+                ),
+            ),
         )
         messaging.send(msg)
         return True
