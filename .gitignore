@@ -102,6 +102,11 @@ desktop.ini
 # Azure CLI temp
 # ──────────────────────────────────────────────────────────────────────
 .azure/
-".claude/" 
-".claude/" 
-".claude/" 
+
+# ──────────────────────────────────────────────────────────────────────
+# Claude Code local settings
+# ──────────────────────────────────────────────────────────────────────
+.claude/
+
+# Persona-comparison demo (isolated) — real creds never committed
+persona_demo/.env.persona-demo
