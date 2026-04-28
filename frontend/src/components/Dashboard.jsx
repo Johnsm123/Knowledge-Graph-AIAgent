@@ -519,8 +519,11 @@ function Dashboard({ onMemberSelect }) {
             <button className="set-email-btn" onClick={handleSetDefaultEmails} title="Add default test email to members without one">
               <Mail size={15} /> Set Default Emails
             </button>
-            <button className="add-member-btn" onClick={() => setShowAddMember(true)}>
-              <UserPlus size={17} /> Add Member
+            <button
+              className="add-member-btn"
+              onClick={() => window.open('http://localhost:5001/api/v1/members/bulk-upload-page', '_blank', 'noopener')}
+            >
+              <UserPlus size={17} /> Upload Patient Record
             </button>
           </div>
         </div>

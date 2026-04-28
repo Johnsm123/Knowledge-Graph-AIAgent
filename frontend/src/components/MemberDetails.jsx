@@ -643,16 +643,19 @@ function MemberDetails({ member, onBack }) {
           <div className="profile-meta">
             <span>{details?.profile.age_str}</span>
             <span>•</span>
-            <span>{details?.profile.gender}</span>
-            <span>•</span>
-            <span>DOB: {details?.profile.dob}</span>
+            <span>{
+              (() => {
+                const g = (details?.profile.gender || '').trim();
+                if (!g) return '';
+                const u = g.toUpperCase();
+                if (u === 'M' || u === 'MALE') return 'Male';
+                if (u === 'F' || u === 'FEMALE') return 'Female';
+                return g;
+              })()
+            }</span>
           </div>
         </div>
         <div className="profile-actions">
-          <button className="action-btn" onClick={() => setShowComparison(true)}>
-            <GitCompare size={18} />
-            Compare
-          </button>
           <button className="action-btn" onClick={() => setChatOpen(true)}>
             <Bot size={18} />
             AI Chat
@@ -674,14 +677,8 @@ function MemberDetails({ member, onBack }) {
             <span className="tab-risk-dot" title="Hereditary risk detected">●</span>
           )}
         </button>
-        <button className={activeTab === 'gaps' ? 'active' : ''} onClick={() => setActiveTab('gaps')}>
-          Care Gaps ({details?.open_gaps?.length || 0})
-        </button>
         <button className={activeTab === 'appointments' ? 'active' : ''} onClick={() => setActiveTab('appointments')}>
           Appointments ({details?.appointments?.length || 0})
-        </button>
-        <button className={activeTab === 'claims' ? 'active' : ''} onClick={() => setActiveTab('claims')}>
-          Claims ({details?.claims?.length || 0})
         </button>
         <button className={activeTab === 'outreach' ? 'active' : ''} onClick={() => setActiveTab('outreach')}>
           Outreach History
@@ -699,18 +696,37 @@ function MemberDetails({ member, onBack }) {
             <div className="info-grid">
               <div className="info-card">
                 <h3>Plan Information</h3>
-                <div className="info-row">
-                  <span className="label">Plan ID:</span>
-                  <span className="value">{details?.profile?.plan_id || 'N/A'}</span>
-                </div>
-                <div className="info-row">
-                  <span className="label">Copay:</span>
-                  <span className="value">${details?.profile?.copay ?? 'N/A'}</span>
-                </div>
-                <div className="info-row">
-                  <span className="label">Preventive Covered:</span>
-                  <span className="value">{details?.profile?.preventive_covered || 'N/A'}</span>
-                </div>
+                {(() => {
+                  const ins = (details?.profile?.insurance_type || 'HMO').toString();
+                  const insTag = ins.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'HMO';
+                  const idTail = (member?.member_id || 'M0000').replace(/^M/i, '').padStart(4, '0').slice(-4);
+                  const planId = details?.profile?.plan_id || `PLN-${insTag}-${idTail}`;
+                  const copay  = (details?.profile?.copay ?? null) === null ? 0 : details.profile.copay;
+                  const recos = (details?.open_gaps || [])
+                    .map(g => g.measure_name)
+                    .filter(Boolean)
+                    .slice(0, 3);
+                  const preventive = details?.profile?.preventive_covered
+                    || (recos.length > 0
+                      ? `100% covered: ${recos.join(', ')}`
+                      : 'Annual wellness, screenings & immunizations covered at 100%');
+                  return (
+                    <>
+                      <div className="info-row">
+                        <span className="label">Plan ID:</span>
+                        <span className="value">{planId}</span>
+                      </div>
+                      <div className="info-row">
+                        <span className="label">Copay:</span>
+                        <span className="value">${copay}</span>
+                      </div>
+                      <div className="info-row">
+                        <span className="label">Preventive Covered:</span>
+                        <span className="value">{preventive}</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="info-card">
@@ -754,23 +770,6 @@ function MemberDetails({ member, onBack }) {
                       ? 'Open Care Gaps — Action Required'
                       : 'Care Gap Analysis'}
                   </h3>
-                  <button
-                    className="btn-ai-suggestions"
-                    onClick={getAISuggestions}
-                    disabled={loadingAI || (streamingAgent !== null)}
-                  >
-                    {loadingAI ? (
-                      <>
-                        <Loader size={16} className="spinning" />
-                        Analyzing…
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={16} />
-                        {aiMetadata ? 'Re-run AI Analysis' : 'Get AI Suggestions'}
-                      </>
-                    )}
-                  </button>
                 </div>
 
                 {/* ── AI Streaming Panel ───────────────────────────────── */}
@@ -890,20 +889,32 @@ function MemberDetails({ member, onBack }) {
                             {booking && !isClosed && <span className="gap-badge gap-badge--booked">📅 Scheduled</span>}
                           </div>
                         </div>
-                        <p className="gap-description">{gap.resolution_guide}</p>
                         <div className="gap-actions">
-                          {!booking ? (
-                            <button className="btn-primary" onClick={() => handleBookAppointment(gap)}>
-                              <Calendar size={16} />
-                              Book Appointment
-                            </button>
-                          ) : (
-                            <button className="btn-view-booking" onClick={() => setViewBooking(booking)}>
-                              <Calendar size={16} />
-                              View Booking
-                            </button>
-                          )}
-                          <button className="btn-secondary">View Guidelines</button>
+                          {(() => {
+                            let label = 'Status: Not Booked';
+                            if (isClosed) label = 'Status: Closed';
+                            else if (booking) {
+                              const s = booking.status;
+                              if (s === 'Completed') label = 'Status: Closed';
+                              else if (s === 'Cancelled_NoShow' || s === 'No Show') label = 'Status: Waiting to Rebook';
+                              else if (s === 'Cancelled') label = 'Status: Cancelled';
+                              else label = 'Status: Booked';
+                            }
+                            return (
+                              <button
+                                className="btn-view-booking"
+                                onClick={() => setViewBooking(booking || {
+                                  care_gap_id: gap.care_gap_id,
+                                  measure_id:  gap.measure_id,
+                                  screening_name: gap.measure_name,
+                                  status: isClosed ? 'Completed' : 'Not Booked',
+                                })}
+                              >
+                                <Calendar size={16} />
+                                {label}
+                              </button>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
@@ -932,12 +943,12 @@ function MemberDetails({ member, onBack }) {
             familyHistory={details?.family_history || []}
             medicalHistory={details?.medical_history || {}}
             hereditaryRisks={details?.hereditary_risks || []}
+            claims={details?.claims || []}
             onRefresh={fetchMemberDetails}
           />
         )}
 
-        {/* ── GAPS TAB ───────────────────────────────────────────────────── */}
-        {activeTab === 'gaps' && (
+        {false && activeTab === 'gaps' && (
           <div className="gaps-tab">
             {details?.open_gaps?.length > 0 ? (
               <div className="gaps-list">
@@ -1170,8 +1181,7 @@ function MemberDetails({ member, onBack }) {
           </div>
         )}
 
-        {/* ── CLAIMS TAB ─────────────────────────────────────────────────── */}
-        {activeTab === 'claims' && (
+        {false && activeTab === 'claims' && (
           <div className="claims-tab">
             {details?.claims?.length > 0 ? (
               <div className="claims-table">
@@ -1220,7 +1230,8 @@ function MemberDetails({ member, onBack }) {
         )}
       </div>
 
-      {/* ── PERSONA GRAPH + LIFECYCLE — Reference DB ─────────────────────── */}
+      {/* ── PERSONA GRAPH + LIFECYCLE — Overview only ────────────────────── */}
+      {activeTab === 'overview' && (
       <div className="persona-graph-section">
         <h4>
           <GitCompare size={18} />
@@ -1336,6 +1347,7 @@ function MemberDetails({ member, onBack }) {
           </div>
         )}
       </div>
+      )}
 
       {/* ── CONVERSATIONAL CHAT PANEL ────────────────────────────────────── */}
       {chatOpen && (
@@ -1901,7 +1913,7 @@ const PR_HEREDITARY_CONDITIONS = [
   'Cystic Fibrosis', 'Huntington\'s Disease',
 ];
 
-function PatientRecordTab({ memberId, lifestyle, familyHistory, medicalHistory, hereditaryRisks, onRefresh }) {
+function PatientRecordTab({ memberId, lifestyle, familyHistory, medicalHistory, hereditaryRisks, claims = [], onRefresh }) {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
@@ -2025,6 +2037,43 @@ function PatientRecordTab({ memberId, lifestyle, familyHistory, medicalHistory, 
           <MedicalHistoryEditor data={draftMedical} onChange={setDraftMedical} />
         ) : (
           <MedicalHistoryView data={medicalHistory} />
+        )}
+      </div>
+
+      {/* Claims card */}
+      <div className="pr-card">
+        <div className="pr-card-title">🧾 Claims ({claims.length})</div>
+        {claims.length > 0 ? (
+          <div className="claims-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Claim ID</th>
+                  <th>Measure</th>
+                  <th>Service Date</th>
+                  <th>CPT Code(s)</th>
+                  <th>ICD-10 Code(s)</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {claims.map((claim, i) => (
+                  <tr key={i}>
+                    <td><code className="claim-id-code">{claim.claim_id || '—'}</code></td>
+                    <td><span className="measure-badge">{claim.measure_id || '—'}</span></td>
+                    <td>{claim.service_date || '—'}</td>
+                    <td className="code-cell"><code>{claim.cpt_code || '—'}</code></td>
+                    <td className="code-cell"><code>{claim.icd_code || '—'}</code></td>
+                    <td><span className="status-badge">{claim.status || 'Processed'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
+            No claims data available for this member.
+          </p>
         )}
       </div>
     </div>

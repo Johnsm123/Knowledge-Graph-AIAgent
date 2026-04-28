@@ -277,23 +277,6 @@ function Analytics() {
           </ResponsiveContainer>
         </div>
 
-        {/* Gap Status */}
-        <div className="chart-card">
-          <div className="chart-header">
-            <h3>Gap Status Overview</h3>
-            <p>Open vs Closed gaps</p>
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={gapStatusData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis type="number" stroke="#64748b" />
-              <YAxis dataKey="name" type="category" stroke="#64748b" />
-              <Tooltip contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
-              <Bar dataKey="value" fill={COLORS.warning} radius={[0, 8, 8, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
         {/* Outreach Performance */}
         <div className="chart-card">
           <div className="chart-header">
