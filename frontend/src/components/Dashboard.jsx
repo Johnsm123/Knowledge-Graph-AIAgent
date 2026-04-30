@@ -99,6 +99,7 @@ function Dashboard({ onMemberSelect }) {
   const [category,      setCategory]      = useState('all');
   const [search,        setSearch]        = useState('');
   const [sortBy,        setSortBy]        = useState('gaps_desc');
+  const [measureFilter, setMeasureFilter] = useState('all');
   const [page,          setPage]          = useState(1);
   const [showAddMember, setShowAddMember] = useState(false);
   // Auto-process state: { [member_id]: { status, message, step } }
@@ -111,7 +112,7 @@ function Dashboard({ onMemberSelect }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
 
   useEffect(() => { fetchDashboardData(); fetchExplorerData(); }, []);
-  useEffect(() => { setPage(1); }, [category, search, sortBy]);
+  useEffect(() => { setPage(1); }, [category, search, sortBy, measureFilter]);
 
   useRealtimeEvents({
     appointment_booked: () => { fetchDashboardData(); },
@@ -359,6 +360,16 @@ function Dashboard({ onMemberSelect }) {
         (m.pcp_name   || '').toLowerCase().includes(q)
       );
     })
+    .filter(m => {
+      if (measureFilter === 'all') return true;
+      // Backend may return open_gap_measures as a list of measure_ids the member
+      // currently has open. A member with multiple measures will appear in EVERY
+      // matching measure's filter — picking GSD shows everyone with GSD open,
+      // even if they also have COL, BCS, etc. open.
+      const list = m.open_gap_measures;
+      if (!Array.isArray(list)) return false;
+      return list.includes(measureFilter);
+    })
     .sort((a, b) => {
       if (sortBy === 'gaps_desc')  return b.open_gaps - a.open_gaps;
       if (sortBy === 'gaps_asc')   return a.open_gaps - b.open_gaps;
@@ -423,30 +434,6 @@ function Dashboard({ onMemberSelect }) {
           </div>
         </div>
       </div>
-
-      {/* ── Gaps by measure ── */}
-      {stats?.gaps_by_measure?.length > 0 && (
-        <div className="gaps-by-measure">
-          <h2>Open Gaps by Measure</h2>
-          <div className="measure-chips-track">
-            {stats.gaps_by_measure.map(m => {
-              const pct = Math.round((m.gap_count / (stats?.members_with_gaps || 1)) * 100);
-              return (
-                <div key={m.measure_id} className="measure-chip">
-                  <div className="chip-top">
-                    <span className="chip-id">{m.measure_id}</span>
-                    <span className="chip-count">{m.gap_count}</span>
-                  </div>
-                  <div className="chip-bar">
-                    <div className="chip-fill" style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className="chip-label">{m.measure_name}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* ── Knowledge Explorer (Members / Providers / Measures filters) ── */}
       <div className="explorer-section">
@@ -549,6 +536,17 @@ function Dashboard({ onMemberSelect }) {
               <option value="gaps_asc">Fewest Gaps First</option>
               <option value="name_asc">Name A–Z</option>
               <option value="name_desc">Name Z–A</option>
+            </select>
+          </div>
+          <div className="sort-bar">
+            <Filter size={14} />
+            <select value={measureFilter} onChange={e => setMeasureFilter(e.target.value)} title="Filter members by measure">
+              <option value="all">All Measures</option>
+              {(stats?.gaps_by_measure || []).map(m => (
+                <option key={m.measure_id} value={m.measure_id}>
+                  {m.measure_id} — {m.measure_name} ({m.gap_count})
+                </option>
+              ))}
             </select>
           </div>
         </div>

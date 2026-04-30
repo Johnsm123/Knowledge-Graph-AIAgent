@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, LineChart, Line, ComposedChart, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, Users, Activity, Target, Download } from 'lucide-react';
 import axios from 'axios';
 import './Analytics.css';
@@ -59,11 +59,22 @@ function Analytics() {
   }
 
   // Prepare data for charts
-  const gapDistributionData = stats?.gaps_by_measure?.map(measure => ({
-    name: measure.measure_id,
-    value: measure.gap_count,
-    fullName: measure.measure_name
-  })) || [];
+  const gapDistributionData = stats?.gaps_by_measure?.map(measure => {
+    const earliest = measure.earliest_created || measure.latest_created || null;
+    let daysOpen = null;
+    if (earliest) {
+      const ms = Date.now() - new Date(earliest).getTime();
+      if (!Number.isNaN(ms)) daysOpen = Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
+    }
+    return {
+      name: measure.measure_id,
+      value: measure.gap_count,
+      fullName: measure.measure_name,
+      earliest_created: earliest,
+      latest_created: measure.latest_created || null,
+      days_open: daysOpen,
+    };
+  }) || [];
 
   const complianceData = [
     { name: 'Compliant', value: stats?.compliant_members || 0, color: COLORS.success },
@@ -190,19 +201,29 @@ function Analytics() {
         <div className="chart-card large">
           <div className="chart-header">
             <h3>Care Gap Distribution by Measure</h3>
-            <p>Total open gaps across HEDIS measures</p>
+            <p>Total open gaps and how long ago each measure was first opened</p>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={gapDistributionData}>
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={gapDistributionData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="name" stroke="#64748b" />
-              <YAxis stroke="#64748b" />
-              <Tooltip 
+              <YAxis yAxisId="left" stroke="#64748b" label={{ value: 'Open Gaps', angle: -90, position: 'insideLeft', fill: '#64748b' }} />
+              <YAxis yAxisId="right" orientation="right" stroke={COLORS.warning} label={{ value: 'Days Since First Opened', angle: 90, position: 'insideRight', fill: COLORS.warning }} />
+              <Tooltip
                 contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}
-                formatter={(value, name, props) => [value, props.payload.fullName]}
+                formatter={(value, name, props) => {
+                  if (name === 'Open Gaps') return [value, props.payload.fullName];
+                  if (name === 'Days Since First Opened') {
+                    const d = props.payload.earliest_created;
+                    return [`${value} days${d ? ` (since ${String(d).slice(0, 10)})` : ''}`, name];
+                  }
+                  return [value, name];
+                }}
               />
-              <Bar dataKey="value" fill={COLORS.primary} radius={[8, 8, 0, 0]} />
-            </BarChart>
+              <Legend />
+              <Bar yAxisId="left" dataKey="value" name="Open Gaps" fill={COLORS.primary} radius={[8, 8, 0, 0]} />
+              <Line yAxisId="right" type="monotone" dataKey="days_open" name="Days Since First Opened" stroke={COLORS.warning} strokeWidth={2} dot={{ r: 4, fill: COLORS.warning }} />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
 

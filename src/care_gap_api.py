@@ -110,6 +110,25 @@ def get_all_members():
     """Get all members with their care gap status and outreach info."""
     try:
         kg = get_knowledge_graph()
+        # Collect each member's open-gap measure_ids — mirror the same coalesce
+        # logic used in dashboard/stats so we never drop a CareGap whose
+        # measure_id lives on the related QualityMeasure node instead of the
+        # gap itself. This list powers the dashboard's "Filter by Measure"
+        # dropdown — picking GSD must surface every member who has GSD open,
+        # even if they also have COL / BCS / etc. open at the same time.
+        member_open_measures_rows = kg.run_query("""
+            MATCH (m:Member)-[:HAS_CARE_GAP]->(g:CareGap)
+            WHERE g.is_open = true
+            OPTIONAL MATCH (g)-[:RELATES_TO]->(q:QualityMeasure)
+            WITH m.member_id AS member_id,
+                 coalesce(g.measure_id, q.measure_id) AS measure_id
+            WHERE measure_id IS NOT NULL
+            RETURN member_id, collect(DISTINCT measure_id) AS open_gap_measures
+        """, {}) or []
+        open_measures_by_member = {
+            row["member_id"]: row["open_gap_measures"] for row in member_open_measures_rows
+        }
+
         members = kg.run_query("""
             MATCH (m:Member)
             OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
@@ -138,6 +157,9 @@ def get_all_members():
                    appointment_count
             ORDER BY open_gaps DESC, m.name
         """, {})
+
+        for member in members:
+            member["open_gap_measures"] = open_measures_by_member.get(member.get("member_id"), [])
         return jsonify({"members": members, "total": len(members)})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
@@ -334,9 +356,12 @@ def get_dashboard_stats():
             OPTIONAL MATCH (g)-[:RELATES_TO]->(q:QualityMeasure)
             WITH coalesce(g.measure_id, q.measure_id, 'UNKNOWN') AS measure_id,
                  coalesce(q.name, g.measure_id, 'Unknown Measure')  AS measure_name,
-                 m.member_id AS member_id
+                 m.member_id AS member_id,
+                 g.created_on AS created_on
             RETURN measure_id, measure_name,
-                   count(DISTINCT member_id) as gap_count
+                   count(DISTINCT member_id) as gap_count,
+                   min(created_on) AS earliest_created,
+                   max(created_on) AS latest_created
             ORDER BY gap_count DESC
         """, {})
         
@@ -2936,7 +2961,7 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
         <button class="cancel-btn" onclick="closeModal()">Cancel</button>
         <span class="selected-count" id="selectedCount" style="margin-left:16px"></span>
       </div>
-      <button class="approve-btn" id="approveBtn" onclick="approveAndProcess()">Approve & Start Analysis</button>
+      <button class="approve-btn" id="approveBtn" onclick="approveAndProcess()">Proceed with Outreach</button>
     </div>
   </div>
 </div>
@@ -2945,8 +2970,8 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
 <div class="processing-overlay" id="processingOverlay">
   <div class="processing-box">
     <div class="spinner"></div>
-    <h2>Processing Members...</h2>
-    <p id="processingMsg">Running 6-agent AI analysis and sending outreach emails simultaneously for all selected members. This may take a few minutes.</p>
+    <h2>Outreach In Progress…</h2>
+    <p id="processingMsg">Sending outreach emails to all selected members and finalising their care-gap records. This may take a few minutes.</p>
   </div>
 </div>
 
