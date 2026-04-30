@@ -882,27 +882,28 @@ function MemberDetails({ member, onBack }) {
                     return (
                       <div key={gap.care_gap_id} className={`quick-gap-card ${isClosed ? 'quick-gap-card--closed' : ''}`}>
                         <div className="gap-header">
-                          <h4>{gap.measure_name}</h4>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <span className="gap-badge">{gap.measure_id}</span>
-                            {isClosed && <span className="gap-badge gap-badge--closed">✓ Closed</span>}
-                            {booking && !isClosed && <span className="gap-badge gap-badge--booked">📅 Scheduled</span>}
-                          </div>
-                        </div>
-                        <div className="gap-actions">
+                          <h4 style={{ flex: 1 }}>{gap.measure_name}</h4>
                           {(() => {
+                            // tone: red = not booked, yellow = needs rebooking, green = booked or closed
+                            let tone = 'red';
                             let label = 'Status: Not Booked';
-                            if (isClosed) label = 'Status: Closed';
+                            if (isClosed) { tone = 'green'; label = 'Status: Closed'; }
                             else if (booking) {
                               const s = booking.status;
-                              if (s === 'Completed') label = 'Status: Closed';
-                              else if (s === 'Cancelled_NoShow' || s === 'No Show') label = 'Status: Waiting to Rebook';
-                              else if (s === 'Cancelled') label = 'Status: Cancelled';
-                              else label = 'Status: Booked';
+                              if (s === 'Completed')                              { tone = 'green';  label = 'Status: Completed'; }
+                              else if (s === 'Cancelled_NoShow' || s === 'No Show'){ tone = 'yellow'; label = 'Status: Needs Rebooking'; }
+                              else if (s === 'Cancelled')                          { tone = 'yellow'; label = 'Status: Cancelled'; }
+                              else                                                 { tone = 'green';  label = 'Status: Booked'; }
                             }
+                            const toneStyle = {
+                              red:    { background: '#B81F2D', color: '#fff', borderColor: '#B81F2D' },
+                              yellow: { background: '#F59E0B', color: '#fff', borderColor: '#F59E0B' },
+                              green:  { background: '#10B981', color: '#fff', borderColor: '#10B981' },
+                            }[tone];
                             return (
                               <button
                                 className="btn-view-booking"
+                                style={{ ...toneStyle, marginLeft: 'auto' }}
                                 onClick={() => setViewBooking(booking || {
                                   care_gap_id: gap.care_gap_id,
                                   measure_id:  gap.measure_id,
@@ -915,6 +916,7 @@ function MemberDetails({ member, onBack }) {
                               </button>
                             );
                           })()}
+                          <span className="gap-badge" style={{ marginLeft: 8 }}>{gap.measure_id}</span>
                         </div>
                       </div>
                     );
@@ -1149,22 +1151,15 @@ function MemberDetails({ member, onBack }) {
                               className="btn-force-close-inline"
                               onClick={() => handleForceClose(booking)}
                               disabled={forceClosing}
-                              title="Force close — generates claim, closes care gap, increases outreach count"
+                              title="Close this gap — generates claim and marks the member compliant"
                             >
-                              {forceClosing ? 'Closing...' : '⚡ Force Close'}
+                              {forceClosing ? 'Closing...' : '✅ Close Gap'}
                             </button>
                           )}
                           {isNoShow && (
-                            <button
-                              className="btn-rebook-inline"
-                              onClick={() => {
-                                setSelectedGap(details?.open_gaps?.find(g => g.measure_id === appt.measure_id) || { measure_id: appt.measure_id, measure_name: appt.screening_name });
-                                setShowAppointmentModal(true);
-                              }}
-                              title="Re-open the gap and book a new appointment for the same screening"
-                            >
-                              🔁 Rebook
-                            </button>
+                            <span className="appt-rebook-note" title="Member will rebook via email link — no portal action needed">
+                              🔁 Awaiting member rebook
+                            </span>
                           )}
                         </div>
                       </div>
@@ -1557,31 +1552,51 @@ function MemberDetails({ member, onBack }) {
               )}
               <div className="vb-footer-btns">
                 <button className="btn-secondary" onClick={() => { setViewBooking(null); setCompleteError(''); }}>Close</button>
-                {viewBooking.status !== 'Completed' && !completedGaps.has(viewBooking.care_gap_id) && (
-                  <>
-                    <button
-                      className="btn-complete-screening"
-                      onClick={() => handleCompleteScreening(viewBooking)}
-                      disabled={completingGap || forceClosing}
-                    >
-                      {completingGap
-                        ? <><span className="appt-spinner" /> Processing…</>
-                        : <>✅ Mark Screening Complete &amp; Close Gap</>
-                      }
-                    </button>
-                    <button
-                      className="btn-force-close"
-                      onClick={() => handleForceClose(viewBooking)}
-                      disabled={completingGap || forceClosing}
-                      title="Force close for demo — immediately generates claim and closes gap"
-                    >
-                      {forceClosing
-                        ? <><span className="appt-spinner" /> Force Closing…</>
-                        : <>⚡ Force Close (Demo)</>
-                      }
-                    </button>
-                  </>
-                )}
+                {(() => {
+                  const s = viewBooking.status;
+                  const isClosedGap = completedGaps.has(viewBooking.care_gap_id);
+                  const isCompleted = s === 'Completed' || isClosedGap;
+                  const isCancelled = s === 'Cancelled' || s === 'Cancelled_NoShow' || s === 'No Show';
+                  const hasNoBooking = !s || s === 'Not Booked';
+                  // Only show Close + Force-Close when the appointment is actively
+                  // Scheduled/Booked. Cancelled/No-Show is rebooked by the member
+                  // via email — portal does nothing. Not-Booked / Completed: nothing.
+                  if (isCompleted || isCancelled || hasNoBooking) {
+                    if (isCancelled) {
+                      return (
+                        <span className="vb-status-note vb-status-note--rebook">
+                          Appointment cancelled — member will rebook via email link.
+                        </span>
+                      );
+                    }
+                    return null;
+                  }
+                  return (
+                    <>
+                      <button
+                        className="btn-complete-screening"
+                        onClick={() => handleCompleteScreening(viewBooking)}
+                        disabled={completingGap || forceClosing}
+                      >
+                        {completingGap
+                          ? <><span className="appt-spinner" /> Processing…</>
+                          : <>✅ Mark Screening Complete &amp; Close Gap</>
+                        }
+                      </button>
+                      <button
+                        className="btn-force-close"
+                        onClick={() => handleForceClose(viewBooking)}
+                        disabled={completingGap || forceClosing}
+                        title="Force close for demo — immediately generates claim and closes gap"
+                      >
+                        {forceClosing
+                          ? <><span className="appt-spinner" /> Force Closing…</>
+                          : <>⚡ Force Close (Demo)</>
+                        }
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -2044,7 +2059,7 @@ function PatientRecordTab({ memberId, lifestyle, familyHistory, medicalHistory, 
       <div className="pr-card">
         <div className="pr-card-title">🧾 Claims ({claims.length})</div>
         {claims.length > 0 ? (
-          <div className="claims-table">
+          <div className="claims-table claims-table--uniform">
             <table>
               <thead>
                 <tr>
@@ -2059,12 +2074,12 @@ function PatientRecordTab({ memberId, lifestyle, familyHistory, medicalHistory, 
               <tbody>
                 {claims.map((claim, i) => (
                   <tr key={i}>
-                    <td><code className="claim-id-code">{claim.claim_id || '—'}</code></td>
-                    <td><span className="measure-badge">{claim.measure_id || '—'}</span></td>
+                    <td>{claim.claim_id || '—'}</td>
+                    <td>{claim.measure_id || '—'}</td>
                     <td>{claim.service_date || '—'}</td>
-                    <td className="code-cell"><code>{claim.cpt_code || '—'}</code></td>
-                    <td className="code-cell"><code>{claim.icd_code || '—'}</code></td>
-                    <td><span className="status-badge">{claim.status || 'Processed'}</span></td>
+                    <td>{claim.cpt_code || '—'}</td>
+                    <td>{claim.icd_code || '—'}</td>
+                    <td>{claim.status || 'Processed'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2152,7 +2167,7 @@ function FamilyHistoryView({ data }) {
       {data.map((fm, i) => (
         <div key={i} className="pr-family-item">
           <div className="pr-family-header">
-            <strong>{fm.relation}</strong>
+            <strong>{fm.relation ? fm.relation.charAt(0).toUpperCase() + fm.relation.slice(1) : ''}</strong>
             {fm.name && <span className="pr-family-name">({fm.name})</span>}
             <span className={`pr-family-status ${fm.alive ? 'alive' : 'deceased'}`}>
               {fm.alive ? 'Alive' : 'Deceased'} {fm.age_or_age_at_death ? `· age ${fm.age_or_age_at_death}` : ''}
