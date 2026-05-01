@@ -362,13 +362,22 @@ function Dashboard({ onMemberSelect }) {
     })
     .filter(m => {
       if (measureFilter === 'all') return true;
-      // Backend may return open_gap_measures as a list of measure_ids the member
-      // currently has open. A member with multiple measures will appear in EVERY
-      // matching measure's filter — picking GSD shows everyone with GSD open,
-      // even if they also have COL, BCS, etc. open.
+      // Source-of-truth: derive membership from the Knowledge-Explorer graph
+      // we already loaded (`graphs.members_graph.edges`). Every open gap is an
+      // OPEN_GAP edge from M:<member_id> → Q:<measure_id>. This works even when
+      // the /members endpoint was not redeployed with `open_gap_measures`.
+      // Fallback: if the explorer graph hasn't loaded yet, fall back to the
+      // stats roster. A member with multiple open measures matches whichever
+      // measure is currently selected.
+      const fromGraph = (graphs?.members_graph?.edges || [])
+        .filter(e => e.type === 'OPEN_GAP' && e.source === `M:${m.member_id}`)
+        .some(e => e.target === `Q:${measureFilter}`);
+      if (fromGraph) return true;
+      const measureRow = (stats?.gaps_by_measure || []).find(r => r.measure_id === measureFilter);
+      const memberIds  = measureRow?.member_ids || [];
+      if (memberIds.includes(m.member_id)) return true;
       const list = m.open_gap_measures;
-      if (!Array.isArray(list)) return false;
-      return list.includes(measureFilter);
+      return Array.isArray(list) && list.includes(measureFilter);
     })
     .sort((a, b) => {
       if (sortBy === 'gaps_desc')  return b.open_gaps - a.open_gaps;

@@ -360,6 +360,7 @@ def get_dashboard_stats():
                  g.created_on AS created_on
             RETURN measure_id, measure_name,
                    count(DISTINCT member_id) as gap_count,
+                   collect(DISTINCT member_id)  AS member_ids,
                    min(created_on) AS earliest_created,
                    max(created_on) AS latest_created
             ORDER BY gap_count DESC
@@ -1240,29 +1241,16 @@ def dashboard_main_graph():
                 iid = f"ICD:{mid}"
                 q_nodes.append({"id": iid, "label": "ICD", "name": icd, "props": {"Primary ICD-10": icd}})
                 q_edges.append({"source": f"Q:{mid}", "target": iid, "type": "PRIMARY_ICD"})
-            # Diagnosis prereq leaf
+            # Diagnosis prerequisite leaf — relabelled "Required Diagnosis"
+            # for the Knowledge Explorer legend so it reads in plain language.
             diag = md.get("diagnosis_requirement", "")
             if diag:
                 did = f"DIAG:{mid}"
-                q_nodes.append({"id": did, "label": "Prereq", "name": diag[:48], "props": {"Diagnosis prerequisite": diag}})
+                q_nodes.append({"id": did, "label": "Required Diagnosis", "name": diag[:48], "props": {"Required Diagnosis": diag}})
                 q_edges.append({"source": f"Q:{mid}", "target": did, "type": "DIAGNOSIS_REQ"})
-            # Exclusion leaves (one node per exclusion type)
-            for ex in (md.get("exclusions", {}) or {}).get("required", []) or []:
-                ex_type = ex.get("type", "")
-                if not ex_type:
-                    continue
-                exid = f"EX:{mid}:{ex_type}"
-                pretty = ex_type.replace("_", " ")
-                icd_codes = ", ".join((ex.get("icd10") or [])[:6])
-                q_nodes.append({
-                    "id": exid, "label": "Exclusion", "name": pretty,
-                    "props": {
-                        "Exclusion": pretty,
-                        "Description": ex.get("description", ""),
-                        "ICD-10": icd_codes or "—",
-                    },
-                })
-                q_edges.append({"source": f"Q:{mid}", "target": exid, "type": "EXCLUDES"})
+            # Exclusion leaves intentionally omitted — Knowledge Explorer keeps
+            # the Measure subgraph focused on positive criteria; the operational
+            # exclusion rules are still applied by the rules engine.
 
         return jsonify({
             "members_graph":   {"nodes": m_nodes, "edges": m_edges},
@@ -2436,6 +2424,23 @@ def bulk_process_members():
                 except Exception as email_err:
                     logger.warning(f"Bulk email failed for {mid}: {email_err}")
 
+            # Persona-comparison side-effect — mirror member + ideal twin into
+            # the persona-demo DB so the upload page can animate the
+            # persona-vs-member comparison in real time. Best-effort: if the
+            # persona DB is unreachable we still complete the main flow.
+            persona_comparison = None
+            try:
+                from src.persona_demo_writer import build_persona_comparison, push_member_persona
+                from src.care_gap_neo4j import get_member_profile as _get_profile_p
+                from src.care_gap_neo4j import get_member_open_gaps as _get_open_p
+                _profile_p = _get_profile_p(mid) or {"member_id": mid, "name": mname}
+                _profile_p["member_id"] = mid
+                _open_p = _get_open_p(mid) or []
+                persona_comparison = build_persona_comparison(_profile_p, _open_p, completed=[])
+                push_member_persona(_profile_p, persona_comparison)
+            except Exception as p_exc:
+                logger.warning(f"Persona-demo push failed for {mid}: {p_exc}")
+
             with lock:
                 processing_results[mid] = {
                     "member_id": mid,
@@ -2443,6 +2448,7 @@ def bulk_process_members():
                     "status": "completed",
                     "email_sent": email_sent,
                     "analysis_summary": str(analysis.get("summary", ""))[:500] if isinstance(analysis, dict) else str(analysis)[:500],
+                    "persona_comparison": persona_comparison,
                 }
         except Exception as exc:
             logger.error(f"Bulk process error for {mid}: {exc}", exc_info=True)
@@ -2928,6 +2934,44 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
 .result-card .info .name{font-weight:700;font-size:15px;color:#000048}
 .result-card .info .detail{color:#53565A;font-size:12px;margin-top:2px}
 .result-card .status-badge{padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600}
+
+/* Realtime persona-comparison panel */
+.persona-panel{display:none;margin-top:24px;background:linear-gradient(135deg,#f6f9ff 0%,#eef3ff 100%);border-radius:12px;padding:20px 24px;box-shadow:0 2px 12px rgba(0,0,72,0.08)}
+.persona-panel.show{display:block}
+.persona-panel-head h2{margin:0 0 4px;color:#000048;font-size:18px}
+.persona-panel-head p{margin:0 0 16px;color:#53565A;font-size:13px}
+.persona-list{display:grid;grid-template-columns:1fr;gap:18px}
+
+/* Per-member graph card */
+.pgraph-card{background:#fff;border-radius:12px;padding:18px 22px;border:1px solid #dde4f7;animation:fadeUp .5s ease both;box-shadow:0 1px 4px rgba(0,0,72,0.04)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.pgc-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:12px}
+.pgc-avatar{width:42px;height:42px;border-radius:50%;background:#000048;color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pgc-identity{flex:1;min-width:0}
+.pgc-name{font-weight:700;color:#000048;font-size:16px;margin-bottom:4px}
+.pgc-meta{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#374151;margin-top:2px}
+.pgc-meta strong{color:#6B7280;font-weight:500;margin-right:3px}
+.pgc-meta-row2{margin-top:4px;color:#475569}
+.pgc-stage{font-size:11.5px;color:#3B82F6;background:#EFF6FF;padding:6px 14px;border-radius:999px;font-weight:600;white-space:nowrap;align-self:center}
+.pgc-stage--gap{color:#B81F2D;background:#FEF2F2}
+.pgc-stage--ok{color:#059669;background:#ECFDF5}
+
+.pgc-graph-wrap{position:relative;background:#0b1220;border-radius:10px;padding:6px;margin:6px 0 12px}
+.pgc-svg{width:100%;height:auto;display:block;background:radial-gradient(circle at center,#0f172a 0%,#0b1220 80%);border-radius:6px}
+/* SVG-internal <animate> tags drive the node + edge fade-in. CSS keyframes
+   are deliberately not used on SVG <g>/<line> elements because animating
+   CSS transform overrides the SVG transform="translate(x,y)" attribute and
+   collapses the geometry to (0,0). */
+
+.pgc-legend{display:flex;align-items:center;gap:6px;font-size:11px;color:#cbd5e1;padding:6px 10px}
+.pgc-legend .lg-dot{display:inline-block;width:9px;height:9px;border-radius:50%}
+.pgc-legend .lg-edge{display:inline-block;width:24px;height:0;border-top:2px solid #10B981}
+.pgc-legend .lg-edge--dashed{border-top:2px dashed #B81F2D}
+
+.pgc-gaps{font-size:12px;color:#374151;margin-top:6px;padding-top:10px;border-top:1px dashed #E5E7EB}
+.pgc-gap-title{font-weight:600;margin-bottom:6px;color:#B81F2D}
+.pgc-gap-chip{display:inline-block;background:#FEF2F2;color:#B81F2D;border:1px solid #FECACA;padding:3px 8px;margin:3px 4px 0 0;border-radius:999px;font-size:11px;font-weight:500}
+.pgc-gap-ok{color:#059669;font-weight:500}
 .result-card .status-badge.success{background:rgba(45,184,31,0.1);color:#2DB81F}
 .result-card .status-badge.error{background:rgba(184,31,45,0.08);color:#B81F2D}
 </style></head><body>
@@ -2973,6 +3017,15 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
     <h2>Outreach In Progress…</h2>
     <p id="processingMsg">Sending outreach emails to all selected members and finalising their care-gap records. This may take a few minutes.</p>
   </div>
+</div>
+
+<!-- Realtime Persona-Comparison Panel -->
+<div class="persona-panel" id="personaPanel">
+  <div class="persona-panel-head">
+    <h2>🧬 Persona-Based Care-Gap Discovery — Live</h2>
+    <p id="personaStatus">Generating closest-fit ideal personas…</p>
+  </div>
+  <div class="persona-list" id="personaList"></div>
 </div>
 
 <!-- Results Area -->
@@ -3132,10 +3185,251 @@ async function approveAndProcess(){
 
   closeModal();
   document.getElementById('uploadArea').style.display='none';
-  const overlay=document.getElementById('processingOverlay');
-  overlay.classList.add('show');
-  document.getElementById('processingMsg').textContent=
-    `Running 6-agent AI analysis and sending outreach emails simultaneously for ${selected.length} member(s). This may take a few minutes.`;
+
+  // ── Realtime persona-comparison Neo4j-style graph panel ──
+  // One mini graph per member: Member node in the centre, IdealPersona node
+  // on the right, candidate Screening nodes radiate around. Edges form
+  // animatedly while the backend processes — completed screenings link
+  // green to the Member, missing screenings link dashed-red to mark gaps.
+  const personaPanel = document.getElementById('personaPanel');
+  const personaList  = document.getElementById('personaList');
+  const personaStatus= document.getElementById('personaStatus');
+  personaPanel.classList.add('show');
+
+  // Render one graph card per selected member with skeleton nodes; the live
+  // values + edges fill in as comparison data arrives.
+  function renderGraphCard(m) {
+    const initials = (m.name || '?').split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
+    return `
+      <div class="pgraph-card" id="pgc-${m.member_id}">
+        <div class="pgc-head">
+          <div class="pgc-avatar">${initials}</div>
+          <div class="pgc-identity">
+            <div class="pgc-name">${m.name||'—'}</div>
+            <div class="pgc-meta" id="pgc-meta-${m.member_id}">
+              <span><strong>ID:</strong> ${m.member_id}</span>
+              <span><strong>Email:</strong> ${m.email||'—'}</span>
+            </div>
+            <div class="pgc-meta pgc-meta-row2" id="pgc-meta2-${m.member_id}">
+              <span><strong>Age:</strong> —</span>
+              <span><strong>Gender:</strong> —</span>
+              <span><strong>PCP:</strong> —</span>
+              <span><strong>Insurance:</strong> —</span>
+            </div>
+          </div>
+          <div class="pgc-stage" id="pgc-stage-${m.member_id}">⏳ Connecting to graph…</div>
+        </div>
+        <div class="pgc-graph-wrap">
+          <svg class="pgc-svg" id="pgc-svg-${m.member_id}" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <marker id="arr-${m.member_id}" viewBox="0 -5 10 10" refX="22" refY="0" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M0,-4L10,0L0,4" fill="#94a3b8"/>
+              </marker>
+            </defs>
+            <g id="pgc-edges-${m.member_id}"></g>
+            <g id="pgc-nodes-${m.member_id}"></g>
+          </svg>
+          <div class="pgc-legend">
+            <span class="lg-dot" style="background:#000048"></span> Member
+            <span class="lg-dot" style="background:#10B981;margin-left:10px"></span> Persona
+            <span class="lg-dot" style="background:#3B82F6;margin-left:10px"></span> Screening
+            <span class="lg-edge lg-edge--solid" style="margin-left:10px"></span> Completed
+            <span class="lg-edge lg-edge--dashed" style="margin-left:10px"></span> Care Gap
+          </div>
+        </div>
+        <div class="pgc-gaps" id="pgc-gaps-${m.member_id}"><em>Awaiting comparison…</em></div>
+      </div>
+    `;
+  }
+
+  personaList.innerHTML = selected.map(renderGraphCard).join('');
+
+  // ── Sequential graph builder — nodes and labelled edges form progressively
+  // (Member → Persona → COMPARED_TO → lifestyle parameters → screenings),
+  // mimicking real-time discovery in a Neo4j-style canvas.
+  // Layout (viewBox 900×520):
+  //     Member (180, 260)               Persona (720, 260)
+  //     Lifestyle parameter nodes evenly spaced between them at y=260
+  //     Screenings: arc beneath, 60° fan
+  const VB_W = 900, VB_H = 520;
+  const MX = 180, PX = 720, CY = 260;
+
+  function clearGraph(mid) {
+    document.getElementById(`pgc-nodes-${mid}`).innerHTML = '';
+    document.getElementById(`pgc-edges-${mid}`).innerHTML = '';
+  }
+
+  function appendNode(mid, html) {
+    document.getElementById(`pgc-nodes-${mid}`).insertAdjacentHTML('beforeend', html);
+  }
+  function appendEdge(mid, html) {
+    document.getElementById(`pgc-edges-${mid}`).insertAdjacentHTML('beforeend', html);
+  }
+
+  // Helper: native SVG opacity fade — guaranteed not to interfere with the
+  // outer <g>'s transform attribute the way CSS keyframes do.
+  function fadeIn(dur) {
+    dur = dur || '0.45s';
+    return `<animate attributeName="opacity" from="0" to="1" dur="${dur}" fill="freeze"/>`;
+  }
+
+  function memberNodeHtml(cmp) {
+    const initials = (cmp.member_name||'?').split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase();
+    return `
+      <g transform="translate(${MX},${CY})" opacity="0">${fadeIn()}
+        <circle r="40" fill="#000048" stroke="#fff" stroke-width="3"/>
+        <text text-anchor="middle" dy="-2" fill="#fff" font-size="13" font-weight="700">${initials}</text>
+        <text text-anchor="middle" dy="14" fill="#bcd0ff" font-size="9">${cmp.member_id}</text>
+        <text text-anchor="middle" dy="60" fill="#bcd0ff" font-size="11" font-weight="600">Member · ${(cmp.member_name||'').slice(0,18)}</text>
+      </g>`;
+  }
+  function personaNodeHtml(cmp) {
+    // Persona ID kept short — same length pattern as member ID (e.g. M0147)
+    // but prefixed with P so it never collides with a member ID. Always
+    // under 100 chars — typically ~5.
+    const shortPid = `P${(cmp.member_id||'').replace(/^M/i,'')}`.slice(0,12);
+    return `
+      <g transform="translate(${PX},${CY})" opacity="0">${fadeIn()}
+        <circle r="36" fill="#10B981" stroke="#fff" stroke-width="3"/>
+        <text text-anchor="middle" dy="-2" fill="#fff" font-size="11" font-weight="700">IDEAL</text>
+        <text text-anchor="middle" dy="12" fill="#d1fae5" font-size="9">${shortPid}</text>
+        <text text-anchor="middle" dy="56" fill="#a7f3d0" font-size="11" font-weight="600">Persona · closest fit</text>
+      </g>`;
+  }
+
+  // Animate the comparison sequence for one member.
+  // Each step is one render + a short delay so the SVG visibly grows.
+  async function animateGraph(mid, cmp) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    clearGraph(mid);
+
+    // Step 1 — Member node appears
+    appendNode(mid, memberNodeHtml(cmp));
+    await sleep(450);
+
+    // Step 2 — Persona node appears
+    appendNode(mid, personaNodeHtml(cmp));
+    await sleep(450);
+
+    // Step 3 — COMPARED_TO edge draws
+    appendEdge(mid, `
+      <line x1="${MX}" y1="${CY}" x2="${PX}" y2="${CY}"
+            stroke="#10B981" stroke-width="2.5" opacity="0">${fadeIn('0.5s')}</line>
+      <text x="${(MX+PX)/2}" y="${CY-10}" text-anchor="middle" fill="#10B981"
+            font-size="12" font-weight="700" opacity="0">${fadeIn('0.5s')}COMPARED_TO</text>
+    `);
+    await sleep(550);
+
+    // Step 4 — Lifestyle parameter nodes form between Member and Persona,
+    // with parameter labels along each edge (member-side actual vs persona-side ideal).
+    const params = [
+      { key: 'BMI',      ideal: cmp.ideal_lifestyle.bmi,                actual: '—' },
+      { key: 'Smoking',  ideal: cmp.ideal_lifestyle.smoking_status,     actual: '—' },
+      { key: 'Exercise', ideal: cmp.ideal_lifestyle.exercise_frequency, actual: '—' },
+      { key: 'Diet',     ideal: cmp.ideal_lifestyle.diet_type,          actual: '—' },
+    ];
+    const paramY = CY - 110;
+    for (let i = 0; i < params.length; i++) {
+      const t = (i + 1) / (params.length + 1);
+      const px = MX + t * (PX - MX);
+      const p = params[i];
+      // edge: Member → param
+      appendEdge(mid, `
+        <line x1="${MX}" y1="${CY-12}" x2="${px}" y2="${paramY+18}"
+              stroke="#64748b" stroke-width="1.4" stroke-dasharray="3 3" opacity="0">
+          <animate attributeName="opacity" from="0" to="0.65" dur="0.4s" fill="freeze"/>
+        </line>
+      `);
+      // param node
+      appendNode(mid, `
+        <g transform="translate(${px},${paramY})" opacity="0">${fadeIn()}
+          <rect x="-46" y="-16" width="92" height="32" rx="16" ry="16"
+                fill="#1e293b" stroke="#7373D8" stroke-width="1.5"/>
+          <text text-anchor="middle" dy="-2" fill="#cbd5e1" font-size="9" font-weight="600">${p.key}</text>
+          <text text-anchor="middle" dy="9" fill="#a7f3d0" font-size="8">${(p.ideal||'').toString().slice(0,16)}</text>
+        </g>
+      `);
+      // edge: param → Persona
+      appendEdge(mid, `
+        <line x1="${px}" y1="${paramY+18}" x2="${PX}" y2="${CY-12}"
+              stroke="#10B981" stroke-width="1.4" opacity="0">
+          <animate attributeName="opacity" from="0" to="0.65" dur="0.4s" fill="freeze"/>
+        </line>
+      `);
+      await sleep(280);
+    }
+
+    // Step 5 — Screening nodes form on an arc beneath, edges Member↔Screening
+    // (solid green if completed, dashed red if it's a gap) + Persona→Screening
+    // (faint blue) showing the persona "would have completed it".
+    const screenings = [...cmp.completed_screenings, ...cmp.pending_screenings];
+    if (screenings.length === 0) {
+      // nothing more to draw — but mark the COMPARED_TO edge as compliant
+      return;
+    }
+    const arcY = CY + 120;
+    const arcRadius = 200;
+    const arcCenterX = (MX + PX) / 2;
+    const totalArc = Math.min(Math.PI * 0.7, Math.PI * 0.18 * screenings.length);
+    const startAngle = Math.PI/2 - totalArc/2;
+    for (let i = 0; i < screenings.length; i++) {
+      const s = screenings[i];
+      const completed = i < cmp.completed_screenings.length;
+      const angle = startAngle + (screenings.length === 1 ? totalArc/2 : (totalArc * i) / (screenings.length - 1));
+      const sx = arcCenterX + arcRadius * Math.cos(angle);
+      const sy = arcY + 30 - arcRadius * Math.sin(angle) * 0.45;
+
+      // Member → Screening edge (drawn first so the node appears on top)
+      const memberStroke = completed ? '#10B981' : '#B81F2D';
+      const memberDash   = completed ? '' : 'stroke-dasharray="6 4"';
+      appendEdge(mid, `
+        <line x1="${MX}" y1="${CY+18}" x2="${sx}" y2="${sy-18}"
+              stroke="${memberStroke}" stroke-width="2" ${memberDash} opacity="0">
+          <animate attributeName="opacity" from="0" to="1" dur="0.45s" fill="freeze"/>
+        </line>
+        <text x="${(MX+sx)/2}" y="${(CY+sy)/2 - 4}"
+              fill="${completed ? '#34d399' : '#fca5a5'}" font-size="9" text-anchor="middle" opacity="0">
+          <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="0.2s" fill="freeze"/>
+          ${completed ? 'HAS_COMPLETED' : 'CARE_GAP'}
+        </text>
+      `);
+      // Persona → Screening edge (always solid green — "would have completed")
+      appendEdge(mid, `
+        <line x1="${PX}" y1="${CY+18}" x2="${sx}" y2="${sy-18}"
+              stroke="#3B82F6" stroke-width="1.3" opacity="0">
+          <animate attributeName="opacity" from="0" to="0.55" dur="0.45s" fill="freeze"/>
+        </line>
+      `);
+      // Screening node
+      const fill = completed ? '#3B82F6' : '#FCA5A5';
+      const ring = completed ? '#1D4ED8' : '#B81F2D';
+      const labelColor = completed ? '#bfdbfe' : '#fecaca';
+      appendNode(mid, `
+        <g transform="translate(${sx},${sy})" opacity="0">${fadeIn()}
+          <circle r="22" fill="${fill}" stroke="${ring}" stroke-width="2"/>
+          <text text-anchor="middle" dy="3" fill="#fff" font-size="10" font-weight="700">${(s.measure_id||'').slice(0,4)}</text>
+          <text text-anchor="middle" dy="38" fill="${labelColor}" font-size="9" font-weight="500">${(s.measure_name||s.measure_id||'').slice(0,18)}</text>
+        </g>
+      `);
+      await sleep(320);
+    }
+  }
+
+  // Stage rotation while waiting for the backend.
+  const stages = [
+    '🔍 Loading member profile…',
+    '🧬 Generating closest-fit ideal persona…',
+    '⚖ Comparing screening history…',
+    '📊 Surfacing missing links…',
+  ];
+  let stageIdx = 0;
+  const stageTimer = setInterval(() => {
+    stageIdx = (stageIdx + 1) % stages.length;
+    document.querySelectorAll('[id^="pgc-stage-"]').forEach(el => {
+      if (!el.dataset.done) el.textContent = stages[stageIdx];
+    });
+    personaStatus.textContent = stages[stageIdx];
+  }, 1400);
 
   try{
     const res=await fetch('/api/v1/members/bulk-process',{
@@ -3144,7 +3438,46 @@ async function approveAndProcess(){
       body:JSON.stringify({members:selected})
     });
     const data=await res.json();
-    overlay.classList.remove('show');
+    clearInterval(stageTimer);
+
+    // Backfill each member's graph + details with the real comparison the
+    // backend pushed into the persona-demo DB.
+    (data.results||[]).forEach(r => {
+      const cmp   = r.persona_comparison;
+      const stage = document.getElementById(`pgc-stage-${r.member_id}`);
+      const gaps  = document.getElementById(`pgc-gaps-${r.member_id}`);
+      const meta2 = document.getElementById(`pgc-meta2-${r.member_id}`);
+      if (!cmp) {
+        if (stage) { stage.textContent = '⚠ No persona data'; stage.dataset.done = '1'; }
+        return;
+      }
+      if (meta2) {
+        meta2.innerHTML = `
+          <span><strong>Age:</strong> ${cmp.age||'—'}</span>
+          <span><strong>Gender:</strong> ${cmp.gender||'—'}</span>
+          <span><strong>PCP:</strong> ${cmp.pcp_name||'—'}</span>
+          <span><strong>Insurance:</strong> ${cmp.insurance_type||'—'}</span>
+          ${cmp.chronic && cmp.chronic.length ? `<span><strong>Conditions:</strong> ${cmp.chronic.slice(0,3).join(', ')}</span>` : ''}
+        `;
+      }
+      if (stage) {
+        stage.textContent = cmp.missing_link_count > 0
+          ? `🩺 ${cmp.missing_link_count} care gap(s) found`
+          : '✅ Fully compliant vs ideal';
+        stage.dataset.done = '1';
+        stage.classList.add(cmp.missing_link_count > 0 ? 'pgc-stage--gap' : 'pgc-stage--ok');
+      }
+      if (gaps) {
+        gaps.innerHTML = cmp.missing_link_count > 0
+          ? '<div class="pgc-gap-title">Missing links vs persona:</div>' +
+            cmp.pending_screenings.map(p =>
+              `<span class="pgc-gap-chip">${p.measure_id} · ${p.measure_name}</span>`
+            ).join('')
+          : '<div class="pgc-gap-ok">No gaps — member matches ideal twin.</div>';
+      }
+      animateGraph(r.member_id, cmp);
+    });
+    personaStatus.textContent = `Persona comparison complete for ${(data.results||[]).length} member(s).`;
 
     // Show results
     const container=document.getElementById('resultsContainer');
@@ -3164,7 +3497,7 @@ async function approveAndProcess(){
 
     document.getElementById('resultsArea').classList.add('show');
   }catch(e){
-    overlay.classList.remove('show');
+    clearInterval(stageTimer);
     alert('Processing failed: '+e.message);
   }
 }
