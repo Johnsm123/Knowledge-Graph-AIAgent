@@ -15,8 +15,7 @@ const LABEL_COLORS = {
   Lookback:  { bg: '#6366F1', text: '#fff' },
   CPT:       { bg: '#14B8A6', text: '#fff' },
   ICD:       { bg: '#F97316', text: '#fff' },
-  Exclusion: { bg: '#DC2626', text: '#fff' },
-  Prereq:    { bg: '#A855F7', text: '#fff' },
+  Disease: { bg: '#A855F7', text: '#fff' },
   Default:   { bg: '#6B7280', text: '#fff' },
 };
 
@@ -47,7 +46,7 @@ const LABEL_RADIUS = {
   CareGap: 24,
   Action: 16,
   // Knowledge Explorer leaves are smaller — they hang off a primary node
-  AgeRange: 18, Gender: 18, Lookback: 18, CPT: 18, ICD: 18, Exclusion: 20, Prereq: 18,
+  AgeRange: 18, Gender: 18, Lookback: 18, CPT: 18, ICD: 18, Disease: 18,
 };
 
 const REL_COLORS = {

@@ -26,7 +26,6 @@
               0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* Logo at the top of the card — always horizontally centered */
 .login-logo {
   display: flex;
   align-items: center;
@@ -36,6 +35,9 @@
   margin: 0 0 26px;
   line-height: 1;
   text-align: center;
+  
+  /* Add this — nudges the whole logo+text group left */
+  transform: translateX(-18px);
 }
 
 .login-logo img {

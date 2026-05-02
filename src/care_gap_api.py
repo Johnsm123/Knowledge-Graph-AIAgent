@@ -24,6 +24,14 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 agent_system = None
 logger = logging.getLogger(__name__)
 
+# Background outreach reminder scheduler — auto-rebook nudges for missed
+# appointments and a weekly reminder for members who never booked.
+try:
+    from src.outreach_scheduler import start_scheduler as _start_outreach_scheduler
+    _start_outreach_scheduler()
+except Exception as _sched_exc:
+    logger.warning(f"Outreach scheduler not started: {_sched_exc}")
+
 
 @socketio.on("join_portal")
 def _on_join_portal(_data=None):
@@ -360,6 +368,7 @@ def get_dashboard_stats():
                  g.created_on AS created_on
             RETURN measure_id, measure_name,
                    count(DISTINCT member_id) as gap_count,
+                   collect(DISTINCT member_id)  AS member_ids,
                    min(created_on) AS earliest_created,
                    max(created_on) AS latest_created
             ORDER BY gap_count DESC
@@ -964,10 +973,14 @@ def add_member():
 
 @app.route("/api/v1/members/<member_id>", methods=["DELETE"])
 def delete_member(member_id):
-    """Delete a member and all their relationships from Neo4j."""
+    """Delete a member and all their relationships from every DB the project
+    writes to: main DB, reference (persona-sync) DB, and persona-demo DB.
+    Each is best-effort — failure to reach the persona/reference DBs must not
+    block the primary deletion in the main DB.
+    """
     try:
         kg = get_knowledge_graph()
-        # Check member exists
+        # Check member exists in main DB
         exists = kg.run_query(
             "MATCH (m:Member {member_id: $mid}) RETURN m.name as name",
             {"mid": member_id},
@@ -977,16 +990,196 @@ def delete_member(member_id):
 
         member_name = exists[0]["name"]
 
-        # Delete the member node and ALL relationships (DETACH DELETE)
+        # 1. Main DB — full member subgraph (claims, gaps, lifestyle,
+        #    family-history, medical-history, appointments, outreach…)
         kg.run_query(
-            "MATCH (m:Member {member_id: $mid}) DETACH DELETE m",
+            """
+            MATCH (m:Member {member_id: $mid})
+            OPTIONAL MATCH (m)-[:HAS_LIFESTYLE]->(l:Lifestyle)
+            OPTIONAL MATCH (m)-[:HAS_RELATIVE]->(fm:FamilyMember)
+            OPTIONAL MATCH (m)-[:HAS_MEDICAL_HISTORY]->(mh:MedicalHistoryEntry)
+            OPTIONAL MATCH (m)-[:HAS_CLAIM]->(c:Claim)
+            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
+            OPTIONAL MATCH (m)-[:HAS_APPOINTMENT]->(a:Appointment)
+            OPTIONAL MATCH (o:Outreach)-[:CONTACTS]->(m)
+            DETACH DELETE l, fm, mh, c, g, a, o, m
+            """,
             {"mid": member_id},
         )
+
+        deleted_from = ["main"]
+
+        # 2. Reference DB (persona_sync) — same member_id may exist there
+        try:
+            from src.neo4j_connection import get_reference_graph
+            ref = get_reference_graph()
+            if ref is not None:
+                ref.run_query(
+                    """
+                    OPTIONAL MATCH (m:Member {member_id: $mid})
+                    OPTIONAL MATCH (m)-[:HAS_PERSONA]->(per:Persona)
+                    OPTIONAL MATCH (m)-[:HAS_CARE_GAP|HAS_GAP]->(g:CareGap)
+                    OPTIONAL MATCH (g)-[:HAS_ACTION]->(act:Action)
+                    DETACH DELETE act, g, per, m
+                    """,
+                    {"mid": member_id},
+                )
+                deleted_from.append("reference")
+        except Exception as ref_exc:
+            logger.warning(f"Reference-DB delete skipped for {member_id}: {ref_exc}")
+
+        # 3. Persona-demo DB — clean up Member + IdealPersona twin
+        try:
+            from src.persona_demo_writer import _get_driver as _get_persona_driver
+            pd_driver = _get_persona_driver()
+            if pd_driver is not None:
+                with pd_driver.session() as s:
+                    s.run(
+                        """
+                        OPTIONAL MATCH (m:Member {member_id: $mid})
+                        OPTIONAL MATCH (m)-[:COMPARED_TO]->(p:IdealPersona)
+                        DETACH DELETE p, m
+                        """,
+                        {"mid": member_id},
+                    ).consume()
+                deleted_from.append("persona-demo")
+        except Exception as pd_exc:
+            logger.warning(f"Persona-demo delete skipped for {member_id}: {pd_exc}")
 
         return jsonify({
             "status": "success",
             "message": f"Member {member_name} ({member_id}) deleted successfully",
+            "deleted_from": deleted_from,
         })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/care-gaps/auto-close-completed", methods=["POST"])
+def auto_close_completed_appointments():
+    """Backend automation that replaces the per-card "Force Close" button:
+    for every appointment marked Completed whose underlying CareGap is still
+    open, generate a Claim, close the CareGap, and recompute member
+    compliance. If a member's open-gap count reaches zero the member is
+    flagged compliant. Runs across the whole member roster — safe to call
+    repeatedly (idempotent on already-closed gaps).
+    """
+    try:
+        kg = get_knowledge_graph()
+        rows = kg.run_query(
+            """
+            MATCH (m:Member)-[:HAS_APPOINTMENT]->(a:Appointment)
+            WHERE a.status = 'Completed'
+            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap {care_gap_id: a.care_gap_id})
+            WHERE coalesce(g.is_open, true) = true
+            RETURN m.member_id          AS member_id,
+                   a.appointment_id     AS appointment_id,
+                   a.care_gap_id        AS care_gap_id,
+                   coalesce(a.measure_id, g.measure_id) AS measure_id,
+                   a.cpt_codes          AS cpt_codes,
+                   a.icd_codes          AS icd_codes,
+                   a.appointment_date   AS appointment_date
+            """, {}
+        ) or []
+
+        from datetime import datetime as _dt
+        import uuid as _uuid
+        closed = 0
+        compliant_now = []
+        for r in rows:
+            mid  = r.get("member_id"); cgid = r.get("care_gap_id")
+            if not (mid and cgid):
+                continue
+            claim_id = f"AUTO-CLM-{mid}-{(r.get('measure_id') or 'GEN')}-{_uuid.uuid4().hex[:6]}"
+            kg.run_query(
+                """
+                MATCH (m:Member {member_id: $mid})
+                MERGE (c:Claim {claim_id: $cid})
+                SET c.member_id    = $mid,
+                    c.measure_id   = $measure_id,
+                    c.cpt_code     = $cpt,
+                    c.icd_code     = $icd,
+                    c.service_date = $sdate,
+                    c.status       = 'Processed',
+                    c.created_on   = $now,
+                    c.auto_generated = true
+                MERGE (m)-[:HAS_CLAIM]->(c)
+                WITH c, m
+                MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap {care_gap_id: $cgid})
+                SET g.is_open    = false,
+                    g.gap_status = 'Closed',
+                    g.closed_on  = $now,
+                    g.claim_id   = $cid
+                """,
+                {"mid": mid, "cid": claim_id, "cgid": cgid,
+                 "measure_id": r.get("measure_id") or "",
+                 "cpt": r.get("cpt_codes") or "",
+                 "icd": r.get("icd_codes") or "",
+                 "sdate": r.get("appointment_date") or _dt.now().date().isoformat(),
+                 "now":   _dt.now().isoformat()},
+            )
+            # Mirror appointment status so the member-panel timer stops.
+            kg.run_query(
+                """
+                MATCH (m:Member {member_id: $mid})-[:HAS_APPOINTMENT]->(a:Appointment)
+                WHERE a.care_gap_id = $cgid AND a.status IN ['Scheduled','Booked']
+                SET a.status = 'Completed', a.completed_at = $now, a.claim_id = $cid
+                """,
+                {"mid": mid, "cgid": cgid, "now": _dt.now().isoformat(), "cid": claim_id},
+            )
+            closed += 1
+
+            # Persona-sync: mirror the closure into the reference DB so the
+            # member-panel lifecycle visualization updates automatically.
+            try:
+                from src.persona_sync import sync_gap_closed
+                sync_gap_closed(mid, cgid)
+            except Exception:
+                pass
+
+        # Recompute compliance per member.
+        compliance_rows = kg.run_query(
+            """
+            MATCH (m:Member)
+            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
+            WHERE coalesce(g.is_open, true) = true
+            WITH m, count(g) AS open_count
+            SET m.health_status = CASE WHEN open_count = 0 THEN 'Compliant' ELSE m.health_status END,
+                m.compliance_score = CASE WHEN open_count = 0 THEN 100.0 ELSE coalesce(m.compliance_score, 0.0) END
+            RETURN m.member_id AS member_id, open_count
+            """, {}
+        ) or []
+        compliant_now = [r["member_id"] for r in compliance_rows if r.get("open_count") == 0]
+
+        return jsonify({
+            "status": "success",
+            "gaps_closed": closed,
+            "members_now_compliant": compliant_now,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/outreach/run-rebook-reminders", methods=["POST"])
+def run_rebook_reminders_endpoint():
+    """Manually trigger the rebook-reminder pass (also runs hourly in the
+    background). Useful for demos and ops verification."""
+    try:
+        from src.outreach_scheduler import run_rebook_reminders
+        sent = run_rebook_reminders()
+        return jsonify({"status": "success", "emails_sent": sent})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/outreach/run-weekly-reminders", methods=["POST"])
+def run_weekly_reminders_endpoint():
+    """Manually trigger the weekly-reminder pass (also runs daily in the
+    background). Useful for demos and ops verification."""
+    try:
+        from src.outreach_scheduler import run_weekly_reminders
+        sent = run_weekly_reminders()
+        return jsonify({"status": "success", "emails_sent": sent})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
@@ -1240,29 +1433,16 @@ def dashboard_main_graph():
                 iid = f"ICD:{mid}"
                 q_nodes.append({"id": iid, "label": "ICD", "name": icd, "props": {"Primary ICD-10": icd}})
                 q_edges.append({"source": f"Q:{mid}", "target": iid, "type": "PRIMARY_ICD"})
-            # Diagnosis prereq leaf
+            # Diagnosis prerequisite leaf — labelled "Disease" so the
+            # Knowledge Explorer legend reads in plain clinical language.
             diag = md.get("diagnosis_requirement", "")
             if diag:
                 did = f"DIAG:{mid}"
-                q_nodes.append({"id": did, "label": "Prereq", "name": diag[:48], "props": {"Diagnosis prerequisite": diag}})
+                q_nodes.append({"id": did, "label": "Disease", "name": diag[:48], "props": {"Disease": diag}})
                 q_edges.append({"source": f"Q:{mid}", "target": did, "type": "DIAGNOSIS_REQ"})
-            # Exclusion leaves (one node per exclusion type)
-            for ex in (md.get("exclusions", {}) or {}).get("required", []) or []:
-                ex_type = ex.get("type", "")
-                if not ex_type:
-                    continue
-                exid = f"EX:{mid}:{ex_type}"
-                pretty = ex_type.replace("_", " ")
-                icd_codes = ", ".join((ex.get("icd10") or [])[:6])
-                q_nodes.append({
-                    "id": exid, "label": "Exclusion", "name": pretty,
-                    "props": {
-                        "Exclusion": pretty,
-                        "Description": ex.get("description", ""),
-                        "ICD-10": icd_codes or "—",
-                    },
-                })
-                q_edges.append({"source": f"Q:{mid}", "target": exid, "type": "EXCLUDES"})
+            # Exclusion leaves intentionally omitted — Knowledge Explorer keeps
+            # the Measure subgraph focused on positive criteria; the operational
+            # exclusion rules are still applied by the rules engine.
 
         return jsonify({
             "members_graph":   {"nodes": m_nodes, "edges": m_edges},
@@ -2305,6 +2485,7 @@ def bulk_process_members():
 
             # 2. Send outreach email with portal link
             email_sent = False
+            email_error_msg = ""
             if memail:
                 try:
                     from azure.communication.email import EmailClient
@@ -2435,6 +2616,35 @@ def bulk_process_members():
 
                 except Exception as email_err:
                     logger.warning(f"Bulk email failed for {mid}: {email_err}")
+                    email_error_msg = str(email_err)[:200]
+
+            # Persona-comparison side-effect — mirror member + ideal twin into
+            # the persona-demo DB so the upload page can animate the
+            # persona-vs-member comparison in real time. Best-effort: if the
+            # persona DB is unreachable we still complete the main flow.
+            persona_comparison = None
+            try:
+                from src.persona_demo_writer import build_persona_comparison, push_member_persona
+                from src.care_gap_neo4j import get_member_profile as _get_profile_p
+                from src.care_gap_neo4j import get_member_open_gaps as _get_open_p
+                from src.care_gap_neo4j import (
+                    get_member_family_history as _get_family_p,
+                    get_member_medical_history as _get_medical_p,
+                )
+                _profile_p = _get_profile_p(mid) or {"member_id": mid, "name": mname}
+                _profile_p["member_id"] = mid
+                _open_p = _get_open_p(mid) or []
+                _family_p  = _get_family_p(mid) or []
+                _medical_p = _get_medical_p(mid) or {}
+                persona_comparison = build_persona_comparison(
+                    _profile_p, _open_p,
+                    completed=[],
+                    family_history=_family_p,
+                    medical_history=_medical_p,
+                )
+                push_member_persona(_profile_p, persona_comparison)
+            except Exception as p_exc:
+                logger.warning(f"Persona-demo push failed for {mid}: {p_exc}")
 
             with lock:
                 processing_results[mid] = {
@@ -2442,7 +2652,9 @@ def bulk_process_members():
                     "name": mname,
                     "status": "completed",
                     "email_sent": email_sent,
+                    "email_error": email_error_msg,
                     "analysis_summary": str(analysis.get("summary", ""))[:500] if isinstance(analysis, dict) else str(analysis)[:500],
+                    "persona_comparison": persona_comparison,
                 }
         except Exception as exc:
             logger.error(f"Bulk process error for {mid}: {exc}", exc_info=True)
@@ -2478,6 +2690,51 @@ def bulk_process_members():
         "total_processed": len(processing_results),
         "results": list(processing_results.values()),
     })
+
+
+@app.route("/api/v1/members/bulk-preview-persona", methods=["POST"])
+def bulk_preview_persona():
+    """Persona-based care-gap discovery for the bulk-upload PREVIEW step.
+    Decoupled from outreach: runs rules-engine + persona-demo writer per
+    member, returns the comparison summaries the bulk-upload UI animates.
+    No emails, no Outreach nodes, no claim generation.
+    """
+    data = request.json or {}
+    member_list = data.get("members", [])
+    if not member_list:
+        return jsonify({"status": "error", "error": "No members provided"}), 400
+    results = []
+    try:
+        from src.persona_demo_writer import build_persona_comparison, push_member_persona
+        from src.care_gap_neo4j import (
+            get_member_profile as _get_profile,
+            get_member_open_gaps as _get_open,
+            get_member_family_history as _get_family,
+            get_member_medical_history as _get_medical,
+        )
+        for m in member_list:
+            mid = m.get("member_id")
+            if not mid:
+                continue
+            try:
+                profile = _get_profile(mid) or {"member_id": mid, "name": m.get("name", mid)}
+                profile["member_id"] = mid
+                cmp = build_persona_comparison(
+                    profile,
+                    _get_open(mid) or [],
+                    completed=[],
+                    family_history=_get_family(mid) or [],
+                    medical_history=_get_medical(mid) or {},
+                )
+                push_member_persona(profile, cmp)
+                results.append({"status": "ok", "member_id": mid, "name": m.get("name", mid),
+                                "email": m.get("email", ""), "persona_comparison": cmp})
+            except Exception as one_exc:
+                results.append({"status": "error", "member_id": mid,
+                                "name": m.get("name", mid), "error": str(one_exc)})
+        return jsonify({"status": "success", "results": results})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 @app.route("/api/v1/members/bulk-upload-page")
@@ -2871,15 +3128,18 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
 /* Preview popup (modal) */
 .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,72,0.5);z-index:1000;align-items:center;justify-content:center}
 .modal-overlay.show{display:flex}
-.modal{background:#fff;border-radius:0;width:95%;max-width:1200px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 48px rgba(0,0,72,0.2)}
-.modal-header{background:#000048;color:#fff;padding:20px 28px;display:flex;justify-content:space-between;align-items:center}
+.modal{background:#fff;border-radius:0;width:97%;max-width:1500px;height:95vh;max-height:95vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 48px rgba(0,0,72,0.2)}
+.modal-header{background:#000048;color:#fff;padding:18px 28px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
 .modal-header h2{font-size:20px}
 .modal-close{background:none;border:none;color:#fff;font-size:28px;cursor:pointer}
-.modal-body{overflow-y:auto;padding:24px 28px;flex:1}
-.modal-footer{padding:16px 28px;border-top:1px solid #E8E8E6;display:flex;justify-content:space-between;align-items:center;background:#F7F7F5}
+.modal-body{overflow-y:auto;overflow-x:hidden;padding:20px 28px;flex:1;min-height:0}
+.modal-scroll{overflow-y:auto;overflow-x:hidden;padding:20px 28px;flex:1 1 auto;min-height:0;display:block}
+.modal-footer{padding:14px 28px;border-top:1px solid #E8E8E6;display:flex;justify-content:space-between;align-items:center;background:#F7F7F5;flex-shrink:0}
 
 .summary-bar{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
-.summary-item{background:rgba(47,120,196,0.06);padding:12px 20px;border-radius:0;text-align:center;min-width:140px}
+.summary-item{background:rgba(47,120,196,0.06);padding:14px 20px;border-radius:0;text-align:center;min-width:160px;flex:1}
+.summary-item .num{font-size:26px;font-weight:700;color:#000048;line-height:1}
+.summary-item .lbl{font-size:11px;color:#53565A;text-transform:uppercase;letter-spacing:0.4px;margin-top:6px;font-weight:600}
 .summary-item .num{font-size:24px;font-weight:700;color:#000048}
 .summary-item .lbl{font-size:11px;color:#53565A;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
 
@@ -2928,6 +3188,65 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
 .result-card .info .name{font-weight:700;font-size:15px;color:#000048}
 .result-card .info .detail{color:#53565A;font-size:12px;margin-top:2px}
 .result-card .status-badge{padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600}
+
+/* Realtime persona-comparison panel */
+.persona-panel{display:none;margin-top:24px;background:linear-gradient(135deg,#f6f9ff 0%,#eef3ff 100%);border-radius:12px;padding:20px 24px;box-shadow:0 2px 12px rgba(0,0,72,0.08)}
+.persona-panel.persona-panel--in-modal{margin:18px 0 0;width:100%}
+.persona-panel.persona-panel--in-modal.show{display:block}
+.persona-panel--in-modal .persona-list{display:grid;grid-template-columns:1fr;gap:14px}
+.persona-panel--in-modal .pgraph-card{padding:14px 18px}
+.persona-panel--in-modal .pgc-svg{min-height:480px}
+.persona-panel.show{display:block}
+.persona-panel-head h2{margin:0 0 4px;color:#000048;font-size:18px}
+.persona-panel-head p{margin:0 0 16px;color:#53565A;font-size:13px}
+.persona-list{display:grid;grid-template-columns:1fr;gap:18px}
+
+/* Per-member graph card */
+.pgraph-card{background:#fff;border-radius:12px;padding:18px 22px;border:1px solid #dde4f7;animation:fadeUp .5s ease both;box-shadow:0 1px 4px rgba(0,0,72,0.04)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.pgc-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:12px}
+.pgc-avatar{width:42px;height:42px;border-radius:50%;background:#000048;color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pgc-identity{flex:1;min-width:0}
+.pgc-name{font-weight:700;color:#000048;font-size:16px;margin-bottom:4px}
+.pgc-meta{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#374151;margin-top:2px}
+.pgc-meta strong{color:#6B7280;font-weight:500;margin-right:3px}
+.pgc-meta-row2{margin-top:4px;color:#475569}
+.pgc-stage{font-size:11.5px;color:#3B82F6;background:#EFF6FF;padding:6px 14px;border-radius:999px;font-weight:600;white-space:nowrap;align-self:center}
+.pgc-stage--gap{color:#B81F2D;background:#FEF2F2}
+.pgc-stage--ok{color:#059669;background:#ECFDF5}
+
+.pgc-graph-wrap{position:relative;background:#0b1220;border-radius:10px;padding:6px;margin:6px 0 12px}
+.pgc-svg{width:100%;height:auto;display:block;background:radial-gradient(circle at center,#0f172a 0%,#0b1220 80%);border-radius:6px}
+/* SVG-internal <animate> tags drive the node + edge fade-in. CSS keyframes
+   are deliberately not used on SVG <g>/<line> elements because animating
+   CSS transform overrides the SVG transform="translate(x,y)" attribute and
+   collapses the geometry to (0,0). */
+
+.pgc-legend{display:flex;align-items:center;gap:6px;font-size:11px;color:#cbd5e1;padding:6px 10px}
+.pgc-legend .lg-dot{display:inline-block;width:9px;height:9px;border-radius:50%}
+.pgc-legend .lg-edge{display:inline-block;width:24px;height:0;border-top:2px solid #10B981}
+.pgc-legend .lg-edge--dashed{border-top:2px dashed #B81F2D}
+
+.pgc-gaps{font-size:12px;color:#374151;margin-top:6px;padding-top:10px;border-top:1px dashed #E5E7EB}
+.pgc-gap-title{font-weight:600;margin-bottom:6px;color:#B81F2D}
+.pgc-gap-chip{display:inline-block;background:#FEF2F2;color:#B81F2D;border:1px solid #FECACA;padding:3px 8px;margin:3px 4px 0 0;border-radius:999px;font-size:11px;font-weight:500}
+.pgc-gap-ok{color:#059669;font-weight:500}
+
+.pgc-history{margin-top:12px;padding-top:10px;border-top:1px dashed #E5E7EB;font-size:12px}
+.pgc-hist-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pgc-hist-col{background:#F9FAFB;border-radius:8px;padding:10px 12px;border:1px solid #E5E7EB}
+.pgc-hist-title{font-weight:700;color:#000048;margin-bottom:8px;font-size:12px}
+.pgc-fam-row{padding:6px 0;border-bottom:1px solid #F1F5F9;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.pgc-fam-row:last-child{border-bottom:none}
+.pgc-fam-row strong{color:#000048;text-transform:capitalize;min-width:70px}
+.pgc-fam-status{font-size:10px;padding:2px 8px;border-radius:999px;font-weight:600}
+.pgc-fam-status.alive{background:#ECFDF5;color:#059669}
+.pgc-fam-status.deceased{background:#FEF2F2;color:#B81F2D}
+.pgc-fam-chip{background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;padding:2px 8px;border-radius:999px;font-size:10.5px}
+.pgc-med-row{padding:5px 0;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.pgc-med-label{color:#6B7280;font-weight:600;min-width:90px;font-size:11px}
+.pgc-med-chip{background:#F0F9FF;color:#0369A1;border:1px solid #BAE6FD;padding:2px 8px;border-radius:999px;font-size:10.5px}
+.pgc-empty{color:#9CA3AF;font-size:11px;font-style:italic}
 .result-card .status-badge.success{background:rgba(45,184,31,0.1);color:#2DB81F}
 .result-card .status-badge.error{background:rgba(184,31,45,0.08);color:#B81F2D}
 </style></head><body>
@@ -2955,7 +3274,20 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
       <h2>&#128269; Care Gap Analysis Preview</h2>
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
-    <div class="modal-body" id="previewBody"></div>
+    <!-- Single scrollable region containing both the member checklist and
+         the realtime persona visualization, so the user can scroll the whole
+         thing freely inside the modal. -->
+    <div class="modal-scroll">
+      <div id="previewBody"></div>
+      <div class="persona-panel persona-panel--in-modal" id="personaPanel">
+        <div class="persona-panel-head">
+          <h2>🧬 Persona-Based Care-Gap Discovery — Live</h2>
+          <p id="personaStatus">Generating closest-fit ideal personas…</p>
+        </div>
+        <div class="persona-list" id="personaList"></div>
+      </div>
+    </div>
+
     <div class="modal-footer">
       <div>
         <button class="cancel-btn" onclick="closeModal()">Cancel</button>
@@ -3098,6 +3430,617 @@ function showPreview(members){
   body.innerHTML=html;
   document.getElementById('previewModal').classList.add('show');
   updateCount();
+
+  // ── Kick off persona-based care-gap discovery NOW (during preview),
+  //    before the user presses "Proceed with Outreach". This decouples the
+  //    realtime visualization from the Azure email send so it's always
+  //    visible — even if the email send is throttled / fails later.
+  loadPreviewPersonaPanel(members);
+}
+
+// ── Persona-graph helpers (top-level so showPreview/loadPreviewPersonaPanel
+// can reach them; previously these were nested inside approveAndProcess and
+// silently undefined at preview time). ───────────────────────────────────
+const PG_VB_W = 900, PG_VB_H = 520, PG_MX = 180, PG_PX = 720, PG_CY = 260;
+
+// Per-graph registry so we can drag nodes and have connected edges follow,
+// Neo4j-Browser-style. mid → { nodes: {nodeId: {x,y,el}}, edges: [{el, from, fromOff, to, toOff}] }
+const PG_REGISTRY = {};
+
+function pgRegisterNode(mid, nodeId, x, y, el){
+  PG_REGISTRY[mid] = PG_REGISTRY[mid] || {nodes:{}, edges:[]};
+  PG_REGISTRY[mid].nodes[nodeId] = {x, y, el};
+}
+function pgRegisterEdge(mid, fromId, toId, lineEl, fromOff, toOff){
+  PG_REGISTRY[mid] = PG_REGISTRY[mid] || {nodes:{}, edges:[]};
+  PG_REGISTRY[mid].edges.push({el: lineEl, from: fromId, to: toId,
+    fromOff: fromOff || {dx:0, dy:0}, toOff: toOff || {dx:0, dy:0}});
+}
+function pgMoveNode(mid, nodeId, nx, ny){
+  const reg = PG_REGISTRY[mid]; if (!reg) return;
+  const node = reg.nodes[nodeId]; if (!node) return;
+  node.x = nx; node.y = ny;
+  node.el.setAttribute('transform', `translate(${nx},${ny})`);
+  reg.edges.forEach(e => {
+    if (e.from === nodeId){
+      e.el.setAttribute('x1', nx + e.fromOff.dx);
+      e.el.setAttribute('y1', ny + e.fromOff.dy);
+    }
+    if (e.to === nodeId){
+      e.el.setAttribute('x2', nx + e.toOff.dx);
+      e.el.setAttribute('y2', ny + e.toOff.dy);
+    }
+  });
+}
+
+// Attach drag handlers to a graph card's SVG (called once per card).
+function pgAttachDrag(mid){
+  const svg = document.getElementById(`pgc-svg-${mid}`);
+  if (!svg || svg.dataset.dragWired) return;
+  svg.dataset.dragWired = '1';
+  let dragging = null; // {nodeId, dx, dy}
+  function svgPoint(evt){
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return {x: evt.clientX, y: evt.clientY};
+    const inv = ctm.inverse();
+    const p = pt.matrixTransform(inv);
+    return {x: p.x, y: p.y};
+  }
+  svg.addEventListener('mousedown', evt => {
+    const g = evt.target.closest('g[data-pg-node-id]');
+    if (!g) return;
+    const id = g.dataset.pgNodeId;
+    const node = (PG_REGISTRY[mid]?.nodes||{})[id];
+    if (!node) return;
+    const p = svgPoint(evt);
+    dragging = { nodeId: id, dx: p.x - node.x, dy: p.y - node.y };
+    svg.style.cursor = 'grabbing';
+    evt.preventDefault();
+  });
+  window.addEventListener('mousemove', evt => {
+    if (!dragging) return;
+    const p = svgPoint(evt);
+    pgMoveNode(mid, dragging.nodeId, p.x - dragging.dx, p.y - dragging.dy);
+  });
+  window.addEventListener('mouseup', () => {
+    if (dragging) { svg.style.cursor=''; dragging = null; }
+  });
+}
+
+function pgFadeIn(dur){
+  dur = dur || '0.45s';
+  return `<animate attributeName="opacity" from="0" to="1" dur="${dur}" fill="freeze"/>`;
+}
+function pgClearGraph(mid){
+  const n = document.getElementById(`pgc-nodes-${mid}`);
+  const e = document.getElementById(`pgc-edges-${mid}`);
+  if (n) n.innerHTML = '';
+  if (e) e.innerHTML = '';
+}
+function pgAppendNode(mid, html){
+  const el = document.getElementById(`pgc-nodes-${mid}`);
+  if (el) el.insertAdjacentHTML('beforeend', html);
+}
+function pgAppendEdge(mid, html){
+  const el = document.getElementById(`pgc-edges-${mid}`);
+  if (el) el.insertAdjacentHTML('beforeend', html);
+}
+
+function renderGraphCard(m){
+  const initials = (m.name || '?').split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
+  return `
+    <div class="pgraph-card" id="pgc-${m.member_id}">
+      <div class="pgc-head">
+        <div class="pgc-avatar">${initials}</div>
+        <div class="pgc-identity">
+          <div class="pgc-name">${m.name||'—'}</div>
+          <div class="pgc-meta" id="pgc-meta-${m.member_id}">
+            <span><strong>ID:</strong> ${m.member_id}</span>
+            <span><strong>Email:</strong> ${m.email||'—'}</span>
+          </div>
+          <div class="pgc-meta pgc-meta-row2" id="pgc-meta2-${m.member_id}">
+            <span><strong>Age:</strong> —</span>
+            <span><strong>Gender:</strong> —</span>
+            <span><strong>PCP:</strong> —</span>
+            <span><strong>Insurance:</strong> —</span>
+          </div>
+        </div>
+        <div class="pgc-stage" id="pgc-stage-${m.member_id}">⏳ Connecting to graph…</div>
+      </div>
+      <div class="pgc-graph-wrap">
+        <svg class="pgc-svg" id="pgc-svg-${m.member_id}" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet">
+          <g id="pgc-edges-${m.member_id}"></g>
+          <g id="pgc-nodes-${m.member_id}"></g>
+        </svg>
+        <div class="pgc-legend">
+          <span class="lg-dot" style="background:#000048"></span> Member
+          <span class="lg-dot" style="background:#10B981;margin-left:10px"></span> Persona
+          <span class="lg-dot" style="background:#3B82F6;margin-left:10px"></span> Screening
+          <span class="lg-edge lg-edge--solid" style="margin-left:10px"></span> Completed
+          <span class="lg-edge lg-edge--dashed" style="margin-left:10px"></span> Care Gap
+        </div>
+      </div>
+      <div class="pgc-gaps" id="pgc-gaps-${m.member_id}"><em>Awaiting comparison…</em></div>
+    </div>`;
+}
+
+function memberNodeHtml(cmp){
+  const initials = (cmp.member_name||'?').split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase();
+  return `
+    <g transform="translate(${PG_MX},${PG_CY})" opacity="0">${pgFadeIn()}
+      <circle r="40" fill="#000048" stroke="#fff" stroke-width="3"/>
+      <text text-anchor="middle" dy="-2" fill="#fff" font-size="13" font-weight="700">${initials}</text>
+      <text text-anchor="middle" dy="14" fill="#bcd0ff" font-size="9">${cmp.member_id}</text>
+      <text text-anchor="middle" dy="60" fill="#bcd0ff" font-size="11" font-weight="600">Member · ${(cmp.member_name||'').slice(0,18)}</text>
+    </g>`;
+}
+function personaNodeHtml(cmp){
+  // Random persona ID allocated by the backend (e.g. P12, P45) — jumbled, not derived from member_id.
+  const pid = cmp.persona_id || 'P??';
+  return `
+    <g transform="translate(${PG_PX},${PG_CY})" opacity="0">${pgFadeIn()}
+      <circle r="36" fill="#10B981" stroke="#fff" stroke-width="3"/>
+      <text text-anchor="middle" dy="-2" fill="#fff" font-size="11" font-weight="700">IDEAL</text>
+      <text text-anchor="middle" dy="12" fill="#d1fae5" font-size="9">${pid}</text>
+      <text text-anchor="middle" dy="56" fill="#a7f3d0" font-size="11" font-weight="600">Persona · closest fit</text>
+    </g>`;
+}
+
+async function animateGraph(mid, cmp){
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  pgClearGraph(mid);
+  PG_REGISTRY[mid] = {nodes:{}, edges:[]};
+  pgAttachDrag(mid);
+
+  // Helper: append a draggable node and register it.
+  const addNode = (nodeId, x, y, innerSVG, opts) => {
+    const ns = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('transform', `translate(${x},${y})`);
+    g.setAttribute('opacity', '0');
+    g.setAttribute('data-pg-node-id', nodeId);
+    g.style.cursor = 'grab';
+    g.innerHTML = `${pgFadeIn()}${innerSVG}`;
+    document.getElementById(`pgc-nodes-${mid}`).appendChild(g);
+    pgRegisterNode(mid, nodeId, x, y, g);
+    return g;
+  };
+  const addEdge = (fromId, toId, fromOff, toOff, attrs, label) => {
+    const ns = 'http://www.w3.org/2000/svg';
+    const fromN = PG_REGISTRY[mid].nodes[fromId];
+    const toN   = PG_REGISTRY[mid].nodes[toId];
+    if (!fromN || !toN) return;
+    const x1 = fromN.x + (fromOff?.dx||0);
+    const y1 = fromN.y + (fromOff?.dy||0);
+    const x2 = toN.x   + (toOff?.dx||0);
+    const y2 = toN.y   + (toOff?.dy||0);
+    const line = document.createElementNS(ns, 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    Object.entries(attrs||{}).forEach(([k,v]) => line.setAttribute(k, v));
+    line.setAttribute('opacity', '0');
+    line.innerHTML = `<animate attributeName="opacity" from="0" to="${attrs.opacity!=null?attrs.opacity:1}" dur="0.45s" fill="freeze"/>`;
+    document.getElementById(`pgc-edges-${mid}`).appendChild(line);
+    pgRegisterEdge(mid, fromId, toId, line, fromOff, toOff);
+    if (label){
+      const txt = document.createElementNS(ns, 'text');
+      txt.setAttribute('x', (x1+x2)/2);
+      txt.setAttribute('y', (y1+y2)/2 - 4);
+      txt.setAttribute('text-anchor', 'middle');
+      txt.setAttribute('font-size', '9');
+      txt.setAttribute('fill', label.color||'#9CA3AF');
+      txt.textContent = label.text;
+      txt.setAttribute('opacity', '0');
+      txt.innerHTML += `<animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="0.15s" fill="freeze"/>`;
+      document.getElementById(`pgc-edges-${mid}`).appendChild(txt);
+      // Track the label too: re-anchor between the two nodes when either moves.
+      pgRegisterEdge(mid, fromId, toId, txt, fromOff, toOff);
+      // Override the line-only update to also recompute midpoint for the text:
+      const reg = PG_REGISTRY[mid];
+      const lastEdge = reg.edges[reg.edges.length - 1];
+      lastEdge.isLabel = true;
+    }
+  };
+
+  // Override pgMoveNode to also reposition labels at the midpoint.
+  if (!window.__pgMoveNodePatched){
+    const original = pgMoveNode;
+    window.pgMoveNode = function(mid, nodeId, nx, ny){
+      const reg = PG_REGISTRY[mid]; if (!reg) return;
+      const node = reg.nodes[nodeId]; if (!node) return;
+      node.x = nx; node.y = ny;
+      node.el.setAttribute('transform', `translate(${nx},${ny})`);
+      reg.edges.forEach(e => {
+        if (e.isLabel){
+          const f = reg.nodes[e.from], t = reg.nodes[e.to];
+          if (!f || !t) return;
+          const x1 = f.x + (e.fromOff.dx||0), y1 = f.y + (e.fromOff.dy||0);
+          const x2 = t.x + (e.toOff.dx  ||0), y2 = t.y + (e.toOff.dy  ||0);
+          e.el.setAttribute('x', (x1+x2)/2);
+          e.el.setAttribute('y', (y1+y2)/2 - 4);
+        } else {
+          if (e.from === nodeId){ e.el.setAttribute('x1', nx + e.fromOff.dx); e.el.setAttribute('y1', ny + e.fromOff.dy); }
+          if (e.to   === nodeId){ e.el.setAttribute('x2', nx + e.toOff.dx);   e.el.setAttribute('y2', ny + e.toOff.dy);   }
+        }
+      });
+    };
+    window.__pgMoveNodePatched = true;
+  }
+
+  // Member node (draggable)
+  addNode('member', PG_MX, PG_CY, `
+    <circle r="40" fill="#000048" stroke="#fff" stroke-width="3"/>
+    <text text-anchor="middle" dy="-2" fill="#fff" font-size="13" font-weight="700">${(cmp.member_name||'?').split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase()}</text>
+    <text text-anchor="middle" dy="14" fill="#bcd0ff" font-size="9">${cmp.member_id}</text>
+    <text text-anchor="middle" dy="60" fill="#bcd0ff" font-size="11" font-weight="600">Member · ${(cmp.member_name||'').slice(0,18)}</text>
+  `);
+  await sleep(450);
+  // Persona node
+  addNode('persona', PG_PX, PG_CY, `
+    <circle r="36" fill="#10B981" stroke="#fff" stroke-width="3"/>
+    <text text-anchor="middle" dy="-2" fill="#fff" font-size="11" font-weight="700">IDEAL</text>
+    <text text-anchor="middle" dy="12" fill="#d1fae5" font-size="9">${cmp.persona_id||'P??'}</text>
+    <text text-anchor="middle" dy="56" fill="#a7f3d0" font-size="11" font-weight="600">Persona · closest fit</text>
+  `);
+  await sleep(450);
+  // COMPARED_TO edge
+  addEdge('member', 'persona', {dx:0,dy:0}, {dx:0,dy:0},
+    {stroke:'#10B981', 'stroke-width':'2.5', opacity:1},
+    {text:'COMPARED_TO', color:'#10B981'});
+  await sleep(450);
+
+  // Lifestyle parameter nodes between member and persona (top arc)
+  const params = [
+    { key:'BMI',      ideal:(cmp.ideal_lifestyle||{}).bmi },
+    { key:'Smoking',  ideal:(cmp.ideal_lifestyle||{}).smoking_status },
+    { key:'Exercise', ideal:(cmp.ideal_lifestyle||{}).exercise_frequency },
+    { key:'Diet',     ideal:(cmp.ideal_lifestyle||{}).diet_type },
+  ];
+  for (let i = 0; i < params.length; i++){
+    const t = (i+1)/(params.length+1);
+    const px = PG_MX + t*(PG_PX-PG_MX);
+    const py = PG_CY - 110;
+    addNode(`param-${i}`, px, py, `
+      <rect x="-46" y="-16" width="92" height="32" rx="16" ry="16" fill="#1e293b" stroke="#7373D8" stroke-width="1.5"/>
+      <text text-anchor="middle" dy="-2" fill="#cbd5e1" font-size="9" font-weight="600">${params[i].key}</text>
+      <text text-anchor="middle" dy="9" fill="#a7f3d0" font-size="8">${(params[i].ideal||'').toString().slice(0,16)}</text>
+    `);
+    addEdge('member', `param-${i}`, {dx:0,dy:-12}, {dx:0,dy:18},
+      {stroke:'#64748b','stroke-width':'1.4','stroke-dasharray':'3 3',opacity:0.65});
+    addEdge(`param-${i}`, 'persona', {dx:0,dy:18}, {dx:0,dy:-12},
+      {stroke:'#10B981','stroke-width':'1.4',opacity:0.65});
+    await sleep(220);
+  }
+
+  // Screening nodes — fan arc beneath
+  const screenings = [...(cmp.completed_screenings||[]), ...(cmp.pending_screenings||[])];
+  if (screenings.length){
+    const arcY = PG_CY + 120, arcRadius = 200, arcCenterX = (PG_MX+PG_PX)/2;
+    const totalArc = Math.min(Math.PI*0.7, Math.PI*0.18*screenings.length);
+    const startAngle = Math.PI/2 - totalArc/2;
+    for (let i = 0; i < screenings.length; i++){
+      const s = screenings[i];
+      const completed = i < (cmp.completed_screenings||[]).length;
+      const angle = startAngle + (screenings.length===1 ? totalArc/2 : (totalArc*i)/(screenings.length-1));
+      const sx = arcCenterX + arcRadius*Math.cos(angle);
+      const sy = arcY + 30 - arcRadius*Math.sin(angle)*0.45;
+      const fill = completed ? '#3B82F6' : '#FCA5A5';
+      const ring = completed ? '#1D4ED8' : '#B81F2D';
+      const labelColor = completed ? '#bfdbfe' : '#fecaca';
+      const nodeId = `scr-${i}`;
+      addNode(nodeId, sx, sy, `
+        <circle r="22" fill="${fill}" stroke="${ring}" stroke-width="2"/>
+        <text text-anchor="middle" dy="3" fill="#fff" font-size="10" font-weight="700">${(s.measure_id||'').slice(0,4)}</text>
+        <text text-anchor="middle" dy="38" fill="${labelColor}" font-size="9" font-weight="500">${(s.measure_name||s.measure_id||'').slice(0,18)}</text>
+      `);
+      addEdge('member', nodeId,
+        {dx:0,dy:18}, {dx:0,dy:-18},
+        completed
+          ? {stroke:'#10B981','stroke-width':'2',opacity:1}
+          : {stroke:'#B81F2D','stroke-width':'2','stroke-dasharray':'6 4',opacity:1},
+        {text: completed ? 'HAS_COMPLETED' : 'CARE_GAP', color: completed ? '#34d399' : '#fca5a5'});
+      addEdge('persona', nodeId,
+        {dx:0,dy:18}, {dx:0,dy:-18},
+        {stroke:'#3B82F6','stroke-width':'1.3',opacity:0.55});
+      await sleep(280);
+    }
+  }
+
+  // Family / Ancestral history (left side, purple)
+  const fam = (cmp.family_history||[]).slice(0,4);
+  for (let i = 0; i < fam.length; i++){
+    const f = fam[i];
+    const fy = 80 + i*80, fx = 124;
+    const nodeId = `fam-${i}`;
+    addNode(nodeId, fx, fy, `
+      <rect x="-84" y="-16" width="168" height="32" rx="14" ry="14" fill="#1e1b4b" stroke="#8B5CF6" stroke-width="1.5"/>
+      <text x="-74" y="-2" fill="#ddd6fe" font-size="10" font-weight="700">${f.relation}</text>
+      <text x="-74" y="11" fill="#c4b5fd" font-size="8">${(f.conditions||[]).slice(0,2).join(', ').slice(0,28) || (f.alive ? 'no conditions' : 'deceased')}</text>
+    `);
+    addEdge('member', nodeId, {dx:-30,dy:-15}, {dx:84,dy:0},
+      {stroke:'#8B5CF6','stroke-width':'1.4',opacity:0.7},
+      {text:'HAS_RELATIVE', color:'#c4b5fd'});
+    await sleep(180);
+  }
+
+  // Medical history (right side)
+  const med = cmp.medical_history || {};
+  const medItems = [
+    ...(med.current_conditions||[]).slice(0,2).map(x => ({type:'Current', label:x, color:'#0EA5E9'})),
+    ...(med.medications||[]).slice(0,2).map(x => ({type:'Med', label:x, color:'#14B8A6'})),
+    ...(med.allergies||[]).slice(0,1).map(x => ({type:'Allergy', label:x, color:'#F97316'})),
+  ];
+  for (let i = 0; i < medItems.length; i++){
+    const item = medItems[i];
+    const my = 80 + i*80, mx_pos = 770;
+    const nodeId = `med-${i}`;
+    addNode(nodeId, mx_pos, my, `
+      <rect x="-90" y="-16" width="180" height="32" rx="14" ry="14" fill="#0c2540" stroke="${item.color}" stroke-width="1.5"/>
+      <text x="0" y="-2" text-anchor="middle" fill="#cbd5e1" font-size="9" font-weight="700">${item.type}</text>
+      <text x="0" y="11" text-anchor="middle" fill="#e2e8f0" font-size="9">${(item.label||'').slice(0,28)}</text>
+    `);
+    addEdge('member', nodeId, {dx:30,dy:-15}, {dx:-90,dy:0},
+      {stroke:item.color,'stroke-width':'1.4',opacity:0.7},
+      {text:'HAS_MEDICAL', color:item.color});
+    await sleep(180);
+  }
+
+  return; // legacy step-based renderer below is unused
+}
+
+async function _legacyAnimateGraph_unused(mid, cmp){
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  pgClearGraph(mid);
+  pgAppendNode(mid, memberNodeHtml(cmp));   await sleep(450);
+  pgAppendNode(mid, personaNodeHtml(cmp));  await sleep(450);
+  pgAppendEdge(mid, `
+    <line x1="${PG_MX}" y1="${PG_CY}" x2="${PG_PX}" y2="${PG_CY}"
+          stroke="#10B981" stroke-width="2.5" opacity="0">${pgFadeIn('0.5s')}</line>
+    <text x="${(PG_MX+PG_PX)/2}" y="${PG_CY-10}" text-anchor="middle" fill="#10B981"
+          font-size="12" font-weight="700" opacity="0">${pgFadeIn('0.5s')}COMPARED_TO</text>
+  `);
+  await sleep(550);
+
+  const params = [
+    { key: 'BMI',      ideal: (cmp.ideal_lifestyle||{}).bmi },
+    { key: 'Smoking',  ideal: (cmp.ideal_lifestyle||{}).smoking_status },
+    { key: 'Exercise', ideal: (cmp.ideal_lifestyle||{}).exercise_frequency },
+    { key: 'Diet',     ideal: (cmp.ideal_lifestyle||{}).diet_type },
+  ];
+  const paramY = PG_CY - 110;
+  for (let i = 0; i < params.length; i++){
+    const t = (i + 1) / (params.length + 1);
+    const px = PG_MX + t * (PG_PX - PG_MX);
+    const p = params[i];
+    pgAppendEdge(mid, `<line x1="${PG_MX}" y1="${PG_CY-12}" x2="${px}" y2="${paramY+18}" stroke="#64748b" stroke-width="1.4" stroke-dasharray="3 3" opacity="0"><animate attributeName="opacity" from="0" to="0.65" dur="0.4s" fill="freeze"/></line>`);
+    pgAppendNode(mid, `
+      <g transform="translate(${px},${paramY})" opacity="0">${pgFadeIn()}
+        <rect x="-46" y="-16" width="92" height="32" rx="16" ry="16" fill="#1e293b" stroke="#7373D8" stroke-width="1.5"/>
+        <text text-anchor="middle" dy="-2" fill="#cbd5e1" font-size="9" font-weight="600">${p.key}</text>
+        <text text-anchor="middle" dy="9" fill="#a7f3d0" font-size="8">${(p.ideal||'').toString().slice(0,16)}</text>
+      </g>`);
+    pgAppendEdge(mid, `<line x1="${px}" y1="${paramY+18}" x2="${PG_PX}" y2="${PG_CY-12}" stroke="#10B981" stroke-width="1.4" opacity="0"><animate attributeName="opacity" from="0" to="0.65" dur="0.4s" fill="freeze"/></line>`);
+    await sleep(280);
+  }
+
+  const screenings = [...(cmp.completed_screenings||[]), ...(cmp.pending_screenings||[])];
+  if (!screenings.length) return;
+  const arcY = PG_CY + 120, arcRadius = 200, arcCenterX = (PG_MX + PG_PX) / 2;
+  const totalArc = Math.min(Math.PI * 0.7, Math.PI * 0.18 * screenings.length);
+  const startAngle = Math.PI/2 - totalArc/2;
+  for (let i = 0; i < screenings.length; i++){
+    const s = screenings[i];
+    const completed = i < (cmp.completed_screenings||[]).length;
+    const angle = startAngle + (screenings.length === 1 ? totalArc/2 : (totalArc * i) / (screenings.length - 1));
+    const sx = arcCenterX + arcRadius * Math.cos(angle);
+    const sy = arcY + 30 - arcRadius * Math.sin(angle) * 0.45;
+    const memberStroke = completed ? '#10B981' : '#B81F2D';
+    const memberDash   = completed ? '' : 'stroke-dasharray="6 4"';
+    pgAppendEdge(mid, `
+      <line x1="${PG_MX}" y1="${PG_CY+18}" x2="${sx}" y2="${sy-18}" stroke="${memberStroke}" stroke-width="2" ${memberDash} opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.45s" fill="freeze"/>
+      </line>
+      <text x="${(PG_MX+sx)/2}" y="${(PG_CY+sy)/2 - 4}" fill="${completed ? '#34d399' : '#fca5a5'}" font-size="9" text-anchor="middle" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="0.2s" fill="freeze"/>
+        ${completed ? 'HAS_COMPLETED' : 'CARE_GAP'}
+      </text>`);
+    pgAppendEdge(mid, `<line x1="${PG_PX}" y1="${PG_CY+18}" x2="${sx}" y2="${sy-18}" stroke="#3B82F6" stroke-width="1.3" opacity="0"><animate attributeName="opacity" from="0" to="0.55" dur="0.45s" fill="freeze"/></line>`);
+    const fill = completed ? '#3B82F6' : '#FCA5A5';
+    const ring = completed ? '#1D4ED8' : '#B81F2D';
+    const labelColor = completed ? '#bfdbfe' : '#fecaca';
+    pgAppendNode(mid, `
+      <g transform="translate(${sx},${sy})" opacity="0">${pgFadeIn()}
+        <circle r="22" fill="${fill}" stroke="${ring}" stroke-width="2"/>
+        <text text-anchor="middle" dy="3" fill="#fff" font-size="10" font-weight="700">${(s.measure_id||'').slice(0,4)}</text>
+        <text text-anchor="middle" dy="38" fill="${labelColor}" font-size="9" font-weight="500">${(s.measure_name||s.measure_id||'').slice(0,18)}</text>
+      </g>`);
+    await sleep(320);
+  }
+
+  // Step 6 — Family / Ancestral History nodes (rendered along the LEFT
+  // side, attached to the Member with HAS_RELATIVE edges). Each node carries
+  // the relative's relation + chronic conditions so the graph illustrates
+  // the hereditary risk evidence the comparison uses.
+  const fam = (cmp.family_history||[]).slice(0, 4);
+  for (let i = 0; i < fam.length; i++){
+    const f = fam[i];
+    const fy = 80 + i * 80;
+    const fx = 40;
+    pgAppendEdge(mid, `
+      <line x1="${PG_MX-30}" y1="${PG_CY-15}" x2="${fx+44}" y2="${fy}"
+            stroke="#8B5CF6" stroke-width="1.4" opacity="0">
+        <animate attributeName="opacity" from="0" to="0.7" dur="0.4s" fill="freeze"/>
+      </line>
+      <text x="${(PG_MX+fx)/2 - 30}" y="${(PG_CY+fy)/2}" fill="#c4b5fd"
+            font-size="9" text-anchor="middle" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.4s" fill="freeze"/>
+        HAS_RELATIVE
+      </text>
+    `);
+    pgAppendNode(mid, `
+      <g transform="translate(${fx},${fy})" opacity="0">${pgFadeIn()}
+        <rect x="0" y="-16" width="170" height="32" rx="14" ry="14"
+              fill="#1e1b4b" stroke="#8B5CF6" stroke-width="1.5"/>
+        <text x="10" y="-2" fill="#ddd6fe" font-size="10" font-weight="700">${f.relation}</text>
+        <text x="10" y="11" fill="#c4b5fd" font-size="8">${(f.conditions||[]).slice(0,2).join(', ').slice(0,28) || (f.alive ? 'no conditions' : 'deceased')}</text>
+      </g>
+    `);
+    await sleep(220);
+  }
+
+  // Step 7 — Medical History nodes (Current conditions / Allergies /
+  // Medications) rendered on the RIGHT side, attached to the Member with
+  // HAS_MEDICAL edges. Mirrors what the rules engine actually consults to
+  // identify open gaps.
+  const med = cmp.medical_history || {};
+  const medItems = [
+    ...(med.current_conditions||[]).slice(0,2).map(x => ({type:'Current', label:x, color:'#0EA5E9'})),
+    ...(med.medications||[]).slice(0,2).map(x => ({type:'Med', label:x, color:'#14B8A6'})),
+    ...(med.allergies||[]).slice(0,1).map(x => ({type:'Allergy', label:x, color:'#F97316'})),
+  ];
+  for (let i = 0; i < medItems.length; i++){
+    const item = medItems[i];
+    const my = 80 + i * 80;
+    const mx_pos = 700;
+    pgAppendEdge(mid, `
+      <line x1="${PG_MX+30}" y1="${PG_CY-15}" x2="${mx_pos-10}" y2="${my}"
+            stroke="${item.color}" stroke-width="1.4" opacity="0">
+        <animate attributeName="opacity" from="0" to="0.7" dur="0.4s" fill="freeze"/>
+      </line>
+      <text x="${(PG_MX+mx_pos)/2 + 30}" y="${(PG_CY+my)/2}" fill="${item.color}"
+            font-size="9" text-anchor="middle" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.4s" fill="freeze"/>
+        HAS_MEDICAL
+      </text>
+    `);
+    pgAppendNode(mid, `
+      <g transform="translate(${mx_pos},${my})" opacity="0">${pgFadeIn()}
+        <rect x="-90" y="-16" width="180" height="32" rx="14" ry="14"
+              fill="#0c2540" stroke="${item.color}" stroke-width="1.5"/>
+        <text x="0" y="-2" text-anchor="middle" fill="#cbd5e1" font-size="9" font-weight="700">${item.type}</text>
+        <text x="0" y="11" text-anchor="middle" fill="#e2e8f0" font-size="9">${(item.label||'').slice(0,28)}</text>
+      </g>
+    `);
+    await sleep(220);
+  }
+}
+
+async function loadPreviewPersonaPanel(members){
+  const personaPanel = document.getElementById('personaPanel');
+  const personaList  = document.getElementById('personaList');
+  const personaStatus= document.getElementById('personaStatus');
+  if(!personaPanel) return;
+
+  // Use members that have at least one open gap (the action set).
+  const subjects = (members||[]).filter(m => !m.error && (m.open_gaps||[]).length > 0)
+    .map(m => ({member_id:m.member_id, name:m.name, email:m.email}));
+  if (!subjects.length) return;
+
+  personaPanel.classList.add('show');
+  personaList.innerHTML = subjects.map(renderGraphCard).join('');
+  subjects.forEach(m => drawSkeletonCard(m));
+
+  const stages = [
+    '🔍 Loading member profile…',
+    '🧬 Generating closest-fit ideal persona…',
+    '⚖ Comparing screening history…',
+    '📊 Surfacing missing links…',
+  ];
+  let stageIdx = 0;
+  const stageTimer = setInterval(() => {
+    stageIdx = (stageIdx + 1) % stages.length;
+    personaStatus.textContent = stages[stageIdx];
+  }, 1400);
+
+  try{
+    const res = await fetch('/api/v1/members/bulk-preview-persona', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({members:subjects}),
+    });
+    const data = await res.json();
+    clearInterval(stageTimer);
+    (data.results||[]).forEach(r => fillPersonaCard(r));
+    personaStatus.textContent = `Persona comparison complete for ${(data.results||[]).filter(r=>r.persona_comparison).length} member(s).`;
+  }catch(e){
+    clearInterval(stageTimer);
+    personaStatus.textContent = 'Persona comparison failed: ' + e.message;
+  }
+}
+
+// Skeleton (Member + Persona placeholders) for one card.
+function drawSkeletonCard(m){
+  const nodesG = document.getElementById(`pgc-nodes-${m.member_id}`);
+  const edgesG = document.getElementById(`pgc-edges-${m.member_id}`);
+  if(!nodesG || !edgesG) return;
+  const MX=180, PX=720, CY=260;
+  const initials = (m.name||'?').split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase();
+  edgesG.innerHTML = `
+    <line x1="${MX}" y1="${CY}" x2="${PX}" y2="${CY}"
+          stroke="#475569" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <text x="${(MX+PX)/2}" y="${CY-10}" text-anchor="middle" fill="#94a3b8"
+          font-size="11">analyzing…</text>
+  `;
+  nodesG.innerHTML = `
+    <g transform="translate(${MX},${CY})">
+      <circle r="40" fill="#000048" stroke="#fff" stroke-width="3"/>
+      <text text-anchor="middle" dy="-2" fill="#fff" font-size="13" font-weight="700">${initials}</text>
+      <text text-anchor="middle" dy="14" fill="#bcd0ff" font-size="9">${m.member_id}</text>
+      <text text-anchor="middle" dy="60" fill="#bcd0ff" font-size="11" font-weight="600">Member</text>
+    </g>
+    <g transform="translate(${PX},${CY})">
+      <circle r="36" fill="#10B981" stroke="#fff" stroke-width="3"/>
+      <text text-anchor="middle" dy="-2" fill="#fff" font-size="11" font-weight="700">IDEAL</text>
+      <text text-anchor="middle" dy="56" fill="#a7f3d0" font-size="11" font-weight="600">Persona</text>
+    </g>
+  `;
+}
+
+// Fill one persona card with the comparison response (animates the graph too).
+function fillPersonaCard(r){
+  const cmp   = r.persona_comparison;
+  // Cache comparison per member_id so approveAndProcess can re-animate
+  // graphs during outreach without refetching.
+  if (cmp && r.member_id){
+    window.__lastPersonaCmp = window.__lastPersonaCmp || {};
+    window.__lastPersonaCmp[r.member_id] = cmp;
+  }
+  const stage = document.getElementById(`pgc-stage-${r.member_id}`);
+  const gaps  = document.getElementById(`pgc-gaps-${r.member_id}`);
+  const meta2 = document.getElementById(`pgc-meta2-${r.member_id}`);
+  const histEl= document.getElementById(`pgc-history-${r.member_id}`);
+  if(!cmp){
+    if(stage){ stage.textContent='⚠ No persona data'; stage.dataset.done='1'; }
+    return;
+  }
+  if(meta2){
+    meta2.innerHTML = `
+      <span><strong>Age:</strong> ${cmp.age||'—'}</span>
+      <span><strong>Gender:</strong> ${cmp.gender||'—'}</span>
+      <span><strong>PCP:</strong> ${cmp.pcp_name||'—'}</span>
+      <span><strong>Insurance:</strong> ${cmp.insurance_type||'—'}</span>
+      ${cmp.chronic && cmp.chronic.length ? `<span><strong>Conditions:</strong> ${cmp.chronic.slice(0,3).join(', ')}</span>` : ''}
+    `;
+  }
+  if(stage){
+    stage.textContent = cmp.missing_link_count > 0
+      ? `🩺 ${cmp.missing_link_count} care gap(s) found`
+      : '✅ Fully compliant vs ideal';
+    stage.dataset.done='1';
+    stage.classList.add(cmp.missing_link_count > 0 ? 'pgc-stage--gap' : 'pgc-stage--ok');
+  }
+  if(gaps){
+    gaps.innerHTML = cmp.missing_link_count > 0
+      ? '<div class="pgc-gap-title">Missing links vs persona:</div>' +
+        cmp.pending_screenings.map(p =>
+          `<span class="pgc-gap-chip">${p.measure_id} · ${p.measure_name}</span>`
+        ).join('')
+      : '<div class="pgc-gap-ok">No gaps — member matches ideal twin.</div>';
+  }
+  // family/medical content is rendered as graph nodes inside animateGraph.
+  animateGraph(r.member_id, cmp);
 }
 
 function toggleCard(i){
@@ -3130,23 +4073,34 @@ async function approveAndProcess(){
   });
   if(!selected.length){alert('Please select at least one member.');return;}
 
-  closeModal();
-  document.getElementById('uploadArea').style.display='none';
-  const overlay=document.getElementById('processingOverlay');
-  overlay.classList.add('show');
-  document.getElementById('processingMsg').textContent=
-    `Running 6-agent AI analysis and sending outreach emails simultaneously for ${selected.length} member(s). This may take a few minutes.`;
+  // Keep the preview modal OPEN so the persona panel inside it stays visible
+  // during outreach. Disable the action buttons while emails are being sent.
+  const approveBtn = document.getElementById('approveBtn');
+  const cancelBtn  = document.querySelector('.cancel-btn');
+  if (approveBtn) { approveBtn.disabled = true; approveBtn.textContent = 'Sending outreach…'; }
+  if (cancelBtn)  { cancelBtn.disabled  = true; }
+
+  // Status banner inside the panel.
+  const personaStatus = document.getElementById('personaStatus');
+  if (personaStatus) personaStatus.textContent = '📨 Outreach in progress — sending emails to selected members…';
+
+  // Re-animate every persona graph card so the realtime edge formation is
+  // visible during the outreach phase too (idempotent — pgClearGraph wipes
+  // the existing nodes/edges before re-drawing).
+  document.querySelectorAll('.pgraph-card').forEach(card => {
+    const mid = card.id.replace('pgc-','');
+    if (window.__lastPersonaCmp && window.__lastPersonaCmp[mid]) {
+      animateGraph(mid, window.__lastPersonaCmp[mid]);
+    }
+  });
 
   try{
-    const res=await fetch('/api/v1/members/bulk-process',{
+    const res = await fetch('/api/v1/members/bulk-process',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({members:selected})
     });
-    const data=await res.json();
-    overlay.classList.remove('show');
-
-    // Show results
+    const data = await res.json();
     const container=document.getElementById('resultsContainer');
     const results=data.results||[];
     container.innerHTML=results.map(r=>`
@@ -3155,19 +4109,29 @@ async function approveAndProcess(){
         <div class="info">
           <div class="name">${r.name} (${r.member_id})</div>
           <div class="detail">${r.status==='completed'?
-            (r.email_sent?'Analysis complete &bull; Outreach email sent':'Analysis complete &bull; No email sent'):
+            (r.email_sent
+              ? 'Outreach email sent'
+              : (r.email_error
+                  ? 'Processed — email failed: ' + r.email_error
+                  : 'Processed (no email address on file)')):
             'Error: '+(r.error||'Unknown error')}</div>
         </div>
         <span class="status-badge ${r.status==='completed'?'success':'error'}">${r.status==='completed'?'Completed':'Failed'}</span>
       </div>
     `).join('');
-
+    if (personaStatus) personaStatus.textContent = '✅ Outreach complete — persona graphs above show every member compared with their ideal twin. You can close this modal.';
+    if (approveBtn) { approveBtn.disabled = false; approveBtn.textContent = 'Done'; approveBtn.onclick = () => { closeModal(); document.getElementById('uploadArea').style.display='none'; document.getElementById('resultsArea').classList.add('show'); }; }
+    if (cancelBtn)  { cancelBtn.disabled  = false; }
     document.getElementById('resultsArea').classList.add('show');
-  }catch(e){
-    overlay.classList.remove('show');
-    alert('Processing failed: '+e.message);
+  } catch(e){
+    if (personaStatus) personaStatus.textContent = '⚠ Outreach failed: ' + e.message;
+    if (approveBtn) { approveBtn.disabled = false; approveBtn.textContent = 'Retry Outreach'; }
+    if (cancelBtn)  { cancelBtn.disabled  = false; }
+    alert('Outreach failed: '+e.message);
   }
 }
+
+async function _legacy_approveAndProcess_unused(){ /* removed — see approveAndProcess */ }
 
 function downloadTemplate(){
   window.open('/api/v1/members/bulk-upload-template','_blank');

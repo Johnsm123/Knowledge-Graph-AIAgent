@@ -177,29 +177,46 @@ function Dashboard({ onMemberSelect }) {
   // Special case for the MEMBERS tab on selection: also pull in each connected
   // Measure's rule-attribute leaves (AgeRange / Gender / CPT / ICD / Exclusion)
   // from the measures_graph so the user sees "the codes for this member's gaps".
+  // Defensive filter — Exclusion and Prereq leaves are intentionally
+  // hidden from the Knowledge Explorer regardless of what the backend
+  // currently returns. "Prereq" is also rewritten to "Disease" client-side
+  // so the legend reads cleanly even before Flask is restarted.
+  const HIDDEN_LABELS = new Set(['Exclusion', 'Prereq']);
+  const sanitizeNode = (n) => {
+    if (!n) return n;
+    if (n.label === 'Prereq') return { ...n, label: 'Disease' };
+    return n;
+  };
+  const sanitizeGraph = (g) => {
+    if (!g) return { nodes: [], edges: [] };
+    const droppedIds = new Set((g.nodes || []).filter(n => HIDDEN_LABELS.has(n.label)).map(n => n.id));
+    return {
+      nodes: (g.nodes || []).filter(n => !HIDDEN_LABELS.has(n.label)).map(sanitizeNode),
+      edges: (g.edges || []).filter(e => !droppedIds.has(e.source) && !droppedIds.has(e.target)),
+    };
+  };
+
   const filteredGraph = (() => {
+    const cleanActive = sanitizeGraph(activeGraph);
     if (!selectedNodeId) {
-      // Default / reset state: show only the PRIMARY nodes for the active tab
-      // (Members, Providers, or Measures) with NO edges.  This gives a clean
-      // grid of just the records the user is filtering on — no provider /
-      // measure / leaf clutter mixed in.
       return {
-        nodes: activeGraph.nodes.filter(n => n.label === primaryLabel),
+        nodes: cleanActive.nodes.filter(n => n.label === primaryLabel),
         edges: [],
       };
     }
     // 1-hop neighborhood of the selected node
     const visible = new Set([selectedNodeId]);
-    for (const e of activeGraph.edges) {
+    for (const e of cleanActive.edges) {
       if (e.source === selectedNodeId) visible.add(e.target);
       if (e.target === selectedNodeId) visible.add(e.source);
     }
     let extraNodes = [];
     let extraEdges = [];
-    // Members tab: enrich with measure leaves (CPT, ICD, AgeRange, Exclusion, etc.)
+    // Members tab: enrich with measure leaves (CPT, ICD, AgeRange, Disease)
     // pulled from the measures_graph for each measure the member has an OPEN_GAP to.
+    // Exclusion / Prereq leaves are stripped by sanitizeGraph().
     if (explorerTab === 'members') {
-      const mg = graphs.measures_graph || { nodes: [], edges: [] };
+      const mg = sanitizeGraph(graphs.measures_graph || { nodes: [], edges: [] });
       const measureIdsInScope = [...visible].filter(id => id.startsWith('Q:'));
       const leafIds = new Set();
       for (const e of mg.edges) {
@@ -212,12 +229,12 @@ function Dashboard({ onMemberSelect }) {
       leafIds.forEach(id => visible.add(id));
     }
     const nodesById = new Map();
-    for (const n of activeGraph.nodes) if (visible.has(n.id)) nodesById.set(n.id, n);
+    for (const n of cleanActive.nodes) if (visible.has(n.id)) nodesById.set(n.id, n);
     for (const n of extraNodes)        if (!nodesById.has(n.id)) nodesById.set(n.id, n);
     return {
       nodes: [...nodesById.values()],
       edges: [
-        ...activeGraph.edges.filter(e => visible.has(e.source) && visible.has(e.target)),
+        ...cleanActive.edges.filter(e => visible.has(e.source) && visible.has(e.target)),
         ...extraEdges,
       ],
     };
@@ -362,13 +379,22 @@ function Dashboard({ onMemberSelect }) {
     })
     .filter(m => {
       if (measureFilter === 'all') return true;
-      // Backend may return open_gap_measures as a list of measure_ids the member
-      // currently has open. A member with multiple measures will appear in EVERY
-      // matching measure's filter — picking GSD shows everyone with GSD open,
-      // even if they also have COL, BCS, etc. open.
+      // Source-of-truth: derive membership from the Knowledge-Explorer graph
+      // we already loaded (`graphs.members_graph.edges`). Every open gap is an
+      // OPEN_GAP edge from M:<member_id> → Q:<measure_id>. This works even when
+      // the /members endpoint was not redeployed with `open_gap_measures`.
+      // Fallback: if the explorer graph hasn't loaded yet, fall back to the
+      // stats roster. A member with multiple open measures matches whichever
+      // measure is currently selected.
+      const fromGraph = (graphs?.members_graph?.edges || [])
+        .filter(e => e.type === 'OPEN_GAP' && e.source === `M:${m.member_id}`)
+        .some(e => e.target === `Q:${measureFilter}`);
+      if (fromGraph) return true;
+      const measureRow = (stats?.gaps_by_measure || []).find(r => r.measure_id === measureFilter);
+      const memberIds  = measureRow?.member_ids || [];
+      if (memberIds.includes(m.member_id)) return true;
       const list = m.open_gap_measures;
-      if (!Array.isArray(list)) return false;
-      return list.includes(measureFilter);
+      return Array.isArray(list) && list.includes(measureFilter);
     })
     .sort((a, b) => {
       if (sortBy === 'gaps_desc')  return b.open_gaps - a.open_gaps;
@@ -464,13 +490,6 @@ function Dashboard({ onMemberSelect }) {
           >
             <Stethoscope size={14} /> Providers
             <span className="tab-count">({(graphs.providers_graph?.nodes || []).filter(n => n.label === 'Provider').length})</span>
-          </button>
-          <button
-            className={`explorer-tab ${explorerTab === 'measures' ? 'active' : ''}`}
-            onClick={() => switchExplorerTab('measures')}
-          >
-            <ClipboardList size={14} /> Quality Measures
-            <span className="tab-count">({(graphs.measures_graph?.nodes || []).filter(n => n.label === 'Measure').length})</span>
           </button>
         </div>
 
