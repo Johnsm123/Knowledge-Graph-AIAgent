@@ -363,18 +363,11 @@ def run_missed_sweep():
 # ── Scheduler bootstrap ─────────────────────────────────────────────────────
 
 def start_mobile_reminder_scheduler():
-    """Register the three mobile reminder jobs on the app's APScheduler instance."""
-    from apscheduler.schedulers.background import BackgroundScheduler
-    from apscheduler.triggers.cron import CronTrigger
-    from apscheduler.triggers.interval import IntervalTrigger
-
-    sched = BackgroundScheduler(timezone="Asia/Kolkata")
-    # 18:00 local — day before
-    sched.add_job(run_day_before, CronTrigger(hour=18, minute=0), id="reminder_day_before", replace_existing=True)
-    # 08:00 local — morning of
-    sched.add_job(run_morning_of, CronTrigger(hour=8, minute=0), id="reminder_morning_of", replace_existing=True)
-    # Every 30 minutes — sweep for missed appointments
-    sched.add_job(run_missed_sweep, IntervalTrigger(minutes=30), id="reminder_missed_sweep", replace_existing=True)
-    sched.start()
-    _logger.info("[REMINDER] mobile reminder scheduler started (day-before, morning-of, missed-sweep)")
-    return sched
+    """DISABLED — recurring mobile reminder emails (day-before, morning-of,
+    missed-sweep) are turned off to save the ACS daily quota. Email sending
+    is now limited to the bulk-upload Proceed-with-Outreach flow and the
+    per-member Auto Process button. Re-enable by restoring the original
+    body if you need automatic appointment reminders again.
+    """
+    _logger.info("[REMINDER] mobile reminder scheduler is DISABLED (auto recurring emails turned off)")
+    return None

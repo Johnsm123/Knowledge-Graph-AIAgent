@@ -181,21 +181,16 @@ _scheduler: BackgroundScheduler | None = None
 
 
 def start_scheduler():
-    """Start the background scheduler. Safe to call once on app startup."""
-    global _scheduler
-    if _scheduler is not None:
-        return _scheduler
-
-    _scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
-    _scheduler.add_job(
-        run_noshow_sweep,
-        trigger=CronTrigger(hour=9, minute=0),
-        id="noshow_sweep",
-        replace_existing=True,
-    )
-    _scheduler.start()
-    _logger.info("[NOSHOW] Scheduler started — runs daily at 09:00 IST")
-    return _scheduler
+    """DISABLED — the daily no-show sweep auto-emails missed-appointment
+    members, which is exactly the kind of recurring email we now want OFF
+    to preserve the ACS daily quota. The data-only auto-cancel pass in
+    outreach_scheduler.py continues to flip past-due appointments to
+    Cancelled_NoShow, but no email is sent. Email sending is now limited
+    to the bulk-upload Proceed-with-Outreach flow and the per-member
+    Auto Process button.
+    """
+    _logger.info("[NOSHOW] Scheduler is DISABLED (auto recurring emails turned off)")
+    return None
 
 
 def trigger_now():

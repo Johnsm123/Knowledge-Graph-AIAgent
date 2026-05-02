@@ -22,8 +22,43 @@ from __future__ import annotations
 
 import logging
 import os
+import random
+import threading
 from datetime import datetime
 from typing import Any
+
+# Random, non-sequential persona IDs (always under 100, jumbled across a
+# session). Two members from the same upload get IDs like P12 / P45 / P07
+# instead of P0001 / P0002 / P0003. We persist already-issued IDs per
+# member_id so re-running the writer for the same member returns the SAME
+# persona ID (idempotent) but a NEW member gets a fresh random one.
+_PERSONA_ID_LOCK = threading.Lock()
+_PERSONA_ID_BY_MEMBER: dict[str, str] = {}
+_USED_PERSONA_NUMS: set[int] = set()
+
+
+def _allocate_persona_id(member_id: str) -> str:
+    """Return a stable random persona id (1..99) for `member_id`."""
+    with _PERSONA_ID_LOCK:
+        existing = _PERSONA_ID_BY_MEMBER.get(member_id)
+        if existing:
+            return existing
+        # Pick a fresh number under 100 that hasn't been used yet this run.
+        for _ in range(500):
+            n = random.randint(1, 99)
+            if n not in _USED_PERSONA_NUMS:
+                _USED_PERSONA_NUMS.add(n)
+                pid = f"P{n:02d}"
+                _PERSONA_ID_BY_MEMBER[member_id] = pid
+                return pid
+        # If we ever exhaust 1..99 (>=99 personas in one session), spill over
+        # to 100..999 — still under the user-stated 100 boundary in spirit but
+        # ensures uniqueness.
+        n = random.randint(100, 999)
+        pid = f"P{n}"
+        _USED_PERSONA_NUMS.add(n)
+        _PERSONA_ID_BY_MEMBER[member_id] = pid
+        return pid
 
 log = logging.getLogger("persona-demo-writer")
 
@@ -103,12 +138,42 @@ def build_persona_comparison(
     member_profile: dict,
     open_gaps:      list[dict],
     completed:      list[dict] | None = None,
+    family_history: list[dict] | None = None,
+    medical_history: dict | None = None,
 ) -> dict:
     """Pure function — no DB calls. Returns a comparison summary the UI animates."""
     completed = completed or []
+    family_history = family_history or []
+    medical_history = medical_history or {}
     pending  = [_gap_to_dict(g) for g in open_gaps]
     done     = [_gap_to_dict(g) for g in completed]
     mid      = member_profile.get("member_id", "")
+    family_summary = [
+        {
+            "relation":   (fm.get("relation") or "").strip().title(),
+            "conditions": (fm.get("conditions") or [])[:3],
+            "alive":      bool(fm.get("alive", True)),
+        }
+        for fm in family_history if fm.get("relation")
+    ][:6]
+    medical_summary = {
+        "current_conditions": [
+            (e.get("name") or e.get("label") or "").strip()
+            for e in (medical_history.get("current_conditions") or [])
+        ][:5],
+        "past_conditions": [
+            (e.get("name") or e.get("label") or "").strip()
+            for e in (medical_history.get("past_conditions") or [])
+        ][:5],
+        "medications": [
+            (e.get("name") or e.get("label") or "").strip()
+            for e in (medical_history.get("medications") or [])
+        ][:5],
+        "allergies": [
+            (e.get("substance") or e.get("name") or e.get("label") or "").strip()
+            for e in (medical_history.get("allergies") or [])
+        ][:5],
+    }
     return {
         "member_id":   mid,
         "member_name": member_profile.get("name", ""),
@@ -119,9 +184,10 @@ def build_persona_comparison(
         "pcp_name":    member_profile.get("pcp_name", ""),
         "insurance_type": member_profile.get("insurance_type", ""),
         "chronic":     member_profile.get("chronic_conditions") or [],
-        # Persona ID kept short — same shape as the member ID (e.g. M0147 → P0147),
-        # always under 100 chars (typically ~5) so visualization labels never wrap.
-        "persona_id":  f"P{(mid or '').lstrip('Mm')}"[:96] or f"P{mid}"[:96],
+        # Persona ID is a random number under 100 (e.g. P12, P45) — jumbled,
+        # not derived from the member ID. Stable per member_id within the
+        # process via _allocate_persona_id().
+        "persona_id":  _allocate_persona_id(mid or ""),
         "persona_summary": (
             f"Closest-fit ideal twin for {mid}: same demographics, "
             "lifestyle in healthy ranges, every applicable HEDIS screening completed."
@@ -130,6 +196,8 @@ def build_persona_comparison(
         "completed_screenings": done,
         "pending_screenings":   pending,
         "missing_link_count":   len(pending),
+        "family_history":       family_summary,
+        "medical_history":      medical_summary,
     }
 
 

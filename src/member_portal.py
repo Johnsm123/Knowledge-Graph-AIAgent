@@ -617,15 +617,6 @@ def portal_book(member_id, token):
           <h2>Your appointments have been booked!</h2>
           <p>A confirmation email has been sent to <strong>{member_email or 'your registered email'}</strong>.</p>
           {bookings_html}
-          <div class="info-box">
-            <strong>Pre-Appointment Instructions:</strong>
-            <ul>
-              <li>Please arrive 15 minutes before your scheduled time.</li>
-              <li>Bring a valid government-issued photo ID and your insurance card.</li>
-              <li>Wear comfortable, loose-fitting clothing appropriate for the screening.</li>
-              <li>If you need to reschedule, please contact your care manager.</li>
-            </ul>
-          </div>
         </div>
     """)
 
@@ -670,14 +661,6 @@ def _send_booking_confirmation_email(member_id, name, email, appointments):
     </tr>
     {rows}
   </table>
-  <div style="background:#fff8e1;border-left:4px solid #f59e0b;padding:16px;border-radius:4px;margin:24px 0;">
-    <strong>Pre-Appointment Instructions:</strong>
-    <ul style="margin:8px 0;padding-left:20px;">
-      <li>Arrive 15 minutes before your scheduled time.</li>
-      <li>Bring a valid photo ID and insurance card.</li>
-      <li>Wear comfortable clothing.</li>
-    </ul>
-  </div>
   <p style="color:#888;font-size:12px;">This is an automated message from the HealthCare Management Portal.</p>
 </div>
 </body></html>"""

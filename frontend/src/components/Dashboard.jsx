@@ -177,29 +177,46 @@ function Dashboard({ onMemberSelect }) {
   // Special case for the MEMBERS tab on selection: also pull in each connected
   // Measure's rule-attribute leaves (AgeRange / Gender / CPT / ICD / Exclusion)
   // from the measures_graph so the user sees "the codes for this member's gaps".
+  // Defensive filter — Exclusion and Prereq leaves are intentionally
+  // hidden from the Knowledge Explorer regardless of what the backend
+  // currently returns. "Prereq" is also rewritten to "Disease" client-side
+  // so the legend reads cleanly even before Flask is restarted.
+  const HIDDEN_LABELS = new Set(['Exclusion', 'Prereq']);
+  const sanitizeNode = (n) => {
+    if (!n) return n;
+    if (n.label === 'Prereq') return { ...n, label: 'Disease' };
+    return n;
+  };
+  const sanitizeGraph = (g) => {
+    if (!g) return { nodes: [], edges: [] };
+    const droppedIds = new Set((g.nodes || []).filter(n => HIDDEN_LABELS.has(n.label)).map(n => n.id));
+    return {
+      nodes: (g.nodes || []).filter(n => !HIDDEN_LABELS.has(n.label)).map(sanitizeNode),
+      edges: (g.edges || []).filter(e => !droppedIds.has(e.source) && !droppedIds.has(e.target)),
+    };
+  };
+
   const filteredGraph = (() => {
+    const cleanActive = sanitizeGraph(activeGraph);
     if (!selectedNodeId) {
-      // Default / reset state: show only the PRIMARY nodes for the active tab
-      // (Members, Providers, or Measures) with NO edges.  This gives a clean
-      // grid of just the records the user is filtering on — no provider /
-      // measure / leaf clutter mixed in.
       return {
-        nodes: activeGraph.nodes.filter(n => n.label === primaryLabel),
+        nodes: cleanActive.nodes.filter(n => n.label === primaryLabel),
         edges: [],
       };
     }
     // 1-hop neighborhood of the selected node
     const visible = new Set([selectedNodeId]);
-    for (const e of activeGraph.edges) {
+    for (const e of cleanActive.edges) {
       if (e.source === selectedNodeId) visible.add(e.target);
       if (e.target === selectedNodeId) visible.add(e.source);
     }
     let extraNodes = [];
     let extraEdges = [];
-    // Members tab: enrich with measure leaves (CPT, ICD, AgeRange, Exclusion, etc.)
+    // Members tab: enrich with measure leaves (CPT, ICD, AgeRange, Disease)
     // pulled from the measures_graph for each measure the member has an OPEN_GAP to.
+    // Exclusion / Prereq leaves are stripped by sanitizeGraph().
     if (explorerTab === 'members') {
-      const mg = graphs.measures_graph || { nodes: [], edges: [] };
+      const mg = sanitizeGraph(graphs.measures_graph || { nodes: [], edges: [] });
       const measureIdsInScope = [...visible].filter(id => id.startsWith('Q:'));
       const leafIds = new Set();
       for (const e of mg.edges) {
@@ -212,12 +229,12 @@ function Dashboard({ onMemberSelect }) {
       leafIds.forEach(id => visible.add(id));
     }
     const nodesById = new Map();
-    for (const n of activeGraph.nodes) if (visible.has(n.id)) nodesById.set(n.id, n);
+    for (const n of cleanActive.nodes) if (visible.has(n.id)) nodesById.set(n.id, n);
     for (const n of extraNodes)        if (!nodesById.has(n.id)) nodesById.set(n.id, n);
     return {
       nodes: [...nodesById.values()],
       edges: [
-        ...activeGraph.edges.filter(e => visible.has(e.source) && visible.has(e.target)),
+        ...cleanActive.edges.filter(e => visible.has(e.source) && visible.has(e.target)),
         ...extraEdges,
       ],
     };
@@ -473,13 +490,6 @@ function Dashboard({ onMemberSelect }) {
           >
             <Stethoscope size={14} /> Providers
             <span className="tab-count">({(graphs.providers_graph?.nodes || []).filter(n => n.label === 'Provider').length})</span>
-          </button>
-          <button
-            className={`explorer-tab ${explorerTab === 'measures' ? 'active' : ''}`}
-            onClick={() => switchExplorerTab('measures')}
-          >
-            <ClipboardList size={14} /> Quality Measures
-            <span className="tab-count">({(graphs.measures_graph?.nodes || []).filter(n => n.label === 'Measure').length})</span>
           </button>
         </div>
 

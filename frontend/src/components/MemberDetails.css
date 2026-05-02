@@ -518,6 +518,40 @@
   background: var(--cog-gray-lightest);
 }
 
+/* Booking-modal status banners + countdown timers */
+.vb-status-banner.vb-status-waiting {
+  background: linear-gradient(90deg,#EFF6FF,#DBEAFE);
+  color: #1E40AF;
+  border: 1px solid #93C5FD;
+}
+.vb-status-banner.vb-status-cancelled {
+  background: linear-gradient(90deg,#FEF3C7,#FDE68A);
+  color: #92400E;
+  border: 1px solid #F59E0B;
+}
+.vb-timer {
+  margin: 12px 0 6px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  text-align: center;
+  border: 1px solid transparent;
+}
+.vb-timer-label { font-size: 13px; font-weight: 600; letter-spacing: 0.2px; }
+.vb-timer-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 28px; font-weight: 700; letter-spacing: 1px;
+  margin: 6px 0; line-height: 1;
+}
+.vb-timer-hint { font-size: 11.5px; opacity: 0.85; margin-top: 4px; }
+.vb-timer--scheduled { background:#ECFDF5; color:#065F46; border-color:#A7F3D0 }
+.vb-timer--scheduled .vb-timer-value { color:#059669 }
+.vb-timer--overdue   { background:#FEF2F2; color:#7F1D1D; border-color:#FCA5A5 }
+.vb-timer--overdue .vb-timer-value   { color:#B81F2D }
+.vb-timer--rebook    { background:#FFFBEB; color:#78350F; border-color:#FCD34D }
+.vb-timer--rebook .vb-timer-value    { color:#D97706 }
+.vb-timer--weekly    { background:#EFF6FF; color:#1E3A8A; border-color:#93C5FD }
+.vb-timer--weekly .vb-timer-value    { color:#2563EB }
+
 /* Status notes — replace action buttons when appointment is cancelled / awaiting member rebook */
 .vb-status-note {
   font-size: 0.85rem;
@@ -530,6 +564,20 @@
   color: #92400E;
   border: 1px solid #F59E0B;
 }
+.appt-auto-note,
+.vb-auto-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: #ECFDF5;
+  color: #065F46;
+  border: 1px solid #A7F3D0;
+  border-radius: 6px;
+}
+
 .appt-rebook-note {
   display: inline-flex;
   align-items: center;

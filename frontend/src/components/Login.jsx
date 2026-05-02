@@ -27,7 +27,7 @@ function Login({ onLogin }) {
     <div className="login-page">
       <div className="login-card">
         <div className="login-logo">
-          <img src="/ct-logo.png" alt="Cognizant" />
+          <img src="/CTS.png" alt="Cognizant" />
           <span className="login-logo-text">Cognizant</span>
         </div>
 
