@@ -3,6 +3,7 @@ Neo4j Database Connection Module
 Handles all Neo4j Aura interactions via Bolt protocol.
 Only connection + query utilities — all schema logic lives in care_gap_neo4j.py
 """
+import atexit
 from neo4j import GraphDatabase
 import logging
 from typing import Any, Dict, List, Optional
@@ -55,6 +56,29 @@ class MedicalKnowledgeGraph:
 # Global singletons
 _kg = None
 _ref_kg = None
+
+
+def _close_all_connections():
+    """Explicitly close all Neo4j drivers at interpreter shutdown so the
+    driver's __del__ finalizer is never called during Python teardown
+    (which causes the harmless but noisy 'sys.meta_path is None' warnings
+    seen on Python 3.12+ / 3.14)."""
+    global _kg, _ref_kg
+    if _kg is not None:
+        try:
+            _kg.driver.close()
+        except Exception:
+            pass
+        _kg = None
+    if _ref_kg is not None:
+        try:
+            _ref_kg.driver.close()
+        except Exception:
+            pass
+        _ref_kg = None
+
+
+atexit.register(_close_all_connections)
 
 
 def get_knowledge_graph() -> MedicalKnowledgeGraph:

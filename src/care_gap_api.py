@@ -54,16 +54,25 @@ def get_agents():
     return agent_system
 
 
-def _send_email_with_retry(client, message, max_retries=4):
-    """Send email via Azure Communication Services with retry on rate-limiting."""
+def _send_email_with_retry(client, message, max_retries=5):
+    """Send email via Azure Communication Services with retry on rate-limiting.
+
+    Azure's managed azurecomm.net domain returns either 'TooManyRequests' or
+    'DomainNotLinked' when the managed domain's per-minute send quota is
+    exceeded under concurrent load. Both are treated as transient and retried
+    with exponential back-off.
+    """
+    _RETRYABLE = ("TooManyRequests", "DomainNotLinked", "429", "503")
     for attempt in range(max_retries):
         try:
             poller = client.begin_send(message)
             return poller.result()
         except Exception as exc:
-            if "TooManyRequests" in str(exc) and attempt < max_retries - 1:
-                wait = max(1, (attempt + 1) * 2)
-                logger.warning(f"[EMAIL] Rate limited (attempt {attempt + 1}/{max_retries}), retrying in {wait}s")
+            exc_str = str(exc)
+            is_retryable = any(code in exc_str for code in _RETRYABLE)
+            if is_retryable and attempt < max_retries - 1:
+                wait = max(2, (attempt + 1) * 3)
+                logger.warning(f"[EMAIL] Transient error '{exc_str[:80]}' (attempt {attempt + 1}/{max_retries}), retrying in {wait}s")
                 _time_mod.sleep(wait)
             else:
                 raise
@@ -2568,6 +2577,10 @@ def bulk_process_members():
                         conn_str = cfg.azure_communication_connection_string
                         sender = cfg.azure_communication_sender
                         if conn_str and sender:
+                            # Stagger bulk sends so concurrent threads don't
+                            # hit the Azure managed-domain rate limit simultaneously.
+                            import random as _rand
+                            _time_mod.sleep(_rand.uniform(1.0, 4.0))
                             client = EmailClient.from_connection_string(conn_str)
                             message = {
                                 "senderAddress": sender,

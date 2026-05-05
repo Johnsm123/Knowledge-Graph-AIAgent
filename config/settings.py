@@ -1,8 +1,12 @@
 """
 Configuration settings for Medical AI Agent System
 """
+import os
 from pydantic_settings import BaseSettings
 from typing import Optional
+
+# Always resolve .env relative to this file (project root/config/../.env)
+_ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
 
 
 class Settings(BaseSettings):
@@ -39,7 +43,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     
     class Config:
-        env_file = ".env"
+        env_file = _ENV_FILE
         case_sensitive = False
 
 
