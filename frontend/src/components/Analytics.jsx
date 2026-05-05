@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, ComposedChart, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, Users, Activity, Target, Download } from 'lucide-react';
 import axios from 'axios';
 import './Analytics.css';
 import { useRealtimeEvents } from '../hooks/useRealtimeEvents';
@@ -131,67 +130,6 @@ function Analytics() {
         <div>
           <h1>Analytics Dashboard</h1>
           <p>Comprehensive care gap analytics and insights</p>
-        </div>
-        <button className="export-btn">
-          <Download size={18} />
-          Export Report
-        </button>
-      </div>
-
-      {/* Key Metrics */}
-      <div className="metrics-grid">
-        <div className="metric-card">
-          <div className="metric-icon" style={{ background: '#dbeafe' }}>
-            <Users size={24} color={COLORS.info} />
-          </div>
-          <div className="metric-content">
-            <p className="metric-label">Total Members</p>
-            <h2 className="metric-value">{stats?.total_members || 0}</h2>
-            <p className="metric-change positive">Active enrollment</p>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-icon" style={{ background: '#fee2e2' }}>
-            <Target size={24} color={COLORS.danger} />
-          </div>
-          <div className="metric-content">
-            <p className="metric-label">Open Care Gaps</p>
-            <h2 className="metric-value">{stats?.total_open_gaps || 0}</h2>
-            <p className="metric-change negative">Requires attention</p>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-icon" style={{ background: '#d1fae5' }}>
-            <TrendingUp size={24} color={COLORS.success} />
-          </div>
-          <div className="metric-content">
-            <p className="metric-label">Compliance Rate</p>
-            <h2 className="metric-value">
-              {stats?.total_members ? Math.round((stats.compliant_members / stats.total_members) * 100) : 0}%
-            </h2>
-            <p className="metric-change positive">
-              {stats?.compliant_members || 0} compliant members
-            </p>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-icon" style={{ background: '#e0e7ff' }}>
-            <Activity size={24} color={COLORS.purple} />
-          </div>
-          <div className="metric-content">
-            <p className="metric-label">Outreach Success</p>
-            <h2 className="metric-value">
-              {stats?.outreach_stats?.total_outreach 
-                ? Math.round((stats.outreach_stats.completed / stats.outreach_stats.total_outreach) * 100) 
-                : 0}%
-            </h2>
-            <p className="metric-change positive">
-              {stats?.outreach_stats?.completed || 0} completed
-            </p>
-          </div>
         </div>
       </div>
 

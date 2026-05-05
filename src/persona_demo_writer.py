@@ -27,36 +27,26 @@ import threading
 from datetime import datetime
 from typing import Any
 
-# Random, non-sequential persona IDs (always under 100, jumbled across a
-# session). Two members from the same upload get IDs like P12 / P45 / P07
-# instead of P0001 / P0002 / P0003. We persist already-issued IDs per
-# member_id so re-running the writer for the same member returns the SAME
-# persona ID (idempotent) but a NEW member gets a fresh random one.
+# Random persona IDs in the range 1..99 (always under 100). Persona IDs MAY
+# repeat across members — multiple members can share the same IdealPersona,
+# since personas are reusable templates. The only guarantee is that the SAME
+# member_id always receives the SAME persona ID (idempotent re-runs).
 _PERSONA_ID_LOCK = threading.Lock()
 _PERSONA_ID_BY_MEMBER: dict[str, str] = {}
-_USED_PERSONA_NUMS: set[int] = set()
 
 
 def _allocate_persona_id(member_id: str) -> str:
-    """Return a stable random persona id (1..99) for `member_id`."""
+    """Return a stable random persona id (P01..P99) for `member_id`.
+
+    The same member_id always returns the same id within the process; different
+    members may collide on the same id (allowed — personas are shared).
+    """
     with _PERSONA_ID_LOCK:
         existing = _PERSONA_ID_BY_MEMBER.get(member_id)
         if existing:
             return existing
-        # Pick a fresh number under 100 that hasn't been used yet this run.
-        for _ in range(500):
-            n = random.randint(1, 99)
-            if n not in _USED_PERSONA_NUMS:
-                _USED_PERSONA_NUMS.add(n)
-                pid = f"P{n:02d}"
-                _PERSONA_ID_BY_MEMBER[member_id] = pid
-                return pid
-        # If we ever exhaust 1..99 (>=99 personas in one session), spill over
-        # to 100..999 — still under the user-stated 100 boundary in spirit but
-        # ensures uniqueness.
-        n = random.randint(100, 999)
-        pid = f"P{n}"
-        _USED_PERSONA_NUMS.add(n)
+        n = random.randint(1, 99)
+        pid = f"P{n:02d}"
         _PERSONA_ID_BY_MEMBER[member_id] = pid
         return pid
 
@@ -140,11 +130,13 @@ def build_persona_comparison(
     completed:      list[dict] | None = None,
     family_history: list[dict] | None = None,
     medical_history: dict | None = None,
+    lifestyle:      dict | None = None,
 ) -> dict:
     """Pure function — no DB calls. Returns a comparison summary the UI animates."""
     completed = completed or []
     family_history = family_history or []
     medical_history = medical_history or {}
+    lifestyle = lifestyle or {}
     pending  = [_gap_to_dict(g) for g in open_gaps]
     done     = [_gap_to_dict(g) for g in completed]
     mid      = member_profile.get("member_id", "")
@@ -198,6 +190,17 @@ def build_persona_comparison(
         "missing_link_count":   len(pending),
         "family_history":       family_summary,
         "medical_history":      medical_summary,
+        "lifestyle": {
+            "bmi":                lifestyle.get("bmi", ""),
+            "smoking_status":     lifestyle.get("smoking_status", ""),
+            "alcohol_use":        lifestyle.get("alcohol_use", ""),
+            "exercise_frequency": lifestyle.get("exercise_frequency", ""),
+            "diet_type":          lifestyle.get("diet_type", ""),
+            "sleep_hours_avg":    lifestyle.get("sleep_hours_avg", ""),
+            "stress_level":       lifestyle.get("stress_level", ""),
+        },
+        "_family_history_raw":  family_history,
+        "_medical_history_raw": medical_history,
     }
 
 
@@ -326,6 +329,125 @@ def push_member_persona(member_profile: dict, comparison: dict) -> bool:
                     """,
                     {"mid": mid, "mea": g["measure_id"], "now": now},
                 ).consume()
+
+            # Member lifestyle node (member's actual values).
+            ls = comparison.get("lifestyle") or {}
+            if any(ls.values()):
+                s.run(
+                    """
+                    MATCH (m:Member {member_id: $mid})
+                    MERGE (l:Lifestyle {member_id: $mid})
+                    SET l.bmi                = $bmi,
+                        l.smoking_status     = $smoking,
+                        l.alcohol_use        = $alcohol,
+                        l.exercise_frequency = $exercise,
+                        l.diet_type          = $diet,
+                        l.sleep_hours_avg    = $sleep,
+                        l.stress_level       = $stress
+                    MERGE (m)-[:HAS_LIFESTYLE]->(l)
+                    """,
+                    {
+                        "mid": mid,
+                        "bmi":      ls.get("bmi", ""),
+                        "smoking":  ls.get("smoking_status", ""),
+                        "alcohol":  ls.get("alcohol_use", ""),
+                        "exercise": ls.get("exercise_frequency", ""),
+                        "diet":     ls.get("diet_type", ""),
+                        "sleep":    ls.get("sleep_hours_avg", ""),
+                        "stress":   ls.get("stress_level", ""),
+                    },
+                ).consume()
+
+            # Family ancestral history.
+            for fm in (comparison.get("_family_history_raw") or []):
+                relation = (fm.get("relation") or "").strip()
+                if not relation:
+                    continue
+                fmid = fm.get("family_member_id") or f"{mid}-{relation.lower().replace(' ', '_')}"
+                s.run(
+                    """
+                    MATCH (m:Member {member_id: $mid})
+                    MERGE (fm:FamilyMember {family_member_id: $fmid})
+                    SET fm.relation = $relation,
+                        fm.name     = $name,
+                        fm.alive    = $alive,
+                        fm.age_or_age_at_death = $age,
+                        fm.cause_of_death = $cod,
+                        fm.notes    = $notes
+                    MERGE (m)-[:HAS_RELATIVE]->(fm)
+                    WITH fm
+                    UNWIND $conds AS cn
+                    WITH fm, cn WHERE cn IS NOT NULL AND cn <> ''
+                    MERGE (c:Condition {name: cn})
+                    MERGE (fm)-[:HAS_CONDITION]->(c)
+                    """,
+                    {
+                        "mid":   mid,
+                        "fmid":  fmid,
+                        "relation": relation,
+                        "name":  fm.get("name", ""),
+                        "alive": bool(fm.get("alive", True)),
+                        "age":   fm.get("age_or_age_at_death") or "",
+                        "cod":   fm.get("cause_of_death") or "",
+                        "notes": fm.get("notes") or "",
+                        "conds": fm.get("conditions") or [],
+                    },
+                ).consume()
+
+            # Medical history (current/past conditions, medications, allergies, etc.).
+            mh = comparison.get("_medical_history_raw") or {}
+            type_map = [
+                ("current_conditions", "current_condition"),
+                ("past_conditions",    "past_condition"),
+                ("surgeries",          "surgery"),
+                ("medications",        "medication"),
+                ("allergies",          "allergy"),
+                ("immunizations",      "immunization"),
+            ]
+            entry_idx = 0
+            for bucket, etype in type_map:
+                for entry in (mh.get(bucket) or []):
+                    label = (
+                        entry.get("label")
+                        or entry.get("name")
+                        or entry.get("substance")
+                        or ""
+                    ).strip()
+                    if not label:
+                        continue
+                    entry_idx += 1
+                    eid = f"{mid}-MH-{entry_idx}"
+                    s.run(
+                        """
+                        MATCH (m:Member {member_id: $mid})
+                        MERGE (e:MedicalHistoryEntry {entry_id: $eid})
+                        SET e.type     = $etype,
+                            e.label    = $label,
+                            e.year     = $year,
+                            e.status   = $status,
+                            e.severity = $severity,
+                            e.reaction = $reaction,
+                            e.dose     = $dose,
+                            e.started  = $started,
+                            e.purpose  = $purpose,
+                            e.notes    = $notes
+                        MERGE (m)-[:HAS_MEDICAL_HISTORY]->(e)
+                        """,
+                        {
+                            "mid":   mid,
+                            "eid":   eid,
+                            "etype": etype,
+                            "label": label,
+                            "year":     entry.get("year") or "",
+                            "status":   entry.get("status") or "",
+                            "severity": entry.get("severity") or "",
+                            "reaction": entry.get("reaction") or "",
+                            "dose":     entry.get("dose") or "",
+                            "started":  entry.get("started") or "",
+                            "purpose":  entry.get("purpose") or "",
+                            "notes":    entry.get("notes") or "",
+                        },
+                    ).consume()
         return True
     except Exception as e:
         log.warning("[PERSONA-DEMO] write failed for %s: %s", mid, e)

@@ -22,10 +22,10 @@ const getCategory = (openGaps) => {
 };
 
 const CATEGORY_META = {
-  all:       { label: 'All Members',      color: '#000048', bg: 'rgba(47,120,196,0.08)' },
   critical:  { label: 'Critical',         color: '#B81F2D', bg: 'rgba(184,31,45,0.08)' },
   moderate:  { label: 'Needs Attention',  color: '#E9C71D', bg: 'rgba(233,199,29,0.12)' },
   compliant: { label: 'Compliant',        color: '#2DB81F', bg: 'rgba(45,184,31,0.10)' },
+  all:       { label: 'All Members',      color: '#000048', bg: 'rgba(47,120,196,0.08)' },
 };
 
 // ── Gap badge ─────────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ function Dashboard({ onMemberSelect }) {
   const [stats,         setStats]         = useState(null);
   const [members,       setMembers]       = useState([]);
   const [loading,       setLoading]       = useState(true);
-  const [category,      setCategory]      = useState('all');
+  const [category,      setCategory]      = useState('critical');
   const [search,        setSearch]        = useState('');
   const [sortBy,        setSortBy]        = useState('gaps_desc');
   const [measureFilter, setMeasureFilter] = useState('all');

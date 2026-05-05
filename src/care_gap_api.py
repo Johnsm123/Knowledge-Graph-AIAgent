@@ -1014,13 +1014,17 @@ def delete_member(member_id):
             from src.neo4j_connection import get_reference_graph
             ref = get_reference_graph()
             if ref is not None:
+                # Delete the Member and member-owned subgraph, but keep the
+                # Persona node intact (personas are shared / re-usable).
                 ref.run_query(
                     """
-                    OPTIONAL MATCH (m:Member {member_id: $mid})
-                    OPTIONAL MATCH (m)-[:HAS_PERSONA]->(per:Persona)
+                    MATCH (m:Member {member_id: $mid})
+                    OPTIONAL MATCH (m)-[:HAS_LIFESTYLE]->(l:Lifestyle)
+                    OPTIONAL MATCH (m)-[:HAS_RELATIVE]->(fm:FamilyMember)
+                    OPTIONAL MATCH (m)-[:HAS_MEDICAL_HISTORY]->(mh:MedicalHistoryEntry)
                     OPTIONAL MATCH (m)-[:HAS_CARE_GAP|HAS_GAP]->(g:CareGap)
                     OPTIONAL MATCH (g)-[:HAS_ACTION]->(act:Action)
-                    DETACH DELETE act, g, per, m
+                    DETACH DELETE act, g, l, fm, mh, m
                     """,
                     {"mid": member_id},
                 )
@@ -1034,11 +1038,16 @@ def delete_member(member_id):
             pd_driver = _get_persona_driver()
             if pd_driver is not None:
                 with pd_driver.session() as s:
+                    # Delete Member + member-owned nodes (Lifestyle,
+                    # FamilyMember, MedicalHistoryEntry). Keep IdealPersona
+                    # and Screening nodes — they are shared/re-usable.
                     s.run(
                         """
-                        OPTIONAL MATCH (m:Member {member_id: $mid})
-                        OPTIONAL MATCH (m)-[:COMPARED_TO]->(p:IdealPersona)
-                        DETACH DELETE p, m
+                        MATCH (m:Member {member_id: $mid})
+                        OPTIONAL MATCH (m)-[:HAS_LIFESTYLE]->(l:Lifestyle)
+                        OPTIONAL MATCH (m)-[:HAS_RELATIVE]->(fm:FamilyMember)
+                        OPTIONAL MATCH (m)-[:HAS_MEDICAL_HISTORY]->(mh:MedicalHistoryEntry)
+                        DETACH DELETE l, fm, mh, m
                         """,
                         {"mid": member_id},
                     ).consume()
@@ -2630,17 +2639,20 @@ def bulk_process_members():
                 from src.care_gap_neo4j import (
                     get_member_family_history as _get_family_p,
                     get_member_medical_history as _get_medical_p,
+                    get_member_lifestyle as _get_lifestyle_p,
                 )
                 _profile_p = _get_profile_p(mid) or {"member_id": mid, "name": mname}
                 _profile_p["member_id"] = mid
                 _open_p = _get_open_p(mid) or []
                 _family_p  = _get_family_p(mid) or []
                 _medical_p = _get_medical_p(mid) or {}
+                _lifestyle_p = _get_lifestyle_p(mid) or {}
                 persona_comparison = build_persona_comparison(
                     _profile_p, _open_p,
                     completed=[],
                     family_history=_family_p,
                     medical_history=_medical_p,
+                    lifestyle=_lifestyle_p,
                 )
                 push_member_persona(_profile_p, persona_comparison)
             except Exception as p_exc:
@@ -2711,6 +2723,7 @@ def bulk_preview_persona():
             get_member_open_gaps as _get_open,
             get_member_family_history as _get_family,
             get_member_medical_history as _get_medical,
+            get_member_lifestyle as _get_lifestyle,
         )
         for m in member_list:
             mid = m.get("member_id")
@@ -2725,6 +2738,7 @@ def bulk_preview_persona():
                     completed=[],
                     family_history=_get_family(mid) or [],
                     medical_history=_get_medical(mid) or {},
+                    lifestyle=_get_lifestyle(mid) or {},
                 )
                 push_member_persona(profile, cmp)
                 results.append({"status": "ok", "member_id": mid, "name": m.get("name", mid),
