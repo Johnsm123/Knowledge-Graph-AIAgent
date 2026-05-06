@@ -231,6 +231,44 @@ def push_member_persona(member_profile: dict, comparison: dict) -> bool:
 
     try:
         with driver.session() as s:
+            # Idempotency reset: drop every member-scoped relationship that the
+            # rest of this function will re-create from current data. Without
+            # this, a re-upload of the same member would leave behind stale
+            # HAS_PENDING / HAS_COMPLETED / IS_CARE_GAP_FOR / HIGHLIGHTS_CARE_GAP
+            # edges from previous runs and the persona-demo DB would no longer
+            # mirror exactly the gaps detected in the main DB.
+            s.run(
+                """
+                MATCH (m:Member {member_id: $mid})
+                OPTIONAL MATCH (m)-[r1:HAS_PENDING]->()
+                DELETE r1
+                """,
+                {"mid": mid},
+            ).consume()
+            s.run(
+                """
+                MATCH (m:Member {member_id: $mid})
+                OPTIONAL MATCH (m)-[r2:HAS_COMPLETED]->()
+                DELETE r2
+                """,
+                {"mid": mid},
+            ).consume()
+            s.run(
+                """
+                MATCH (m:Member {member_id: $mid})
+                OPTIONAL MATCH (m)<-[r3:IS_CARE_GAP_FOR]-(:Screening)
+                DELETE r3
+                """,
+                {"mid": mid},
+            ).consume()
+            s.run(
+                """
+                MATCH (:IdealPersona)-[r4:HIGHLIGHTS_CARE_GAP {member_id: $mid}]->(:Screening)
+                DELETE r4
+                """,
+                {"mid": mid},
+            ).consume()
+
             s.run(
                 """
                 MERGE (m:Member {member_id: $mid})

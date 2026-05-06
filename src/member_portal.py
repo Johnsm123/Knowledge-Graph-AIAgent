@@ -1161,6 +1161,28 @@ def auto_process_member(member_id):
                             "message": f"{name} is fully compliant. No email needed."})
                 return
 
+            # Persona sync: backfill any prior-screening / compliant measures
+            # as Closed CareGaps in the reference DB so the timeline shows
+            # them alongside the open ones. Idempotent — re-running is safe.
+            try:
+                from src.persona_sync import (
+                    sync_compliant_measure, _find_screening_date_from_claims,
+                )
+                from src.care_gap_neo4j import get_member_claims_cpt_codes
+                from src.hedis_golden_reference import HEDIS_MEASURES
+                _claims_for_dates = get_member_claims_cpt_codes(member_id) or []
+                for _cmid in (gap_result.get("compliant") or []):
+                    _mdef = HEDIS_MEASURES.get(_cmid) or {}
+                    _sdate = _find_screening_date_from_claims(_mdef, _claims_for_dates)
+                    sync_compliant_measure(
+                        member_id=member_id,
+                        measure_id=_cmid,
+                        measure_name=_mdef.get("name", _cmid),
+                        screening_date=_sdate,
+                    )
+            except Exception as _comp_err:
+                logger.warning(f"[AUTO-PROCESS] compliant sync skipped: {_comp_err}")
+
             # Persona sync: analysis starting
             try:
                 from src.persona_sync import sync_analysis_started

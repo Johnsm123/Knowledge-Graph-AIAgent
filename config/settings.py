@@ -1,8 +1,15 @@
 """
 Configuration settings for Medical AI Agent System
 """
+import os
 from pydantic_settings import BaseSettings
 from typing import Optional
+
+# Resolve .env to an absolute path anchored at the repo root so settings load
+# correctly regardless of the caller's current working directory (e.g. when
+# scripts/ utilities are run from inside scripts/).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ENV_FILE = os.path.join(_REPO_ROOT, ".env")
 
 
 class Settings(BaseSettings):
@@ -44,7 +51,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     
     class Config:
-        env_file = ".env"
+        env_file = _ENV_FILE
         case_sensitive = False
 
 

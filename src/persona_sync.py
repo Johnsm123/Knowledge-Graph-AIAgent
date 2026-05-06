@@ -151,6 +151,38 @@ def _age_band(age: int) -> str:
 #  Care-gap lifecycle tracking
 # ═══════════════════════════════════════════════════════════════════════════
 
+def reset_member_care_gaps(member_id: str) -> int:
+    """Delete every CareGap (+ its Action nodes) attached to this member in
+    the reference DB. Used before re-syncing on bulk upload so the reference
+    DB never accumulates stale gaps from previous runs and always mirrors
+    exactly the open gaps detected in the main DB by the HEDIS rulebook.
+
+    Returns the number of CareGap nodes deleted.
+    """
+    ref = _ref()
+    rows = ref.run_query("""
+        MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+        RETURN count(g) AS n
+    """, {"mid": member_id})
+    n = (rows[0]["n"] if rows else 0) or 0
+
+    # Detach + delete actions first, then care gaps. DETACH DELETE drops
+    # all relationships incident to the deleted nodes, so HAS_CARE_GAP /
+    # HAS_ACTION / FOR_MEASURE edges go with them.
+    ref.execute_write("""
+        MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+        OPTIONAL MATCH (g)-[:HAS_ACTION]->(a:Action)
+        DETACH DELETE a
+    """, {"mid": member_id})
+    ref.execute_write("""
+        MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+        DETACH DELETE g
+    """, {"mid": member_id})
+    if n:
+        logger.info(f"[PERSONA-SYNC] reset_member_care_gaps: removed {n} stale gap(s) for {member_id}")
+    return n
+
+
 def sync_care_gap(member_id: str, care_gap_id: str, measure_id: str,
                   measure_name: str, status: str = "Open"):
     """Create / update a CareGap node and link it to the Member and Measure."""
@@ -185,6 +217,95 @@ def sync_care_gap(member_id: str, care_gap_id: str, measure_id: str,
                 stage="gap_identified")
 
     logger.info(f"[PERSONA-SYNC] Care gap {care_gap_id} synced for {member_id}")
+
+
+def sync_compliant_measure(member_id: str, measure_id: str, measure_name: str,
+                           screening_date: str = ""):
+    """
+    Mirror a HEDIS measure that the member has *already* satisfied (e.g. via
+    a PriorScreenings claim loaded during bulk upload, or any other completed
+    claim within the lookback window) into the reference DB as a CLOSED
+    CareGap node.
+
+    The reference DB exists purely for visualization. The main DB's golden
+    rulebook decides "this isn't a gap because the member is compliant", and
+    we want the timeline to reflect that fact: a brief "Gap Identified → Gap
+    Closed" lifecycle dated on the screening service date, so the care
+    manager sees both the still-open gaps AND the compliant ones in one
+    unified view, exactly matching what the rulebook says.
+    """
+    ref = _ref()
+    now = datetime.now().isoformat()
+    sd = (screening_date or "")[:10]
+    iso_date = (sd + "T00:00:00") if sd else now
+
+    # Stable ID per (member, measure) so re-running the sync is idempotent
+    # and never creates duplicate closed gaps for the same prior screening.
+    care_gap_id = f"PRIOR-{member_id}-{measure_id}"
+
+    ref.execute_write("""
+        MERGE (ms:Measure {measure_id: $msid})
+        SET ms.name = $msname
+    """, {"msid": measure_id, "msname": measure_name})
+
+    ref.execute_write("""
+        MERGE (g:CareGap {gap_id: $gid})
+        SET g.measure_id    = $msid,
+            g.measure_name  = $msname,
+            g.status        = 'Closed',
+            g.stage         = 'gap_closed',
+            g.identified_at = $iso,
+            g.closed_at     = $iso,
+            g.source        = 'prior_screening'
+        WITH g
+        MATCH (m:Member {member_id: $mid})
+        MERGE (m)-[:HAS_CARE_GAP]->(g)
+        WITH g
+        MATCH (ms:Measure {measure_id: $msid})
+        MERGE (g)-[:FOR_MEASURE]->(ms)
+    """, {"gid": care_gap_id, "msid": measure_id, "msname": measure_name,
+          "iso": iso_date, "mid": member_id})
+
+    _add_action(care_gap_id, "identified",
+                f"Prior screening on file for {measure_name}",
+                stage="gap_identified")
+    _add_action(care_gap_id, "closed",
+                f"Care gap closed — screening completed on {sd or 'a prior date'}",
+                stage="gap_closed")
+
+    logger.info(
+        f"[PERSONA-SYNC] Compliant measure {measure_id} synced as CLOSED gap for {member_id}"
+    )
+    return care_gap_id
+
+
+def _find_screening_date_from_claims(measure: dict, claims: list) -> str:
+    """Return the most recent service_date from claims whose CPT matches one
+    of the measure's accepted codes. Used when backfilling existing members
+    where we don't have the original PriorScreenings excel mapping."""
+    if not measure or not claims:
+        return ""
+    accepted = set()
+    for key, codes in (measure.get("codes") or {}).items():
+        kl = (key or "").lower()
+        if isinstance(codes, list) and ("cpt" in kl or "hcpcs" in kl):
+            for c in codes:
+                if c:
+                    accepted.add(str(c).strip())
+    primary = (measure.get("primary_cpt") or "").strip()
+    if primary:
+        accepted.add(primary)
+    for opt in (measure.get("screening_options") or []):
+        for c in list(opt.get("cpt") or []) + list(opt.get("hcpcs") or []):
+            if c:
+                accepted.add(str(c).strip())
+
+    # Claims come back ordered by service_date DESC, so the first match is
+    # the most recent service date.
+    for c in claims:
+        if (c.get("cpt_code") or "").strip() in accepted:
+            return (c.get("service_date") or "")[:10]
+    return ""
 
 
 def sync_analysis_started(member_id: str, care_gap_id: str = None):
@@ -403,11 +524,24 @@ def sync_gap_closed(member_id: str, care_gap_id: str):
 
 def sync_all_existing_members():
     """
-    One-time bulk sync: read all Members + CareGaps from the original DB
-    and create corresponding Persona structures in the reference DB.
+    Full re-sync: for every Member in the main DB, rebuild the reference DB
+    and persona-demo DB so they exactly mirror the rulebook's view —
+    open gaps as Open, prior-screening compliant measures as Closed gaps,
+    and a fresh IdealPersona twin in the persona-demo DB.
+
+    Idempotent: existing reference-DB CareGaps for each member are wiped
+    first via reset_member_care_gaps so stale data from earlier runs does
+    not survive.
     """
     from src.neo4j_connection import get_knowledge_graph
-    from src.care_gap_neo4j import get_member_open_gaps
+    from src.care_gap_neo4j import (
+        get_member_open_gaps, get_member_profile,
+        get_member_claims_cpt_codes,
+        get_member_family_history, get_member_medical_history,
+        get_member_lifestyle,
+    )
+    from src.care_gap_agents import detect_care_gaps
+    from src.hedis_golden_reference import HEDIS_MEASURES
 
     kg = get_knowledge_graph()
     members = kg.run_query("""
@@ -427,6 +561,9 @@ def sync_all_existing_members():
         if isinstance(chronic, str):
             chronic = [c.strip() for c in chronic.split(",") if c.strip()]
 
+        # Wipe any stale reference-DB gaps from previous runs.
+        reset_member_care_gaps(mid)
+
         sync_member_persona(
             member_id=mid,
             name=mem.get("name", ""),
@@ -439,9 +576,18 @@ def sync_all_existing_members():
             pcp_id=mem.get("pcp_id", ""),
         )
 
-        # Sync care gaps
-        gaps = get_member_open_gaps(mid)
-        for g in gaps:
+        # Re-detect against the rulebook so we know which measures are open
+        # vs compliant right now (idempotent — closes stale opens, no-op
+        # for already-compliant).
+        try:
+            gap_result = detect_care_gaps(mid) or {}
+        except Exception as exc:
+            logger.warning(f"[PERSONA-SYNC] detect_care_gaps failed for {mid}: {exc}")
+            gap_result = {}
+
+        # Open gaps → Open CareGap nodes
+        open_gaps = get_member_open_gaps(mid)
+        for g in open_gaps:
             sync_care_gap(
                 member_id=mid,
                 care_gap_id=g["care_gap_id"],
@@ -449,9 +595,50 @@ def sync_all_existing_members():
                 measure_name=g.get("measure_name", g["measure_id"]),
             )
 
+        # Compliant measures → Closed CareGap nodes (timeline shows them
+        # as Gap Identified → Gap Closed on the screening service date).
+        claims = get_member_claims_cpt_codes(mid) or []
+        completed_for_persona = []
+        for compliant_id in (gap_result.get("compliant") or []):
+            measure_def = HEDIS_MEASURES.get(compliant_id) or {}
+            measure_name = measure_def.get("name", compliant_id)
+            screening_date = _find_screening_date_from_claims(measure_def, claims)
+            sync_compliant_measure(
+                member_id=mid,
+                measure_id=compliant_id,
+                measure_name=measure_name,
+                screening_date=screening_date,
+            )
+            completed_for_persona.append({
+                "measure_id":       compliant_id,
+                "measure_name":     measure_name,
+                "primary_cpt_code": measure_def.get("primary_cpt", ""),
+                "primary_icd10":    measure_def.get("primary_icd10", ""),
+            })
+
+        # Refresh the persona-demo DB twin so its pending/completed
+        # screenings exactly match the rulebook view too.
+        try:
+            from src.persona_demo_writer import (
+                build_persona_comparison, push_member_persona,
+            )
+            profile_pd = get_member_profile(mid) or {"member_id": mid, "name": mem.get("name", "")}
+            profile_pd["member_id"] = mid
+            cmp = build_persona_comparison(
+                profile_pd,
+                open_gaps,
+                completed=completed_for_persona,
+                family_history=get_member_family_history(mid) or [],
+                medical_history=get_member_medical_history(mid) or {},
+                lifestyle=get_member_lifestyle(mid) or {},
+            )
+            push_member_persona(profile_pd, cmp)
+        except Exception as pd_err:
+            logger.warning(f"[PERSONA-SYNC] persona-demo refresh failed for {mid}: {pd_err}")
+
         count += 1
 
-    logger.info(f"[PERSONA-SYNC] Bulk synced {count} members to reference DB")
+    logger.info(f"[PERSONA-SYNC] Bulk synced {count} members to reference + persona-demo DBs")
     return count
 
 

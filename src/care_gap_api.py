@@ -2354,6 +2354,11 @@ def bulk_upload_members():
                 replace_medical_history(member_id, history)
 
             # Load prior screenings as claims (e.g. "BCS:2025-06-15;COL:2024-03-20")
+            # Also captured into prior_screenings_map so we can later mark the
+            # corresponding measures as Closed gaps in the reference + persona-demo
+            # DBs with the actual screening date — keeping the visualization in
+            # exact sync with what the golden rulebook decides about compliance.
+            prior_screenings_map: dict = {}
             prior_raw = str(row.get("PriorScreenings", "")).strip()
             if prior_raw and prior_raw.lower() != "nan":
                 from src.hedis_golden_reference import HEDIS_MEASURES
@@ -2379,6 +2384,7 @@ def bulk_upload_members():
                         service_date=svc_date,
                         status="Completed",
                     )
+                    prior_screenings_map[mid_part] = svc_date
                     logger.info(f"[BULK] Prior screening claim created: {claim_id} ({mid_part} on {svc_date})")
 
             # Detect care gaps (pure Python — fast)
@@ -2386,9 +2392,41 @@ def bulk_upload_members():
             open_gaps = get_member_open_gaps(member_id)
             profile = get_member_profile(member_id)
 
+            # Build the "completed" list once — every measure the rulebook
+            # marked compliant becomes a closed gap in ref DB + a completed
+            # screening on the persona-demo twin. Service date comes from
+            # the Excel PriorScreenings column when present, otherwise from
+            # the most recent matching claim.
+            from src.hedis_golden_reference import HEDIS_MEASURES as _HM
+            from src.persona_sync import _find_screening_date_from_claims
+            from src.care_gap_neo4j import get_member_claims_cpt_codes as _gccc
+            _claims_for_dates = _gccc(member_id) or []
+            completed_measures = []
+            for _cmid in (gap_result.get("compliant") or []):
+                _mdef = _HM.get(_cmid) or {}
+                _mname = _mdef.get("name", _cmid)
+                _sdate = (
+                    prior_screenings_map.get(_cmid)
+                    or _find_screening_date_from_claims(_mdef, _claims_for_dates)
+                )
+                completed_measures.append({
+                    "measure_id":       _cmid,
+                    "measure_name":     _mname,
+                    "primary_cpt_code": _mdef.get("primary_cpt", ""),
+                    "primary_icd10":    _mdef.get("primary_icd10", ""),
+                    "service_date":     _sdate,
+                })
+
             # ── Sync persona to reference DB for visualization ──────
             try:
-                from src.persona_sync import sync_member_persona, sync_care_gap
+                from src.persona_sync import (
+                    sync_member_persona, sync_care_gap, reset_member_care_gaps,
+                    sync_compliant_measure,
+                )
+                # Wipe any stale CareGap nodes left from a previous upload of
+                # this member so the reference DB ends up mirroring exactly the
+                # open + closed gaps the rulebook just decided — no extras.
+                reset_member_care_gaps(member_id)
                 sync_member_persona(
                     member_id=member_id, name=name, dob=dob,
                     gender=gender, age_str=age_str,
@@ -2403,6 +2441,14 @@ def bulk_upload_members():
                         care_gap_id=og["care_gap_id"],
                         measure_id=og["measure_id"],
                         measure_name=og.get("measure_name", og["measure_id"]),
+                    )
+                # Closed gaps for prior-screening / already-compliant measures.
+                for _cm in completed_measures:
+                    sync_compliant_measure(
+                        member_id=member_id,
+                        measure_id=_cm["measure_id"],
+                        measure_name=_cm["measure_name"],
+                        screening_date=_cm.get("service_date", ""),
                     )
             except Exception as ps_err:
                 logger.warning(f"Persona sync failed for {member_id}: {ps_err}")
@@ -2425,7 +2471,7 @@ def bulk_upload_members():
                 _cmp = _bpc(
                     _profile_pd,
                     open_gaps,
-                    completed=[],
+                    completed=completed_measures,
                     family_history=_gfh(member_id) or [],
                     medical_history=_gmh(member_id) or {},
                     lifestyle=_gls(member_id) or {},
@@ -4281,6 +4327,95 @@ def reference_member_personas(member_id):
         except Exception as rec_err:
             logger.warning(f"[RECONCILE] Reconciliation failed: {rec_err}")
 
+        # ── Reconcile compliant measures (prior screenings) ─────────────
+        # Two-pass backfill so the timeline always shows prior screenings as
+        # closed gaps in the reference DB, regardless of when / how the member
+        # was uploaded.
+        #
+        # Pass A — rulebook-driven: detect_care_gaps() in the main DB tells us
+        #   which measures are currently compliant. Anything compliant whose
+        #   corresponding ref-DB CareGap is missing or not yet at gap_closed
+        #   gets created/updated via sync_compliant_measure().
+        #
+        # Pass B — claim-driven fallback: scan every PRIOR-* claim attached to
+        #   the member and ensure each one has a closed CareGap mirroring it.
+        #   This is the safety net for members where detect_care_gaps fails or
+        #   the measure isn't in the compliant list (e.g. stale BenefitPlan,
+        #   missing diagnosis), so the visualization can still rely on the raw
+        #   "the member has a completed screening claim" fact.
+        try:
+            from src.persona_sync import (
+                sync_compliant_measure, _ref, _find_screening_date_from_claims,
+            )
+            from src.care_gap_neo4j import get_member_claims_cpt_codes
+            from src.hedis_golden_reference import HEDIS_MEASURES
+
+            ref = _ref()
+            existing = ref.run_query("""
+                MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+                RETURN g.measure_id AS measure_id, g.stage AS stage
+            """, {"mid": member_id})
+            ref_stage_by_measure = {
+                r["measure_id"]: r.get("stage")
+                for r in existing if r.get("measure_id")
+            }
+            claims = get_member_claims_cpt_codes(member_id) or []
+
+            compliant_seen: set = set()
+
+            # Pass A — rulebook
+            try:
+                from src.care_gap_agents import detect_care_gaps
+                gap_result = detect_care_gaps(member_id) or {}
+                for cmid in (gap_result.get("compliant") or []):
+                    compliant_seen.add(cmid)
+                    if ref_stage_by_measure.get(cmid) == "gap_closed":
+                        continue
+                    measure_def = HEDIS_MEASURES.get(cmid) or {}
+                    sdate = _find_screening_date_from_claims(measure_def, claims)
+                    sync_compliant_measure(
+                        member_id=member_id,
+                        measure_id=cmid,
+                        measure_name=measure_def.get("name", cmid),
+                        screening_date=sdate,
+                    )
+                    logger.info(f"[RECONCILE-A] Backfilled closed gap for {member_id}/{cmid} (date={sdate or 'unknown'})")
+            except Exception as ra_err:
+                logger.warning(f"[RECONCILE-A] rulebook pass failed for {member_id}: {ra_err}")
+
+            # Pass B — direct PRIOR-* claim scan
+            kg = get_knowledge_graph()
+            prior_claims = kg.run_query("""
+                MATCH (m:Member {member_id: $mid})-[:HAS_CLAIM]->(c:Claim)
+                WHERE c.claim_id STARTS WITH 'PRIOR-'
+                RETURN c.claim_id AS claim_id, c.cpt_code AS cpt_code,
+                       c.service_date AS service_date
+            """, {"mid": member_id})
+            for pc in prior_claims:
+                cid = pc.get("claim_id") or ""
+                # Format: PRIOR-{member_id}-{measure_id}
+                parts = cid.split("-")
+                if len(parts) < 3:
+                    continue
+                cmid = parts[-1].upper()
+                if cmid in compliant_seen and ref_stage_by_measure.get(cmid) == "gap_closed":
+                    continue
+                if ref_stage_by_measure.get(cmid) == "gap_closed":
+                    continue
+                measure_def = HEDIS_MEASURES.get(cmid)
+                if not measure_def:
+                    continue
+                sdate = (pc.get("service_date") or "")[:10]
+                sync_compliant_measure(
+                    member_id=member_id,
+                    measure_id=cmid,
+                    measure_name=measure_def.get("name", cmid),
+                    screening_date=sdate,
+                )
+                logger.info(f"[RECONCILE-B] Backfilled closed gap from PRIOR claim for {member_id}/{cmid} (date={sdate or 'unknown'})")
+        except Exception as comp_err:
+            logger.warning(f"[RECONCILE] Compliant-measure reconciliation failed: {comp_err}")
+
         result = get_member_lifecycle_graph(member_id)
         return jsonify(result)
     except Exception as e:
@@ -4330,6 +4465,24 @@ if __name__ == "__main__":
         logger.info("Persona reference DB schema ready")
     except Exception as e:
         logger.warning(f"Persona schema bootstrap skipped: {e}")
+
+    # Backfill prior-screening closed gaps for every existing member so the
+    # lifecycle visualization is correct on first page load. Runs in a
+    # background thread so it never blocks server startup. Best-effort: any
+    # failure is logged and ignored — the per-request lifecycle endpoint
+    # also reconciles on read, so this is purely a head-start.
+    try:
+        import threading as _bg_t
+        def _startup_full_sync():
+            try:
+                from src.persona_sync import sync_all_existing_members
+                n = sync_all_existing_members()
+                logger.info(f"[STARTUP-SYNC] reference + persona-demo DBs refreshed for {n} members")
+            except Exception as exc:
+                logger.warning(f"[STARTUP-SYNC] full sync skipped: {exc}")
+        _bg_t.Thread(target=_startup_full_sync, daemon=True).start()
+    except Exception as e:
+        logger.warning(f"Startup full-sync thread failed to start: {e}")
 
     # Start the no-show auto-cancel + re-outreach scheduler
     try:
