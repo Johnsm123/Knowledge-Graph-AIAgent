@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     neo4j_ref_password: str = ""
     neo4j_ref_database: str = "neo4j"
 
+    # Neo4j Persona-Demo Database (bulk-upload persona-comparison animation)
+    neo4j_persona_uri: str = ""
+    neo4j_persona_user: str = ""
+    neo4j_persona_password: str = ""
+
     # Google Maps / Places API
     google_maps_api_key: str = ""
 

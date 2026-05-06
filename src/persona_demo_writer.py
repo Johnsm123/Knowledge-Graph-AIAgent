@@ -70,11 +70,18 @@ def _load_env_file(path: str) -> None:
 def _persona_db_creds() -> tuple[str, str, str] | None:
     here = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(here)
+    # Load from main .env first (preferred), then persona_demo/.env.persona-demo
+    # as a fallback. setdefault means whichever loads first wins.
+    _load_env_file(os.path.join(repo_root, ".env"))
     _load_env_file(os.path.join(repo_root, "persona_demo", ".env.persona-demo"))
     uri = os.environ.get("NEO4J_PERSONA_URI", "")
     user = os.environ.get("NEO4J_PERSONA_USER", "")
     pw   = os.environ.get("NEO4J_PERSONA_PASSWORD", "")
     if not (uri and user and pw):
+        log.warning(
+            "[PERSONA-DEMO] missing creds — uri=%s user=%s pw_set=%s",
+            bool(uri), bool(user), bool(pw),
+        )
         return None
     return uri, user, pw
 
@@ -210,6 +217,10 @@ def push_member_persona(member_profile: dict, comparison: dict) -> bool:
     """Write Member + IdealPersona + Screening nodes/edges. Returns True on success."""
     driver = _get_driver()
     if driver is None:
+        log.warning(
+            "[PERSONA-DEMO] no driver — skipping write for member_id=%s",
+            comparison.get("member_id", "?"),
+        )
         return False
     mid = comparison["member_id"]
     persona_id = comparison["persona_id"]
@@ -448,6 +459,10 @@ def push_member_persona(member_profile: dict, comparison: dict) -> bool:
                             "notes":    entry.get("notes") or "",
                         },
                     ).consume()
+        log.info(
+            "[PERSONA-DEMO] wrote member_id=%s persona_id=%s pending=%d completed=%d",
+            mid, persona_id, len(pending), len(completed),
+        )
         return True
     except Exception as e:
         log.warning("[PERSONA-DEMO] write failed for %s: %s", mid, e)
