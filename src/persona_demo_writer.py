@@ -459,6 +459,181 @@ def push_member_persona(member_profile: dict, comparison: dict) -> bool:
                             "notes":    entry.get("notes") or "",
                         },
                     ).consume()
+
+            # ── Ideal-persona mirror nodes ───────────────────────────────
+            # Mirror the member's parameter structure (lifestyle / ancestral
+            # history / medical history) onto the IdealPersona — but with
+            # perfected values. This gives the persona-demo visualization a
+            # complete "perfect twin" graph that contrasts the member's
+            # actual records and clearly shows where the care gaps are.
+            s.run(
+                """
+                MERGE (il:IdealLifestyle {persona_id: $pid})
+                SET il.bmi                = $bmi,
+                    il.smoking_status     = $smoking,
+                    il.alcohol_use        = $alcohol,
+                    il.exercise_frequency = $exercise,
+                    il.diet_type          = $diet,
+                    il.sleep_hours_avg    = $sleep,
+                    il.stress_level       = $stress
+                WITH il
+                MATCH (p:IdealPersona {persona_id: $pid})
+                MERGE (p)-[:HAS_IDEAL_LIFESTYLE]->(il)
+                """,
+                {
+                    "pid":      persona_id,
+                    "bmi":      IDEAL_LIFESTYLE["bmi"],
+                    "smoking":  IDEAL_LIFESTYLE["smoking_status"],
+                    "alcohol":  IDEAL_LIFESTYLE["alcohol_use"],
+                    "exercise": IDEAL_LIFESTYLE["exercise_frequency"],
+                    "diet":     IDEAL_LIFESTYLE["diet_type"],
+                    "sleep":    IDEAL_LIFESTYLE["sleep_hours_avg"],
+                    "stress":   IDEAL_LIFESTYLE["stress_level"],
+                },
+            ).consume()
+
+            # Ideal ancestral history — same relations as the member, but
+            # all alive and free of inherited conditions (the "clean" lineage
+            # the member would have in an ideal world).
+            for fm in (comparison.get("_family_history_raw") or []):
+                relation = (fm.get("relation") or "").strip()
+                if not relation:
+                    continue
+                ifmid = f"{persona_id}-{relation.lower().replace(' ', '_')}-ideal"
+                s.run(
+                    """
+                    MATCH (p:IdealPersona {persona_id: $pid})
+                    MERGE (ifm:IdealFamilyMember {family_member_id: $ifmid})
+                    SET ifm.relation              = $relation,
+                        ifm.alive                 = true,
+                        ifm.age_or_age_at_death   = $age,
+                        ifm.conditions            = [],
+                        ifm.notes                 = 'Ideal lineage — no inherited conditions'
+                    MERGE (p)-[:HAS_IDEAL_RELATIVE]->(ifm)
+                    """,
+                    {
+                        "pid":      persona_id,
+                        "ifmid":    ifmid,
+                        "relation": relation,
+                        "age":      fm.get("age_or_age_at_death") or "",
+                    },
+                ).consume()
+
+            # Ideal medical history — every applicable screening completed,
+            # no active conditions, allergies / immunizations preserved as
+            # neutral facts. Each entry mirrors the member's structure but
+            # is marked "ideal".
+            ideal_entry_idx = 0
+            for g in applicable:
+                ideal_entry_idx += 1
+                ieid = f"{persona_id}-IMH-{ideal_entry_idx}"
+                s.run(
+                    """
+                    MATCH (p:IdealPersona {persona_id: $pid})
+                    MERGE (e:IdealMedicalHistoryEntry {entry_id: $ieid})
+                    SET e.type       = 'completed_screening',
+                        e.label      = $label,
+                        e.measure_id = $mea,
+                        e.status     = 'Completed',
+                        e.notes      = 'Ideal twin completed this HEDIS screening'
+                    MERGE (p)-[:HAS_IDEAL_MEDICAL_HISTORY]->(e)
+                    """,
+                    {
+                        "pid":   persona_id,
+                        "ieid":  ieid,
+                        "label": g["measure_name"] or g["measure_id"],
+                        "mea":   g["measure_id"],
+                    },
+                ).consume()
+
+            mh = comparison.get("_medical_history_raw") or {}
+            for entry in (mh.get("past_conditions") or []) + (mh.get("current_conditions") or []):
+                label = (entry.get("name") or entry.get("label") or "").strip()
+                if not label:
+                    continue
+                ideal_entry_idx += 1
+                ieid = f"{persona_id}-IMH-{ideal_entry_idx}"
+                s.run(
+                    """
+                    MATCH (p:IdealPersona {persona_id: $pid})
+                    MERGE (e:IdealMedicalHistoryEntry {entry_id: $ieid})
+                    SET e.type     = 'resolved_condition',
+                        e.label    = $label,
+                        e.status   = 'Resolved',
+                        e.notes    = 'Ideal twin resolved/avoided this condition'
+                    MERGE (p)-[:HAS_IDEAL_MEDICAL_HISTORY]->(e)
+                    """,
+                    {"pid": persona_id, "ieid": ieid, "label": label},
+                ).consume()
+
+            for entry in (mh.get("allergies") or []):
+                label = (entry.get("substance") or entry.get("name") or entry.get("label") or "").strip()
+                if not label:
+                    continue
+                ideal_entry_idx += 1
+                ieid = f"{persona_id}-IMH-{ideal_entry_idx}"
+                s.run(
+                    """
+                    MATCH (p:IdealPersona {persona_id: $pid})
+                    MERGE (e:IdealMedicalHistoryEntry {entry_id: $ieid})
+                    SET e.type     = 'allergy',
+                        e.label    = $label,
+                        e.severity = 'Managed',
+                        e.notes    = 'Allergy carried to ideal twin — managed without incident'
+                    MERGE (p)-[:HAS_IDEAL_MEDICAL_HISTORY]->(e)
+                    """,
+                    {"pid": persona_id, "ieid": ieid, "label": label},
+                ).consume()
+
+            for entry in (mh.get("immunizations") or []):
+                label = (entry.get("name") or entry.get("label") or "").strip()
+                if not label:
+                    continue
+                ideal_entry_idx += 1
+                ieid = f"{persona_id}-IMH-{ideal_entry_idx}"
+                s.run(
+                    """
+                    MATCH (p:IdealPersona {persona_id: $pid})
+                    MERGE (e:IdealMedicalHistoryEntry {entry_id: $ieid})
+                    SET e.type   = 'immunization',
+                        e.label  = $label,
+                        e.year   = $year,
+                        e.status = 'Up-to-date'
+                    MERGE (p)-[:HAS_IDEAL_MEDICAL_HISTORY]->(e)
+                    """,
+                    {
+                        "pid":   persona_id,
+                        "ieid":  ieid,
+                        "label": label,
+                        "year":  entry.get("year") or "",
+                    },
+                ).consume()
+
+            # Explicit care-gap marker: connect each pending Screening to the
+            # Member with a HIGHLIGHTS_CARE_GAP edge from the IdealPersona, so
+            # the visualization can light up exactly which screenings the
+            # member is missing relative to the perfect twin.
+            for g in pending:
+                s.run(
+                    """
+                    MATCH (p:IdealPersona {persona_id: $pid})
+                    MATCH (m:Member {member_id: $mid})
+                    MATCH (sc:Screening {measure_id: $mea})
+                    MERGE (p)-[r:HIGHLIGHTS_CARE_GAP {member_id: $mid, measure_id: $mea}]->(sc)
+                    SET r.identified_on = $now,
+                        r.measure_name  = $name
+                    MERGE (sc)-[g:IS_CARE_GAP_FOR]->(m)
+                    SET g.identified_on = $now
+                    """,
+                    {
+                        "pid":  persona_id,
+                        "mid":  mid,
+                        "mea":  g["measure_id"],
+                        "name": g["measure_name"] or g["measure_id"],
+                        "now":  now,
+                    },
+                ).consume()
+
         log.info(
             "[PERSONA-DEMO] wrote member_id=%s persona_id=%s pending=%d completed=%d",
             mid, persona_id, len(pending), len(completed),
