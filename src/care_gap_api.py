@@ -2407,6 +2407,33 @@ def bulk_upload_members():
             except Exception as ps_err:
                 logger.warning(f"Persona sync failed for {member_id}: {ps_err}")
 
+            # ── Persona-Demo DB: write Member + IdealPersona relationship ──
+            # Happens during INITIAL bulk upload (not after outreach), so the
+            # persona DB stays in sync with what's in main + reference DBs.
+            try:
+                from src.persona_demo_writer import (
+                    build_persona_comparison as _bpc,
+                    push_member_persona as _ppm,
+                )
+                from src.care_gap_neo4j import (
+                    get_member_family_history as _gfh,
+                    get_member_medical_history as _gmh,
+                    get_member_lifestyle as _gls,
+                )
+                _profile_pd = profile or {"member_id": member_id, "name": name}
+                _profile_pd["member_id"] = member_id
+                _cmp = _bpc(
+                    _profile_pd,
+                    open_gaps,
+                    completed=[],
+                    family_history=_gfh(member_id) or [],
+                    medical_history=_gmh(member_id) or {},
+                    lifestyle=_gls(member_id) or {},
+                )
+                _ppm(_profile_pd, _cmp)
+            except Exception as pd_err:
+                logger.warning(f"Persona-demo write failed for {member_id}: {pd_err}")
+
             results.append({
                 "member_id": member_id,
                 "name": name,
