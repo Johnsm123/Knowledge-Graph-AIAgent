@@ -489,7 +489,7 @@ def sync_gap_closed(member_id: str, care_gap_id: str):
     logger.info(f"[PERSONA-SYNC] Gap closure — gap lookup for '{care_gap_id}': {check}")
 
     if not check:
-        logger.warning(f"[PERSONA-SYNC] CareGap '{care_gap_id}' NOT FOUND — creating before closing")
+        logger.info(f"[PERSONA-SYNC] CareGap '{care_gap_id}' missing in reference DB — auto-creating as closed (self-heal, expected)")
         ref.execute_write("""
             MERGE (g:CareGap {gap_id: $gid})
             SET g.status = 'Open', g.stage = 'appointment_booked',
