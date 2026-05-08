@@ -57,23 +57,29 @@ function Analytics() {
     );
   }
 
-  // Prepare data for charts
-  const gapDistributionData = stats?.gaps_by_measure?.map(measure => {
-    const earliest = measure.earliest_created || measure.latest_created || null;
-    let daysOpen = null;
-    if (earliest) {
-      const ms = Date.now() - new Date(earliest).getTime();
-      if (!Number.isNaN(ms)) daysOpen = Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
-    }
-    return {
-      name: measure.measure_id,
-      value: measure.gap_count,
-      fullName: measure.measure_name,
-      earliest_created: earliest,
-      latest_created: measure.latest_created || null,
-      days_open: daysOpen,
-    };
-  }) || [];
+  // Prepare data for charts.
+  // Demo scope: limit the Care Gap Distribution chart to the three cancer
+  // screening measures only (BCS, CCS, COL). The rest of the HEDIS measures
+  // are intentionally hidden until the demo expands to other gap categories.
+  const DEMO_MEASURE_IDS = new Set(['BCS', 'CCS', 'COL']);
+  const gapDistributionData = (stats?.gaps_by_measure || [])
+    .filter(measure => DEMO_MEASURE_IDS.has(measure.measure_id))
+    .map(measure => {
+      const earliest = measure.earliest_created || measure.latest_created || null;
+      let daysOpen = null;
+      if (earliest) {
+        const ms = Date.now() - new Date(earliest).getTime();
+        if (!Number.isNaN(ms)) daysOpen = Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
+      }
+      return {
+        name: measure.measure_id,
+        value: measure.gap_count,
+        fullName: measure.measure_name,
+        earliest_created: earliest,
+        latest_created: measure.latest_created || null,
+        days_open: daysOpen,
+      };
+    });
 
   const complianceData = [
     { name: 'Compliant', value: stats?.compliant_members || 0, color: COLORS.success },
