@@ -461,8 +461,11 @@ function Dashboard({ onMemberSelect }) {
         </div>
       </div>
 
-      {/* ── Knowledge Explorer (Members / Providers / Measures filters) ── */}
-      <div className="explorer-section">
+      {/* Knowledge Explorer removed — graph filter data is still fetched in
+          state (graphs.members_graph) because the measure-filter chip on
+          the Members panel uses its OPEN_GAP edges. */}
+      {false && (
+        <div className="explorer-section" style={{ display: 'none' }}>
         <div className="section-header">
           <h2><Activity size={20} className="graph-icon" /> Knowledge Explorer</h2>
           {selectedNodeId && (
@@ -513,7 +516,8 @@ function Dashboard({ onMemberSelect }) {
             Click <strong>Reset filter</strong> above to see every {primaryLabel.toLowerCase()} again.
           </p>
         )}
-      </div>
+        </div>
+      )}
 
       {/* ── Members panel ── */}
       <div className="members-panel">
@@ -627,46 +631,48 @@ function Dashboard({ onMemberSelect }) {
                       )}
                     </div>
 
-                    {/* Outreach & Appointment badges */}
-                    {(member.outreach_count > 0 || member.appointment_count > 0) && (
-                      <div className="tile-badges">
-                        {member.outreach_count > 0 && (
-                          <span className="outreach-badge" title={member.last_outreach_date ? `Last outreach: ${member.last_outreach_date}` : 'Outreach sent'}>
-                            <Mail size={12} /> Outreach Done
-                          </span>
-                        )}
-                        {member.appointment_count > 0 && (
-                          <span className="appointment-badge" title="Has scheduled appointments">
-                            <Calendar size={12} /> Appt Booked
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    {/* Outreach / Appointment / Closed badge — mutually
+                        exclusive precedence so the tile shows the FURTHEST
+                        stage of the journey only:
+                          • all open gaps closed     → "Care Gaps Closed"
+                          • appointment booked       → "Appt Booked"
+                          • outreach sent (no appt)  → "Outreach Done" */}
+                    {(() => {
+                      const hadGaps = (member.open_gaps || 0) + (member.closed_gaps || 0) > 0;
+                      const allClosed = hadGaps && (member.open_gaps || 0) === 0;
+                      const hasAppt   = (member.appointment_count || 0) > 0;
+                      const hasOutreach = (member.outreach_count || 0) > 0;
+                      if (allClosed) {
+                        return (
+                          <div className="tile-badges">
+                            <span className="closed-badge" title="All care gaps closed">
+                              <CheckCircle size={12} /> Care Gaps Closed
+                            </span>
+                          </div>
+                        );
+                      }
+                      if (hasAppt) {
+                        return (
+                          <div className="tile-badges">
+                            <span className="appointment-badge" title="Has scheduled appointments">
+                              <Calendar size={12} /> Appt Booked
+                            </span>
+                          </div>
+                        );
+                      }
+                      if (hasOutreach) {
+                        return (
+                          <div className="tile-badges">
+                            <span className="outreach-badge" title={member.last_outreach_date ? `Last outreach: ${member.last_outreach_date}` : 'Outreach sent'}>
+                              <Mail size={12} /> Outreach Done
+                            </span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
 
                     <div className="tile-footer">
-                      {/* Auto-process status or button */}
-                      {processing[member.member_id]?.status === 'running' ? (
-                        <button className="btn-auto-process running" disabled>
-                          <Loader size={14} className="spinning" />
-                          {processing[member.member_id].message}
-                        </button>
-                      ) : processing[member.member_id]?.status === 'done' ? (
-                        <span className="auto-process-done">
-                          <CheckCircle size={14} />
-                          {processing[member.member_id].message}
-                          {processing[member.member_id].emailSent && ' ✉'}
-                        </span>
-                      ) : processing[member.member_id]?.status === 'error' ? (
-                        <button className="btn-auto-process error" onClick={(e) => handleAutoProcess(e, member.member_id)}>
-                          <Zap size={14} />
-                          Retry
-                        </button>
-                      ) : member.open_gaps > 0 ? (
-                        <button className="btn-auto-process" onClick={(e) => handleAutoProcess(e, member.member_id)}>
-                          <Zap size={14} />
-                          Auto Process
-                        </button>
-                      ) : null}
                       <span className="tile-view-details" onClick={() => onMemberSelect(member)}>
                         View Details →
                       </span>

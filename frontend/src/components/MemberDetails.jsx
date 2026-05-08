@@ -840,11 +840,6 @@ function MemberDetails({ member, onBack }) {
           onClick={() => setActiveTab("patient-record")}
         >
           Patient Record
-          {(details?.hereditary_risks || []).length > 0 && (
-            <span className="tab-risk-dot" title="Hereditary risk detected">
-              ●
-            </span>
-          )}
         </button>
         <button
           className={activeTab === "appointments" ? "active" : ""}
