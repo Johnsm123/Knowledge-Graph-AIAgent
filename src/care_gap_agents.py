@@ -585,7 +585,35 @@ def detect_care_gaps(member_id: str) -> Dict[str, Any]:
     _kg = _get_kg()
     today = datetime.now().strftime("%Y-%m-%d")
 
+    # Demo scope. Only these HEDIS measures are evaluated against members.
+    # Override at runtime by setting CARE_GAP_ENABLED_MEASURES="BCS,CCS,COL,AAP,..."
+    # in the environment, or set it to "*" to evaluate all measures.
+    import os as _os
+    _enabled_raw = _os.environ.get("CARE_GAP_ENABLED_MEASURES", "BCS,CCS,COL").strip()
+    if _enabled_raw == "*" or _enabled_raw.lower() == "all":
+        ENABLED_MEASURES = None  # evaluate everything
+    else:
+        ENABLED_MEASURES = {m.strip().upper() for m in _enabled_raw.split(",") if m.strip()}
+
+    # Defensive sweep — if the demo scope is restricted, hard-delete any
+    # CareGap on this member whose measure is OUTSIDE the enabled set.
+    # Catches stale gaps left over from earlier runs that used a wider
+    # scope, so the email / PDF / member panel can never surface them.
+    if ENABLED_MEASURES is not None:
+        try:
+            _kg.execute_write("""
+                MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+                WHERE NOT coalesce(g.measure_id, '') IN $enabled
+                DETACH DELETE g
+            """, {"mid": member_id, "enabled": list(ENABLED_MEASURES)})
+        except Exception:
+            pass  # best-effort; do not block detection
+
     for measure_id, measure in HEDIS_MEASURES.items():
+        # ── 0. Demo-scope filter ──────────────────────────────────────────────
+        if ENABLED_MEASURES is not None and measure_id.upper() not in ENABLED_MEASURES:
+            continue
+
         # ── 1. Eligibility: age / gender / diagnosis ──────────────────────────
         if not _measure_applies(measure, age, gender, icd_codes):
             not_applicable_n += 1
@@ -609,6 +637,22 @@ def detect_care_gaps(member_id: str) -> Dict[str, Any]:
 
         if not satisfied:
             gap_id = f"AUTO-{member_id}-{measure_id}"
+            # If the gap was previously closed by a manual claim
+            # (close_member_gap.py stamps g.claim_id), respect that closure
+            # and DO NOT re-open it. Otherwise the panel-open → detect_care_gaps
+            # cycle would resurrect the gap, and a subsequent script run would
+            # create a duplicate claim. This is the gap that made the user see
+            # 6 claims when only 3 should exist.
+            existing = _kg.run_query("""
+                MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap {care_gap_id: $gid})
+                RETURN g.is_open AS is_open, g.claim_id AS claim_id
+            """, {"mid": member_id, "gid": gap_id}) or []
+            already_manually_closed = bool(existing and existing[0].get("claim_id") and existing[0].get("is_open") is False)
+            if already_manually_closed:
+                # Honor the manual closure — count this measure as compliant.
+                compliant.append(measure_id)
+                continue
+
             merge_care_gap(
                 care_gap_id=gap_id,
                 member_id=member_id,
@@ -837,9 +881,23 @@ HEREDITARY RISK FLAG: [YES/NO — if YES, one-line reason]""",
         )
         icd_codes = list(set(claim_icd_codes + condition_icd_codes))
 
+        # Demo-scope filter — same env var honoured by detect_care_gaps and
+        # the dashboard endpoints. Without this, the 6-agent pipeline (which
+        # runs when the operator presses "Proceed with Outreach") would
+        # iterate every HEDIS measure and re-create AAP / KED / etc. gaps
+        # behind the user's back. Default scope: BCS, CCS, COL only.
+        import os as _os_dem
+        _enabled_raw_v = _os_dem.environ.get("CARE_GAP_ENABLED_MEASURES", "BCS,CCS,COL").strip()
+        if _enabled_raw_v in ("*", "all", "ALL"):
+            ENABLED_V = None
+        else:
+            ENABLED_V = {m.strip().upper() for m in _enabled_raw_v.split(",") if m.strip()}
+
         # Build applicable list using golden reference directly
         applicable: List[Dict] = []
         for mid, m in HEDIS_MEASURES.items():
+            if ENABLED_V is not None and mid.upper() not in ENABLED_V:
+                continue
             if _measure_applies(m, age, gender, icd_codes):
                 applicable.append(_measure_to_flat_dict(mid, m))
 

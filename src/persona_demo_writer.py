@@ -111,15 +111,70 @@ def _get_driver():
 
 # ── Ideal-persona baseline ───────────────────────────────────────────────────
 
+# Healthy clinical bands per lifestyle metric. The IdealPersona presents
+# these as the "perfect range" — wide enough that a typical healthy member
+# value falls inside, narrow enough that the contrast with an at-risk
+# member is visible. Used by build_persona_comparison and rendered on the
+# persona node + IdealLifestyle node in the persona-demo DB.
 IDEAL_LIFESTYLE = {
-    "bmi":                "18.5-24.9",
-    "smoking_status":     "Never",
-    "alcohol_use":        "None / Occasional",
-    "exercise_frequency": "5+ times/week",
-    "diet_type":          "Balanced / Mediterranean",
-    "sleep_hours_avg":    "7-9",
-    "stress_level":       "Low",
+    "bmi":                "18.5 – 24.9 (healthy)",
+    "smoking_status":     "Never / former-quit",
+    "alcohol_use":        "None to occasional (≤1/day F, ≤2/day M)",
+    "exercise_frequency": "≥150 min moderate or 75 min vigorous /week",
+    "diet_type":          "Balanced / Mediterranean / DASH",
+    "sleep_hours_avg":    "7 – 9 hours/night",
+    "stress_level":       "Low to moderate, well-managed",
 }
+
+
+# Numeric guard rails so we can flag whether the member's value sits inside
+# the healthy band. Used by _annotate_member_lifestyle below to enrich the
+# persona-comparison payload with `is_healthy` flags per metric.
+_LIFESTYLE_BANDS = {
+    "bmi":              {"min": 18.5, "max": 24.9},
+    "sleep_hours_avg":  {"min": 7,    "max": 9},
+}
+
+
+def _to_float(v):
+    try:
+        return float(str(v).strip())
+    except Exception:
+        return None
+
+
+def _annotate_member_lifestyle(member_lifestyle: dict) -> dict:
+    """Return per-metric annotations: actual value + persona band + healthy-flag.
+
+    Used by the bulk-upload preview and member-panel persona graph so the
+    UI can show, per parameter, '<member value> vs <persona band>' with a
+    green/red dot indicating whether the member already sits inside the
+    healthy band.
+    """
+    ml = member_lifestyle or {}
+    out = {}
+    for key, ideal in IDEAL_LIFESTYLE.items():
+        actual = ml.get(key, "")
+        is_healthy = None
+        band = _LIFESTYLE_BANDS.get(key)
+        if band:
+            n = _to_float(actual)
+            if n is not None:
+                is_healthy = (band["min"] <= n <= band["max"])
+        elif key == "smoking_status":
+            s = str(actual).strip().lower()
+            if s:
+                is_healthy = s in ("never", "former", "quit", "former-quit", "non-smoker", "none")
+        elif key == "alcohol_use":
+            s = str(actual).strip().lower()
+            if s:
+                is_healthy = s in ("none", "occasional", "rarely", "social", "none / occasional")
+        out[key] = {
+            "actual": actual,
+            "ideal_range": ideal,
+            "is_healthy": is_healthy,  # None = unknown, True/False otherwise
+        }
+    return out
 
 
 def _gap_to_dict(g: dict) -> dict:
@@ -173,6 +228,7 @@ def build_persona_comparison(
             for e in (medical_history.get("allergies") or [])
         ][:5],
     }
+    lifestyle_annotated = _annotate_member_lifestyle(lifestyle)
     return {
         "member_id":   mid,
         "member_name": member_profile.get("name", ""),
@@ -183,6 +239,10 @@ def build_persona_comparison(
         "pcp_name":    member_profile.get("pcp_name", ""),
         "insurance_type": member_profile.get("insurance_type", ""),
         "chronic":     member_profile.get("chronic_conditions") or [],
+        # Member's actual value alongside the persona's healthy band per
+        # lifestyle metric, so the UI can render "member 19.5 vs persona
+        # 18.5–24.9 ✓" with a green/red indicator.
+        "lifestyle_compare": lifestyle_annotated,
         # Persona ID is a random number under 100 (e.g. P12, P45) — jumbled,
         # not derived from the member ID. Stable per member_id within the
         # process via _allocate_persona_id().

@@ -400,7 +400,20 @@ def merge_care_gap(care_gap_id, member_id, measure_id, gap_status, is_open,
     - is_open: bool
     - primary_cpt_code: single CPT to display/order to close this gap
     - primary_icd10: single ICD-10 code (member's diagnosis or screening encounter code)
+
+    Demo-scope guard (lowest layer of defense): refuses to write any CareGap
+    whose measure_id is outside CARE_GAP_ENABLED_MEASURES (default
+    'BCS,CCS,COL'). Set CARE_GAP_ENABLED_MEASURES='*' to disable.
     """
+    import os as _os
+    _raw = _os.environ.get("CARE_GAP_ENABLED_MEASURES", "BCS,CCS,COL").strip()
+    if _raw not in ("*", "all", "ALL"):
+        _enabled = {m.strip().upper() for m in _raw.split(",") if m.strip()}
+        if _enabled and (measure_id or "").upper() not in _enabled:
+            # Print so it shows up in the Flask console regardless of log config.
+            print(f"[CARE-GAP-WRITE-BLOCKED] refused to write {measure_id} for "
+                  f"{member_id} — outside demo scope {sorted(_enabled)}")
+            return  # silently no-op — every layer above this also filters
     kg = get_knowledge_graph()
     kg.execute_write("""
         MERGE (g:CareGap {care_gap_id: $care_gap_id})
@@ -481,6 +494,14 @@ def merge_outreach(outreach_id, care_gap_id, member_id, care_manager_id,
 # ── Query helpers used by agents ──────────────────────────────────────────────
 
 def get_member_open_gaps(member_id: str):
+    """Return open CareGaps for the member.
+
+    Honors the CARE_GAP_ENABLED_MEASURES env var (default 'BCS,CCS,COL') so
+    that even if older non-demo CareGap nodes still exist in the graph, they
+    never surface in the email / PDF / member panel. To restore unrestricted
+    behavior set CARE_GAP_ENABLED_MEASURES='*'.
+    """
+    import os as _os
     kg = get_knowledge_graph()
     results = kg.run_query("""
         MATCH (m:Member {member_id: $member_id})-[:HAS_CARE_GAP]->(g:CareGap)-[:RELATES_TO]->(q:QualityMeasure)
@@ -495,6 +516,16 @@ def get_member_open_gaps(member_id: str):
                q.description       AS resolution_guide,
                q.lookback_months   AS lookback_months
     """, {"member_id": member_id})
+
+    # Demo-scope filter — applied here so every consumer (email, PDF, member
+    # panel, dashboard) sees the same scoped list without each one having to
+    # re-implement the filter.
+    raw = _os.environ.get("CARE_GAP_ENABLED_MEASURES", "BCS,CCS,COL").strip()
+    if raw not in ("*", "all", "ALL"):
+        enabled = {m.strip().upper() for m in raw.split(",") if m.strip()}
+        if enabled:
+            results = [g for g in results
+                       if (g.get("measure_id") or "").upper() in enabled]
 
     # Normalise: expose primary_cpt_code also as required_cpt_codes for
     # backward compatibility with any frontend field that still reads that key.

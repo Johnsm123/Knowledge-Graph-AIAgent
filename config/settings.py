@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     class Config:
         env_file = _ENV_FILE
         case_sensitive = False
+        # Allow ad-hoc env vars used by other modules (e.g.
+        # CARE_GAP_ENABLED_MEASURES read via os.environ) to coexist in
+        # .env without needing a Settings field for each.
+        extra = "ignore"
 
 
 settings = Settings()

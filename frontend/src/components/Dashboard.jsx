@@ -14,6 +14,20 @@ import './Dashboard.css';
 import { API_BASE } from '../lib/apiBase';
 const PAGE_SIZE = 12;
 
+// Demo scope — Critical / Needs Attention / Compliant filters and the
+// matching counts only consider open gaps for these three cancer-screening
+// measures. To broaden the demo, add measure IDs here.
+const DEMO_MEASURE_IDS = new Set(['BCS', 'CCS', 'COL']);
+
+// Per-member demo-scope open-gap count. Prefers `open_gap_measures` (an
+// array on the member object); falls back to `m.open_gaps` if the array
+// isn't available (older /members responses).
+const demoOpenGapCount = (m) => {
+  const list = Array.isArray(m?.open_gap_measures) ? m.open_gap_measures : null;
+  if (list) return list.filter(x => DEMO_MEASURE_IDS.has(x)).length;
+  return m?.open_gaps || 0;
+};
+
 // ── Category helpers ──────────────────────────────────────────────────────────
 const getCategory = (openGaps) => {
   if (openGaps >= 3) return 'critical';
@@ -363,9 +377,10 @@ function Dashboard({ onMemberSelect }) {
   // ── Filtering + sorting ───────────────────────────────────────────────────
   const filtered = members
     .filter(m => {
-      if (category === 'critical')  return m.open_gaps >= 3;
-      if (category === 'moderate')  return m.open_gaps >= 1 && m.open_gaps < 3;
-      if (category === 'compliant') return m.open_gaps === 0;
+      const n = demoOpenGapCount(m);
+      if (category === 'critical')  return n >= 3;
+      if (category === 'moderate')  return n >= 1 && n < 3;
+      if (category === 'compliant') return n === 0;
       return true;
     })
     .filter(m => {
@@ -409,9 +424,9 @@ function Dashboard({ onMemberSelect }) {
 
   const counts = {
     all:       members.length,
-    critical:  members.filter(m => m.open_gaps >= 3).length,
-    moderate:  members.filter(m => m.open_gaps >= 1 && m.open_gaps < 3).length,
-    compliant: members.filter(m => m.open_gaps === 0).length,
+    critical:  members.filter(m => demoOpenGapCount(m) >= 3).length,
+    moderate:  members.filter(m => { const n = demoOpenGapCount(m); return n >= 1 && n < 3; }).length,
+    compliant: members.filter(m => demoOpenGapCount(m) === 0).length,
   };
 
   if (loading) {
@@ -593,7 +608,7 @@ function Dashboard({ onMemberSelect }) {
           <>
             <div className="members-grid">
               {paginated.map(member => {
-                const cat = getCategory(member.open_gaps);
+                const cat = getCategory(demoOpenGapCount(member));
                 return (
                   <div
                     key={member.member_id}

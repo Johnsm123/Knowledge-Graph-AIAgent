@@ -118,31 +118,53 @@ def get_all_members():
     """Get all members with their care gap status and outreach info."""
     try:
         kg = get_knowledge_graph()
+        # Demo scope — same env-var convention used in detect_care_gaps and
+        # get_member_open_gaps. When set (default 'BCS,CCS,COL'), out-of-scope
+        # CareGap nodes are excluded from the per-member open-gap counts +
+        # measure list so the dashboard tiles, pill counts, and measure
+        # filter all stay consistent with the email/PDF/member panel.
+        import os as _os_demo
+        _enabled_raw_demo = _os_demo.environ.get("CARE_GAP_ENABLED_MEASURES", "BCS,CCS,COL").strip()
+        _enabled_demo = None
+        if _enabled_raw_demo not in ("*", "all", "ALL"):
+            _enabled_demo = [m.strip().upper() for m in _enabled_raw_demo.split(",") if m.strip()]
+        _demo_clause = "AND coalesce(g.measure_id, q.measure_id, '') IN $en" if _enabled_demo else ""
+        _demo_params = {"en": _enabled_demo} if _enabled_demo else {}
+
         # Collect each member's open-gap measure_ids — mirror the same coalesce
         # logic used in dashboard/stats so we never drop a CareGap whose
         # measure_id lives on the related QualityMeasure node instead of the
         # gap itself. This list powers the dashboard's "Filter by Measure"
         # dropdown — picking GSD must surface every member who has GSD open,
         # even if they also have COL / BCS / etc. open at the same time.
-        member_open_measures_rows = kg.run_query("""
+        member_open_measures_rows = kg.run_query(f"""
             MATCH (m:Member)-[:HAS_CARE_GAP]->(g:CareGap)
             WHERE g.is_open = true
             OPTIONAL MATCH (g)-[:RELATES_TO]->(q:QualityMeasure)
             WITH m.member_id AS member_id,
                  coalesce(g.measure_id, q.measure_id) AS measure_id
             WHERE measure_id IS NOT NULL
+              {('AND measure_id IN $en' if _enabled_demo else '')}
             RETURN member_id, collect(DISTINCT measure_id) AS open_gap_measures
-        """, {}) or []
+        """, _demo_params) or []
         open_measures_by_member = {
             row["member_id"]: row["open_gap_measures"] for row in member_open_measures_rows
         }
 
-        members = kg.run_query("""
+        members = kg.run_query(f"""
             MATCH (m:Member)
             OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap)
+            OPTIONAL MATCH (g)-[:RELATES_TO]->(q:QualityMeasure)
+            WITH m, g, q,
+                 // Scope-mask: gap counts towards open/closed only if its
+                 // measure is in the enabled set (or no scope is set).
+                 CASE
+                   WHEN $en IS NULL THEN true
+                   ELSE coalesce(g.measure_id, q.measure_id, '') IN $en
+                 END AS in_scope
             WITH m,
-                 count(DISTINCT CASE WHEN g.is_open = true  THEN g.care_gap_id ELSE null END) AS open_gaps,
-                 count(DISTINCT CASE WHEN g.is_open = false THEN g.care_gap_id ELSE null END) AS closed_gaps
+                 count(DISTINCT CASE WHEN g.is_open = true  AND in_scope THEN g.care_gap_id ELSE null END) AS open_gaps,
+                 count(DISTINCT CASE WHEN g.is_open = false AND in_scope THEN g.care_gap_id ELSE null END) AS closed_gaps
             OPTIONAL MATCH (m)-[:ASSIGNED_TO]->(p:Provider)
             OPTIONAL MATCH (o:Outreach)-[:CONTACTS]->(m)
             WITH m, open_gaps, closed_gaps, p,
@@ -164,7 +186,7 @@ def get_all_members():
                    last_outreach_date,
                    appointment_count
             ORDER BY open_gaps DESC, m.name
-        """, {})
+        """, {"en": _enabled_demo})
 
         for member in members:
             member["open_gap_measures"] = open_measures_by_member.get(member.get("member_id"), [])
@@ -261,6 +283,17 @@ def get_member_details(member_id):
         # Extended patient record (lifestyle / family history / medical history)
         extended = get_member_extended_profile(member_id)
 
+        # Final demo-scope guard. Belt-and-suspenders — even if a future change
+        # bypasses get_member_open_gaps, the response payload is still filtered
+        # so AAP / KED / etc. never reach the member panel.
+        import os as _os_demo
+        _raw = _os_demo.environ.get("CARE_GAP_ENABLED_MEASURES", "BCS,CCS,COL").strip()
+        if _raw not in ("*", "all", "ALL"):
+            _en = {m.strip().upper() for m in _raw.split(",") if m.strip()}
+            if _en:
+                gaps        = [g for g in (gaps or [])        if (g.get("measure_id") or "").upper() in _en]
+                closed_gaps = [g for g in (closed_gaps or []) if (g.get("measure_id") or "").upper() in _en]
+
         return jsonify({
             "member_id": member_id,
             "profile": profile,
@@ -329,35 +362,44 @@ def get_member_patient_record(member_id):
 
 @app.route("/api/v1/dashboard/stats", methods=["GET"])
 def get_dashboard_stats():
-    """Get dashboard statistics."""
+    """Get dashboard statistics.
+
+    Demo scope: members-with-gaps / compliant-members / total-open-gaps /
+    outreach counts are filtered to the three cancer-screening measures
+    we're demoing (BCS, CCS, COL). gaps_by_measure stays unscoped so the
+    frontend can still inspect every measure if needed; analytics charts
+    apply their own demo filter on the JS side.
+    """
     try:
         kg = get_knowledge_graph()
-        
+
+        # Demo measure scope — when broadening the demo, just add measure
+        # IDs to this list and the dashboard counters will follow.
+        DEMO_MEASURES = ["BCS", "CCS", "COL"]
+
         # Total members
         total_members = kg.run_query("MATCH (m:Member) RETURN count(m) as count", {})[0]["count"]
-        
-        # Members with open gaps
+
+        # Members with open gaps in the demo measure set
         members_with_gaps = kg.run_query("""
             MATCH (m:Member)-[:HAS_CARE_GAP]->(g:CareGap)
             WHERE g.is_open = true
+              AND coalesce(g.measure_id, '') IN $demo
             RETURN count(DISTINCT m) as count
-        """, {})[0]["count"]
-        
-        # Members without gaps (compliant)
+        """, {"demo": DEMO_MEASURES})[0]["count"]
+
+        # Members without demo-scope gaps (compliant for the demo)
         compliant_members = total_members - members_with_gaps
-        
-        # Total open gaps — count distinct (member, measure) pairs to avoid
-        # double-counting when both an Excel-loaded gap and an AUTO- gap exist
-        # for the same member+measure.  Use g.measure_id (stored on the node)
-        # so this works even when the RELATES_TO→QualityMeasure link is absent.
+
+        # Total open gaps — distinct (member, measure) pairs scoped to demo
         total_open_gaps = kg.run_query("""
             MATCH (m:Member)-[:HAS_CARE_GAP]->(g:CareGap)
             WHERE g.is_open = true
+              AND coalesce(g.measure_id, '') IN $demo
             RETURN count(DISTINCT m.member_id + '|' + coalesce(g.measure_id, g.care_gap_id)) as count
-        """, {})[0]["count"]
+        """, {"demo": DEMO_MEASURES})[0]["count"]
 
-        # Gaps by measure — count distinct members per measure.
-        # Prefer RELATES_TO for name; fall back to g.measure_id for the ID.
+        # Gaps by measure — UNSCOPED. Frontend filters per-chart.
         gaps_by_measure = kg.run_query("""
             MATCH (m:Member)-[:HAS_CARE_GAP]->(g:CareGap)
             WHERE g.is_open = true
@@ -373,14 +415,34 @@ def get_dashboard_stats():
                    max(created_on) AS latest_created
             ORDER BY gap_count DESC
         """, {})
-        
-        # Recent outreach
-        recent_outreach = kg.run_query("""
-            MATCH (o:Outreach)
-            RETURN count(o) as total_outreach,
-                   count(CASE WHEN o.status = 'Completed' THEN 1 END) as completed,
-                   count(CASE WHEN o.status = 'Scheduled' THEN 1 END) as scheduled
-        """, {})[0]
+
+        # Outreach — count per outreach EVENT (one email send per member per
+        # day), not per care gap. The merge_outreach() pipeline writes one
+        # Outreach node per (member, gap) pair, so a single email targeting
+        # 3 gaps creates 3 nodes. Collapsing to distinct (member_id, date)
+        # gives the count care managers actually intuit ("how many outreach
+        # touches happened?"). Requires the CareGap to still be attached to
+        # a Member (orphan filter).
+        recent_outreach_rows = kg.run_query("""
+            MATCH (o:Outreach)-[:TARGETS]->(g:CareGap)<-[:HAS_CARE_GAP]-(m:Member)
+            WHERE coalesce(g.measure_id, '') IN $demo
+            // Group multiple per-gap rows into one event per (member, date)
+            WITH m.member_id AS mid,
+                 substring(coalesce(o.date, ''), 0, 10) AS day,
+                 collect(o.status) AS statuses
+            // An event is "Completed" iff EVERY constituent outreach is Completed.
+            // It's "Scheduled" if any are still Scheduled (and not all Completed).
+            WITH mid, day,
+                 CASE WHEN ALL(s IN statuses WHERE s = 'Completed') THEN 'Completed'
+                      WHEN ANY(s IN statuses WHERE s = 'Scheduled') THEN 'Scheduled'
+                      ELSE 'Sent' END AS event_status
+            RETURN count(*)                                                 AS total_outreach,
+                   sum(CASE WHEN event_status = 'Completed' THEN 1 ELSE 0 END) AS completed,
+                   sum(CASE WHEN event_status = 'Scheduled' THEN 1 ELSE 0 END) AS scheduled
+        """, {"demo": DEMO_MEASURES})
+        recent_outreach = recent_outreach_rows[0] if recent_outreach_rows else {
+            "total_outreach": 0, "completed": 0, "scheduled": 0,
+        }
         
         return jsonify({
             "total_members": total_members,
@@ -2798,6 +2860,7 @@ def bulk_preview_persona():
             get_member_medical_history as _get_medical,
             get_member_lifestyle as _get_lifestyle,
         )
+        from src.care_gap_reason import generate_reasons_for_member
         for m in member_list:
             mid = m.get("member_id")
             if not mid:
@@ -2805,14 +2868,37 @@ def bulk_preview_persona():
             try:
                 profile = _get_profile(mid) or {"member_id": mid, "name": m.get("name", mid)}
                 profile["member_id"] = mid
+                family   = _get_family(mid) or []
+                medical  = _get_medical(mid) or {}
+                lifestyle = _get_lifestyle(mid) or {}
+                open_gaps = _get_open(mid) or []
                 cmp = build_persona_comparison(
                     profile,
-                    _get_open(mid) or [],
+                    open_gaps,
                     completed=[],
-                    family_history=_get_family(mid) or [],
-                    medical_history=_get_medical(mid) or {},
-                    lifestyle=_get_lifestyle(mid) or {},
+                    family_history=family,
+                    medical_history=medical,
+                    lifestyle=lifestyle,
                 )
+                # Generate one LLM reason per pending screening so the bulk-
+                # upload UI can show them on hover. Runs in parallel across
+                # measures; falls back to a rulebook-derived sentence on
+                # any per-measure failure.
+                try:
+                    pending_ids = [p.get("measure_id") for p in (cmp.get("pending_screenings") or []) if p.get("measure_id")]
+                    reason_map = generate_reasons_for_member(
+                        member=profile,
+                        pending_measure_ids=pending_ids,
+                        family_history=family,
+                        medical_history=medical,
+                        lifestyle=lifestyle,
+                    )
+                    for p in (cmp.get("pending_screenings") or []):
+                        rid = p.get("measure_id")
+                        if rid and reason_map.get(rid):
+                            p["reason"] = reason_map[rid]
+                except Exception as r_err:
+                    logger.warning(f"[BULK-PREVIEW] reason generation failed for {mid}: {r_err}")
                 push_member_persona(profile, cmp)
                 results.append({"status": "ok", "member_id": mid, "name": m.get("name", mid),
                                 "email": m.get("email", ""), "persona_comparison": cmp})
@@ -3339,7 +3425,6 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
 </style></head><body>
 <div class="header">
   <h1>&#128228; Bulk Upload Members</h1>
-  <a href="/api/v1/landing">&larr; Back to Home</a>
 </div>
 
 <div class="upload-area" id="uploadArea">
@@ -3400,7 +3485,6 @@ body{font-family:'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;backgro
   <div id="resultsContainer"></div>
   <div style="text-align:center;margin-top:24px">
     <button class="upload-btn" onclick="location.reload()">Upload Another File</button>
-    <a href="/api/v1/members/dashboard-page" style="margin-left:16px;color:#000048;font-weight:600;text-decoration:none">View Members Dashboard &rarr;</a>
   </div>
 </div>
 
@@ -3600,6 +3684,50 @@ function pgFadeIn(dur){
   dur = dur || '0.45s';
   return `<animate attributeName="opacity" from="0" to="1" dur="${dur}" fill="freeze"/>`;
 }
+
+// ── Care-gap reason tooltip (shared single floating element) ────────────────
+let _cgTipEl = null;
+function _ensureCgTip(){
+  if (_cgTipEl) return _cgTipEl;
+  const t = document.createElement('div');
+  t.id = 'cg-tooltip';
+  t.style.cssText = [
+    'position:fixed','z-index:99999','pointer-events:none',
+    'max-width:340px','background:#0f172a','color:#e2e8f0',
+    'font-size:12px','line-height:1.45','padding:10px 14px',
+    'border:1px solid #1e293b','border-radius:8px',
+    'box-shadow:0 10px 30px rgba(0,0,0,0.45)',
+    'opacity:0','transform:translateY(4px)',
+    'transition:opacity 0.15s ease, transform 0.15s ease',
+  ].join(';');
+  t.innerHTML = '';
+  document.body.appendChild(t);
+  _cgTipEl = t;
+  return t;
+}
+function cgShowTooltip(evt){
+  const el = evt.currentTarget;
+  const reason  = el?.dataset?.cgReason || '';
+  const measure = el?.dataset?.cgMeasure || '';
+  if (!reason) return;
+  const tip = _ensureCgTip();
+  tip.innerHTML = (
+    `<div style="font-weight:700;color:#fca5a5;margin-bottom:6px;font-size:11px;letter-spacing:0.3px;">CARE GAP · ${measure}</div>` +
+    `<div>${reason.replace(/</g,'&lt;')}</div>`
+  );
+  const r = el.getBoundingClientRect();
+  const top  = Math.max(8, r.top  - 8);
+  const left = Math.min(window.innerWidth - 360, r.right + 12);
+  tip.style.top  = `${top}px`;
+  tip.style.left = `${left}px`;
+  tip.style.opacity = '1';
+  tip.style.transform = 'translateY(0)';
+}
+function cgHideTooltip(){
+  if (!_cgTipEl) return;
+  _cgTipEl.style.opacity = '0';
+  _cgTipEl.style.transform = 'translateY(4px)';
+}
 function pgClearGraph(mid){
   const n = document.getElementById(`pgc-nodes-${mid}`);
   const e = document.getElementById(`pgc-edges-${mid}`);
@@ -3778,21 +3906,36 @@ async function animateGraph(mid, cmp){
     {text:'COMPARED_TO', color:'#10B981'});
   await sleep(450);
 
-  // Lifestyle parameter nodes between member and persona (top arc)
-  const params = [
-    { key:'BMI',      ideal:(cmp.ideal_lifestyle||{}).bmi },
-    { key:'Smoking',  ideal:(cmp.ideal_lifestyle||{}).smoking_status },
-    { key:'Exercise', ideal:(cmp.ideal_lifestyle||{}).exercise_frequency },
-    { key:'Diet',     ideal:(cmp.ideal_lifestyle||{}).diet_type },
+  // Lifestyle parameter nodes between member and persona (top arc).
+  // Each chip shows the member's actual value alongside the persona's
+  // healthy band, with a green/red dot indicating whether the member
+  // already sits inside the healthy band.
+  const lc = cmp.lifestyle_compare || {};
+  const paramSpecs = [
+    { key:'BMI',      f:'bmi'                },
+    { key:'Smoking',  f:'smoking_status'     },
+    { key:'Exercise', f:'exercise_frequency' },
+    { key:'Diet',     f:'diet_type'          },
   ];
+  const params = paramSpecs.map(s => ({
+    key:    s.key,
+    actual: (lc[s.f]||{}).actual || '—',
+    ideal:  (lc[s.f]||{}).ideal_range || (cmp.ideal_lifestyle||{})[s.f] || '',
+    healthy: (lc[s.f]||{}).is_healthy,  // true / false / null
+  }));
   for (let i = 0; i < params.length; i++){
     const t = (i+1)/(params.length+1);
     const px = PG_MX + t*(PG_PX-PG_MX);
     const py = PG_CY - 110;
+    const dotColor = params[i].healthy === true ? '#10B981'
+                   : params[i].healthy === false ? '#EF4444' : '#94a3b8';
+    const ringColor = params[i].healthy === false ? '#EF4444' : '#7373D8';
     addNode(`param-${i}`, px, py, `
-      <rect x="-46" y="-16" width="92" height="32" rx="16" ry="16" fill="#1e293b" stroke="#7373D8" stroke-width="1.5"/>
-      <text text-anchor="middle" dy="-2" fill="#cbd5e1" font-size="9" font-weight="600">${params[i].key}</text>
-      <text text-anchor="middle" dy="9" fill="#a7f3d0" font-size="8">${(params[i].ideal||'').toString().slice(0,16)}</text>
+      <rect x="-72" y="-22" width="144" height="44" rx="10" ry="10" fill="#1e293b" stroke="${ringColor}" stroke-width="1.5"/>
+      <circle cx="-58" cy="0" r="4" fill="${dotColor}"/>
+      <text text-anchor="middle" dy="-9" fill="#cbd5e1" font-size="9" font-weight="700">${params[i].key}</text>
+      <text text-anchor="middle" dy="3" fill="#fde68a" font-size="8">member: ${(params[i].actual||'—').toString().slice(0,18)}</text>
+      <text text-anchor="middle" dy="14" fill="#a7f3d0" font-size="8">persona: ${(params[i].ideal||'').toString().slice(0,22)}</text>
     `);
     addEdge('member', `param-${i}`, {dx:0,dy:-12}, {dx:0,dy:18},
       {stroke:'#64748b','stroke-width':'1.4','stroke-dasharray':'3 3',opacity:0.65});
@@ -3817,11 +3960,21 @@ async function animateGraph(mid, cmp){
       const ring = completed ? '#1D4ED8' : '#B81F2D';
       const labelColor = completed ? '#bfdbfe' : '#fecaca';
       const nodeId = `scr-${i}`;
-      addNode(nodeId, sx, sy, `
+      const nodeEl = addNode(nodeId, sx, sy, `
         <circle r="22" fill="${fill}" stroke="${ring}" stroke-width="2"/>
         <text text-anchor="middle" dy="3" fill="#fff" font-size="10" font-weight="700">${(s.measure_id||'').slice(0,4)}</text>
         <text text-anchor="middle" dy="38" fill="${labelColor}" font-size="9" font-weight="500">${(s.measure_name||s.measure_id||'').slice(0,18)}</text>
       `);
+      // Care-gap hover tooltip — shows the LLM-generated clinical reason
+      // for pending screenings only (completed ones don't need an
+      // explanation).
+      if (!completed && s.reason && nodeEl){
+        nodeEl.classList.add('cg-tooltip-anchor');
+        nodeEl.dataset.cgReason = s.reason;
+        nodeEl.dataset.cgMeasure = `${s.measure_id||''} · ${s.measure_name||''}`;
+        nodeEl.addEventListener('mouseenter', cgShowTooltip);
+        nodeEl.addEventListener('mouseleave', cgHideTooltip);
+      }
       addEdge('member', nodeId,
         {dx:0,dy:18}, {dx:0,dy:-18},
         completed
@@ -4423,6 +4576,97 @@ def reference_member_personas(member_id):
         return jsonify({"nodes": [], "edges": [], "member": None, "lifecycle": []})
 
 
+@app.route("/api/v1/admin/notify-gap-update", methods=["POST"])
+def notify_gap_update():
+    """Lightweight hook for external scripts (e.g. close_member_gap.py) to
+    push a `care_gap_updated` event into the portal SocketIO channel so any
+    open member panel auto-refreshes."""
+    try:
+        data = request.json or {}
+        mid = data.get("member_id")
+        if not mid:
+            return jsonify({"status": "error", "error": "member_id required"}), 400
+        emit_portal_event("care_gap_updated", {
+            "member_id": mid,
+            "source": data.get("source", "external"),
+        })
+        return jsonify({"status": "ok", "member_id": mid})
+    except Exception as e:
+        logger.error(f"notify_gap_update error: {e}", exc_info=True)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/admin/cleanup-orphans", methods=["POST"])
+def cleanup_orphan_records():
+    """
+    One-shot cleanup of records left behind when Members were deleted from
+    the main DB without cascading their dependents. Removes:
+      • Outreach nodes with no inbound CONTACTS / TARGETS-to-Member chain
+      • CareGap nodes with no inbound HAS_CARE_GAP from any Member
+      • Email nodes with no associated Member
+      • Appointment nodes orphaned by member deletion
+      • Claim nodes orphaned by member deletion
+
+    Returns counts of deleted nodes so the caller can verify. Safe to run
+    repeatedly — only deletes nodes that have no living Member parent.
+    """
+    try:
+        kg = get_knowledge_graph()
+        deleted = {}
+
+        for label, query in [
+            ("outreach", """
+                MATCH (o:Outreach)
+                WHERE NOT EXISTS { MATCH (o)-[:CONTACTS]->(:Member) }
+                  AND NOT EXISTS { MATCH (o)-[:TARGETS]->(:CareGap)<-[:HAS_CARE_GAP]-(:Member) }
+                WITH o
+                DETACH DELETE o
+                RETURN count(o) AS n
+            """),
+            ("care_gaps", """
+                MATCH (g:CareGap)
+                WHERE NOT EXISTS { MATCH (:Member)-[:HAS_CARE_GAP]->(g) }
+                WITH g
+                DETACH DELETE g
+                RETURN count(g) AS n
+            """),
+            ("emails", """
+                MATCH (e:Email)
+                WHERE NOT EXISTS { MATCH (e)-[:SENT_TO|:RECEIVED_FROM]->(:Member) }
+                  AND NOT EXISTS { MATCH (:Member)-[:HAS_EMAIL|:RECEIVED]->(e) }
+                WITH e
+                DETACH DELETE e
+                RETURN count(e) AS n
+            """),
+            ("appointments", """
+                MATCH (a:Appointment)
+                WHERE NOT EXISTS { MATCH (:Member)-[:HAS_APPOINTMENT]->(a) }
+                WITH a
+                DETACH DELETE a
+                RETURN count(a) AS n
+            """),
+            ("claims", """
+                MATCH (c:Claim)
+                WHERE NOT EXISTS { MATCH (:Member)-[:HAS_CLAIM]->(c) }
+                WITH c
+                DETACH DELETE c
+                RETURN count(c) AS n
+            """),
+        ]:
+            try:
+                rows = kg.run_query(query, {})
+                deleted[label] = (rows[0]["n"] if rows else 0) or 0
+            except Exception as q_err:
+                logger.warning(f"[CLEANUP-ORPHANS] {label} query failed: {q_err}")
+                deleted[label] = f"error: {q_err}"
+
+        logger.info(f"[CLEANUP-ORPHANS] removed: {deleted}")
+        return jsonify({"status": "success", "deleted": deleted})
+    except Exception as e:
+        logger.error(f"cleanup_orphan_records error: {e}", exc_info=True)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 @app.route("/api/v1/reference/sync-all", methods=["POST"])
 def sync_all_to_reference():
     """Bulk sync all existing members from original DB into the persona reference DB."""
@@ -4458,22 +4702,93 @@ def noshow_trigger():
 
 
 if __name__ == "__main__":
+    # Make startup banners actually visible regardless of project log config.
+    import logging as _logging, os as _boot_os
+    _logging.basicConfig(level=_logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    print("=" * 70)
+    print("[BOOT] care_gap_api starting — demo-scope filter:",
+          _boot_os.environ.get("CARE_GAP_ENABLED_MEASURES", "BCS,CCS,COL (default)"))
+    print("=" * 70)
+
     # Bootstrap persona reference DB schema on startup
     try:
         from src.persona_sync import bootstrap_persona_schema
         bootstrap_persona_schema()
-        logger.info("Persona reference DB schema ready")
+        print("[BOOT] persona reference DB schema ready")
     except Exception as e:
-        logger.warning(f"Persona schema bootstrap skipped: {e}")
+        print(f"[BOOT] persona schema bootstrap skipped: {e}")
 
-    # Backfill prior-screening closed gaps for every existing member so the
-    # lifecycle visualization is correct on first page load. Runs in a
-    # background thread so it never blocks server startup. Best-effort: any
-    # failure is logged and ignored — the per-request lifecycle endpoint
-    # also reconciles on read, so this is purely a head-start.
+    # Backfill prior-screening closed gaps + clean up orphan records left
+    # over from previous member deletions. Runs in a background thread so
+    # it never blocks server startup. Best-effort.
     try:
         import threading as _bg_t
         def _startup_full_sync():
+            # Demo-scope sweep — hard-delete CareGap nodes whose measure is
+            # outside CARE_GAP_ENABLED_MEASURES so out-of-scope gaps left
+            # over from older uploads never surface in the dashboard /
+            # email / PDF on a fresh start.
+            try:
+                import os as _os_demo
+                _enabled_raw_demo = _os_demo.environ.get(
+                    "CARE_GAP_ENABLED_MEASURES", "BCS,CCS,COL"
+                ).strip()
+                if _enabled_raw_demo not in ("*", "all", "ALL"):
+                    _enabled_demo = [m.strip().upper()
+                                     for m in _enabled_raw_demo.split(",") if m.strip()]
+                    if _enabled_demo:
+                        kg_demo = get_knowledge_graph()
+                        rows = kg_demo.run_query("""
+                            MATCH (m:Member)-[:HAS_CARE_GAP]->(g:CareGap)
+                            WHERE NOT coalesce(g.measure_id,'') IN $en
+                            WITH g, count(g) AS c DETACH DELETE g
+                            RETURN sum(c) AS n
+                        """, {"en": _enabled_demo})
+                        n_demo = (rows[0]["n"] if rows else 0) or 0
+                        print(f"[BOOT][STARTUP-DEMO-SCOPE] removed {n_demo} out-of-scope CareGap node(s)")
+            except Exception as exc:
+                print(f"[BOOT][STARTUP-DEMO-SCOPE] sweep skipped: {exc}")
+
+            # Orphan cleanup first — removes Outreach/CareGap/Claim/Email
+            # /Appointment nodes whose Members were deleted, so dashboard
+            # counts (e.g. Outreach Activity) self-correct without manual
+            # intervention.
+            try:
+                kg_local = get_knowledge_graph()
+                for label, q in [
+                    ("outreach", """
+                        MATCH (o:Outreach)
+                        WHERE NOT EXISTS { MATCH (o)-[:CONTACTS]->(:Member) }
+                          AND NOT EXISTS { MATCH (o)-[:TARGETS]->(:CareGap)<-[:HAS_CARE_GAP]-(:Member) }
+                        WITH o DETACH DELETE o RETURN count(o) AS n
+                    """),
+                    ("care_gaps", """
+                        MATCH (g:CareGap)
+                        WHERE NOT EXISTS { MATCH (:Member)-[:HAS_CARE_GAP]->(g) }
+                        WITH g DETACH DELETE g RETURN count(g) AS n
+                    """),
+                    ("appointments", """
+                        MATCH (a:Appointment)
+                        WHERE NOT EXISTS { MATCH (:Member)-[:HAS_APPOINTMENT]->(a) }
+                        WITH a DETACH DELETE a RETURN count(a) AS n
+                    """),
+                    ("claims", """
+                        MATCH (c:Claim)
+                        WHERE NOT EXISTS { MATCH (:Member)-[:HAS_CLAIM]->(c) }
+                        WITH c DETACH DELETE c RETURN count(c) AS n
+                    """),
+                ]:
+                    try:
+                        rows = kg_local.run_query(q, {})
+                        n = (rows[0]["n"] if rows else 0) or 0
+                        if n:
+                            logger.info(f"[STARTUP-CLEANUP] removed {n} orphan {label}")
+                    except Exception as cq_err:
+                        logger.warning(f"[STARTUP-CLEANUP] {label} skipped: {cq_err}")
+            except Exception as exc:
+                logger.warning(f"[STARTUP-CLEANUP] orphan sweep skipped: {exc}")
+
+            # Then refresh ref + persona-demo DBs from the now-clean main DB.
             try:
                 from src.persona_sync import sync_all_existing_members
                 n = sync_all_existing_members()

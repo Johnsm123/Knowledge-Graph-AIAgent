@@ -27,22 +27,74 @@ from src.neo4j_connection import get_knowledge_graph
 
 
 def close_gap(member_id: str, measure_id: str | None = None) -> int:
-    """Close every open care gap for `member_id` (filtered to `measure_id`
-    if provided). Returns count of gaps closed."""
-    kg = get_knowledge_graph()
-    cypher = """
-        MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
-        WHERE coalesce(g.is_open, true) = true
-          AND ($mea IS NULL OR g.measure_id = $mea)
-        RETURN g.care_gap_id AS care_gap_id,
-               g.measure_id  AS measure_id,
-               g.measure_name AS measure_name,
-               g.primary_cpt_code AS primary_cpt,
-               g.primary_icd10    AS primary_icd
+    """Close care gaps for `member_id`.
+
+    Behaviour:
+      • If `measure_id` is given → close that one gap (must be open).
+      • If `measure_id` is omitted → close ONLY gaps that have a non-Cancelled
+        Appointment attached. Avoids accidentally closing every gap when the
+        operator only intended to close the one they booked an appointment for.
+
+    Idempotent:
+      • Re-running for an already-closed gap is a no-op (no new claim).
+      • If a claim already exists for the gap (g.claim_id is set), reuses it
+        instead of creating a duplicate.
+
+    Returns the number of gaps newly closed by this invocation.
     """
-    rows = kg.run_query(cypher, {"mid": member_id, "mea": measure_id}) or []
+    kg = get_knowledge_graph()
+
+    # Sweep orphan AUTO-CLM-* claims for this member: any auto-generated claim
+    # whose claim_id isn't referenced by any CareGap.claim_id is leftover from
+    # an earlier buggy run. Removes them so re-runs don't accumulate duplicates.
+    orphan = kg.run_query("""
+        MATCH (m:Member {member_id: $mid})-[:HAS_CLAIM]->(c:Claim)
+        WHERE c.auto_generated = true
+          AND NOT EXISTS { MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap) WHERE g.claim_id = c.claim_id }
+        WITH c, count(c) AS cc DETACH DELETE c RETURN sum(cc) AS n
+    """, {"mid": member_id})
+    orphan_count = (orphan[0]["n"] if orphan else 0) or 0
+    if orphan_count:
+        print(f"[{member_id}] cleaned up {orphan_count} orphan auto-claim(s) from prior runs")
+
+    if measure_id:
+        cypher = """
+            MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+            WHERE coalesce(g.is_open, true) = true
+              AND g.measure_id = $mea
+            RETURN g.care_gap_id AS care_gap_id,
+                   g.measure_id  AS measure_id,
+                   g.measure_name AS measure_name,
+                   g.primary_cpt_code AS primary_cpt,
+                   g.primary_icd10    AS primary_icd,
+                   g.claim_id          AS existing_claim_id
+        """
+        params = {"mid": member_id, "mea": measure_id}
+    else:
+        # No measure specified → only close gaps that the user booked an
+        # appointment for. Prevents the script from sweeping unrelated gaps.
+        cypher = """
+            MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+            WHERE coalesce(g.is_open, true) = true
+            MATCH (m)-[:HAS_APPOINTMENT]->(a:Appointment)
+            WHERE a.care_gap_id = g.care_gap_id
+              AND coalesce(a.status,'Scheduled') IN ['Scheduled','Booked','Completed']
+            RETURN DISTINCT g.care_gap_id AS care_gap_id,
+                   g.measure_id  AS measure_id,
+                   g.measure_name AS measure_name,
+                   g.primary_cpt_code AS primary_cpt,
+                   g.primary_icd10    AS primary_icd,
+                   g.claim_id          AS existing_claim_id
+        """
+        params = {"mid": member_id}
+
+    rows = kg.run_query(cypher, params) or []
     if not rows:
-        print(f"[{member_id}] no open gaps" + (f" for {measure_id}" if measure_id else ""))
+        if measure_id:
+            print(f"[{member_id}] no open gap for {measure_id}")
+        else:
+            print(f"[{member_id}] no open gaps with a booked appointment "
+                  "(use `python close_member_gap.py M0001 <MEASURE>` to close a specific gap)")
         return 0
 
     now = datetime.now().isoformat()
@@ -51,7 +103,10 @@ def close_gap(member_id: str, measure_id: str | None = None) -> int:
     for r in rows:
         cgid = r["care_gap_id"]
         mid_norm = r.get("measure_id") or "GEN"
-        claim_id = f"AUTO-CLM-{member_id}-{mid_norm}-{uuid.uuid4().hex[:6]}"
+        # Reuse existing claim id if one was previously stamped on the gap;
+        # otherwise generate a new one. This stops re-runs from creating
+        # duplicate claim rows for the same screening.
+        claim_id = r.get("existing_claim_id") or f"AUTO-CLM-{member_id}-{mid_norm}-{uuid.uuid4().hex[:6]}"
         kg.run_query(
             """
             MATCH (m:Member {member_id: $mid})
@@ -91,6 +146,16 @@ def close_gap(member_id: str, measure_id: str | None = None) -> int:
             """,
             {"mid": member_id, "cgid": cgid, "now": now, "cid": claim_id},
         )
+        # Mark the matching Outreach record(s) as Completed so the dashboard
+        # outreach completion-rate reflects the closure.
+        kg.run_query(
+            """
+            MATCH (o:Outreach)-[:TARGETS]->(g:CareGap {care_gap_id: $cgid})
+            SET o.status = 'Completed',
+                o.completed_at = $now
+            """,
+            {"cgid": cgid, "now": now},
+        )
         closed += 1
         print(f"[{member_id}] closed gap {cgid} ({r.get('measure_name') or r.get('measure_id')}) "
               f"with claim {claim_id}")
@@ -113,6 +178,23 @@ def close_gap(member_id: str, measure_id: str | None = None) -> int:
         """,
         {"mid": member_id},
     )
+
+    # Notify a running Flask server (if any) so any open member panel
+    # auto-refreshes without the user having to hit Refresh. Best-effort —
+    # if the server isn't running, silently ignore.
+    if closed:
+        try:
+            import urllib.request, json as _json
+            req = urllib.request.Request(
+                "http://127.0.0.1:5001/api/v1/admin/notify-gap-update",
+                data=_json.dumps({"member_id": member_id, "source": "close_member_gap"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=2)
+        except Exception:
+            pass
+
     return closed
 
 
