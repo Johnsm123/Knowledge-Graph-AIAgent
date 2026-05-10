@@ -1232,7 +1232,6 @@ function MemberDetails({ member, onBack }) {
             lifestyle={details?.lifestyle || {}}
             familyHistory={details?.family_history || []}
             medicalHistory={details?.medical_history || {}}
-            hereditaryRisks={details?.hereditary_risks || []}
             claims={details?.claims || []}
             onRefresh={fetchMemberDetails}
           />
@@ -2875,7 +2874,6 @@ function PatientRecordTab({
   lifestyle,
   familyHistory,
   medicalHistory,
-  hereditaryRisks,
   claims = [],
   onRefresh,
 }) {
@@ -2946,27 +2944,6 @@ function PatientRecordTab({
 
   return (
     <div className="patient-record-tab">
-      {/* Hereditary-risk banner */}
-      {hereditaryRisks.length > 0 && (
-        <div className="hereditary-risk-banner">
-          <div className="hrb-icon">⚠</div>
-          <div className="hrb-body">
-            <strong>Elevated Hereditary Risk Detected</strong>
-            <div className="hrb-list">
-              {hereditaryRisks.map((r, i) => (
-                <span key={i} className="hrb-chip">
-                  {r.condition} <em>({(r.relatives || []).join(", ")})</em>
-                </span>
-              ))}
-            </div>
-            <p className="hrb-note">
-              Care-gap recommendations below are risk-adjusted based on
-              first-degree relative conditions.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Header / edit toggle */}
       <div className="patient-record-header">
         <h3>Comprehensive Patient Record</h3>

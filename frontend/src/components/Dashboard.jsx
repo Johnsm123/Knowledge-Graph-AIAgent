@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Users, AlertCircle, CheckCircle, TrendingUp, Activity, UserPlus,
   Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  SortAsc, SortDesc, Filter, Zap, Loader, Mail, Trash2, Calendar,
+  SortAsc, SortDesc, Filter, Zap, Loader, Mail, Calendar,
   UserCog, Stethoscope, ClipboardList, RotateCcw,
 } from 'lucide-react';
 import axios from 'axios';
@@ -357,23 +357,6 @@ function Dashboard({ onMemberSelect }) {
     }
   };
 
-  // ── Delete member handler ─────────────────────────────────────────────────
-  const handleDeleteMember = async (e, memberId, memberName) => {
-    e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete ${memberName} (${memberId})? This will remove the member and all their data permanently.`)) {
-      return;
-    }
-    try {
-      const res = await axios.delete(`${API_BASE}/members/${memberId}`);
-      if (res.data.status === 'success') {
-        setMembers(prev => prev.filter(m => m.member_id !== memberId));
-      }
-    } catch (err) {
-      console.error('Delete member error:', err);
-      alert('Failed to delete member. Please try again.');
-    }
-  };
-
   // ── Filtering + sorting ───────────────────────────────────────────────────
   const filtered = members
     .filter(m => {
@@ -691,13 +674,6 @@ function Dashboard({ onMemberSelect }) {
                       <span className="tile-view-details" onClick={() => onMemberSelect(member)}>
                         View Details →
                       </span>
-                      <button
-                        className="btn-delete-member"
-                        onClick={(e) => handleDeleteMember(e, member.member_id, member.name)}
-                        title="Delete member"
-                      >
-                        <Trash2 size={14} />
-                      </button>
                     </div>
                   </div>
                 );
