@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 class BedrockChatCompletionClient(ChatCompletionClient):
     """AutoGen-compatible model client backed by AWS Bedrock Converse API."""
-
+    
     component_type = "model"
     component_config_schema = BaseModel
     component_provider_override = "bedrock_client.BedrockChatCompletionClient"

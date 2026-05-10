@@ -185,7 +185,15 @@ def reset_member_care_gaps(member_id: str) -> int:
 
 def sync_care_gap(member_id: str, care_gap_id: str, measure_id: str,
                   measure_name: str, status: str = "Open"):
-    """Create / update a CareGap node and link it to the Member and Measure."""
+    """Create / update a CareGap node and link it to the Member and Measure.
+
+    Idempotent w.r.t. lifecycle stage: when the gap already exists, the
+    stage / identified_at / outreach / appointment / closure timestamps are
+    preserved. Only the metadata (measure name, status) is refreshed. This
+    is what lets the reference-DB timeline survive a backend restart — the
+    startup full-sync no longer rewinds gaps that have already advanced to
+    outreach_sent / appointment_booked / gap_closed.
+    """
     ref = _ref()
     now = datetime.now().isoformat()
 
@@ -195,14 +203,13 @@ def sync_care_gap(member_id: str, care_gap_id: str, measure_id: str,
         SET ms.name = $msname
     """, {"msid": measure_id, "msname": measure_name})
 
-    # CareGap node
+    # CareGap node — ON CREATE seeds initial stage; ON MATCH preserves it.
     ref.execute_write("""
         MERGE (g:CareGap {gap_id: $gid})
+        ON CREATE SET g.stage = 'gap_identified', g.identified_at = $now
         SET g.measure_id   = $msid,
             g.measure_name = $msname,
-            g.status       = $status,
-            g.stage        = 'gap_identified',
-            g.identified_at = $now
+            g.status       = $status
         WITH g
         MATCH (m:Member {member_id: $mid})
         MERGE (m)-[:HAS_CARE_GAP]->(g)
@@ -212,11 +219,19 @@ def sync_care_gap(member_id: str, care_gap_id: str, measure_id: str,
     """, {"gid": care_gap_id, "msid": measure_id, "msname": measure_name,
           "status": status, "mid": member_id, "now": now})
 
-    # Create the "Gap Identified" action
-    _add_action(care_gap_id, "identified", "Care gap identified by rule engine",
-                stage="gap_identified")
+    # Only emit the "Gap Identified" action if the gap is still at that
+    # stage — re-syncing a gap that already advanced shouldn't append another
+    # identified action and reset the timeline.
+    cur = ref.run_query(
+        "MATCH (g:CareGap {gap_id: $gid}) RETURN g.stage AS stage",
+        {"gid": care_gap_id},
+    )
+    cur_stage = (cur[0]["stage"] if cur else None)
+    if cur_stage in (None, "gap_identified"):
+        _add_action(care_gap_id, "identified", "Care gap identified by rule engine",
+                    stage="gap_identified")
 
-    logger.info(f"[PERSONA-SYNC] Care gap {care_gap_id} synced for {member_id}")
+    logger.info(f"[PERSONA-SYNC] Care gap {care_gap_id} synced for {member_id} (stage={cur_stage})")
 
 
 def sync_compliant_measure(member_id: str, measure_id: str, measure_name: str,
@@ -522,16 +537,21 @@ def sync_gap_closed(member_id: str, care_gap_id: str):
 #  Bulk sync -- sync all existing members into the reference DB
 # ═══════════════════════════════════════════════════════════════════════════
 
-def sync_all_existing_members():
+def sync_all_existing_members(preserve_progress: bool = True):
     """
     Full re-sync: for every Member in the main DB, rebuild the reference DB
     and persona-demo DB so they exactly mirror the rulebook's view —
     open gaps as Open, prior-screening compliant measures as Closed gaps,
     and a fresh IdealPersona twin in the persona-demo DB.
 
-    Idempotent: existing reference-DB CareGaps for each member are wiped
-    first via reset_member_care_gaps so stale data from earlier runs does
-    not survive.
+    `preserve_progress` (default True): if True, existing reference-DB
+    CareGap nodes are kept intact so their lifecycle stage (outreach_sent /
+    appointment_booked / gap_closed) survives the re-sync. This is what
+    the backend-restart path uses so reopening a member panel after a
+    server restart still shows the timeline at the stage it had reached.
+
+    Pass `preserve_progress=False` only when you actually want a hard reset
+    (e.g. an explicit admin "rebuild from scratch" action).
     """
     from src.neo4j_connection import get_knowledge_graph
     from src.care_gap_neo4j import (
@@ -561,8 +581,12 @@ def sync_all_existing_members():
         if isinstance(chronic, str):
             chronic = [c.strip() for c in chronic.split(",") if c.strip()]
 
-        # Wipe any stale reference-DB gaps from previous runs.
-        reset_member_care_gaps(mid)
+        # Wipe any stale reference-DB gaps from previous runs — only when
+        # the caller explicitly asked for a hard reset. Default behaviour
+        # preserves the lifecycle stage so a server restart doesn't rewind
+        # the member-panel timeline.
+        if not preserve_progress:
+            reset_member_care_gaps(mid)
 
         sync_member_persona(
             member_id=mid,

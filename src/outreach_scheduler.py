@@ -74,12 +74,17 @@ def run_auto_close_completed() -> int:
     """For every appointment marked Completed whose underlying CareGap is
     still open: generate a claim, close the gap, mark member compliant if
     all gaps are now closed. Replaces the manual "Force Close" UI flow."""
+    # Use MATCH (not OPTIONAL MATCH) so already-closed gaps drop out of the
+    # result set entirely — otherwise the row is still emitted with g=null
+    # and the loop below blindly creates a fresh claim every tick. Only emit
+    # rows where the gap is open AND has no claim yet.
     rows = _kg().run_query(
         """
         MATCH (m:Member)-[:HAS_APPOINTMENT]->(a:Appointment)
         WHERE a.status = 'Completed'
-        OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap {care_gap_id: a.care_gap_id})
+        MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap {care_gap_id: a.care_gap_id})
         WHERE coalesce(g.is_open, true) = true
+          AND (g.claim_id IS NULL OR g.claim_id = '')
         RETURN m.member_id        AS member_id,
                a.care_gap_id      AS care_gap_id,
                coalesce(a.measure_id, g.measure_id) AS measure_id,

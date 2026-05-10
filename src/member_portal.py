@@ -598,6 +598,20 @@ def portal_book(member_id, token):
     if member_email and booked_appointments:
         _send_booking_confirmation_email(member_id, name, member_email, booked_appointments)
 
+    # Push real-time event so any open member panel auto-refreshes.
+    if booked_appointments:
+        try:
+            from src.care_gap_api import emit_portal_event
+            emit_portal_event("appointment_booked", {
+                "member_id": member_id, "source": "member_portal",
+                "count": len(booked_appointments),
+            })
+            emit_portal_event("care_gap_updated", {
+                "member_id": member_id, "source": "appointment_booked",
+            })
+        except Exception:
+            pass
+
     if not bookings_html:
         return _html_page("No Slots Selected", f"""
             <div class="card">

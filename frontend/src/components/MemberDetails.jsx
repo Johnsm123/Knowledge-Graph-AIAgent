@@ -321,13 +321,22 @@ function MemberDetails({ member, onBack }) {
 
   useRealtimeEvents({
     appointment_booked: (payload) => {
-      if (payload?.member_id === member?.member_id) fetchMemberDetails();
+      if (payload?.member_id === member?.member_id) {
+        fetchMemberDetails();
+        fetchPersonaGraph();
+      }
     },
     profile_updated: (payload) => {
-      if (payload?.member_id === member?.member_id) fetchMemberDetails();
+      if (payload?.member_id === member?.member_id) {
+        fetchMemberDetails();
+        fetchPersonaGraph();
+      }
     },
     care_gap_updated: (payload) => {
-      if (payload?.member_id === member?.member_id) fetchMemberDetails();
+      if (payload?.member_id === member?.member_id) {
+        fetchMemberDetails();
+        fetchPersonaGraph();
+      }
     },
   });
   // keep original useEffect deps intact below; no-op body preserves original semantics

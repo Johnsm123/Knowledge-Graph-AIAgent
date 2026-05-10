@@ -787,6 +787,22 @@ def book_appointment():
         else:
             logger.warning(f"[BOOK] No care_gap_id provided — skipping persona sync for {member_id}/{measure_id}")
 
+        # Push a real-time event so any open member panel auto-refreshes
+        # without a manual reload after the appointment is booked.
+        try:
+            emit_portal_event("appointment_booked", {
+                "member_id": member_id,
+                "care_gap_id": care_gap_id,
+                "measure_id": measure_id,
+                "appointment_id": appointment_id,
+            })
+            emit_portal_event("care_gap_updated", {
+                "member_id": member_id,
+                "source": "appointment_booked",
+            })
+        except Exception:
+            pass
+
         return jsonify({
             "status": "success",
             "appointment_id": appointment_id,
@@ -1137,12 +1153,16 @@ def auto_close_completed_appointments():
     """
     try:
         kg = get_knowledge_graph()
+        # MATCH (not OPTIONAL MATCH) — closed gaps must NOT emit a row, or
+        # the loop below would mint a new AUTO-CLM-* claim every call. Also
+        # require g.claim_id to be empty so re-runs are true no-ops.
         rows = kg.run_query(
             """
             MATCH (m:Member)-[:HAS_APPOINTMENT]->(a:Appointment)
             WHERE a.status = 'Completed'
-            OPTIONAL MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap {care_gap_id: a.care_gap_id})
+            MATCH (m)-[:HAS_CARE_GAP]->(g:CareGap {care_gap_id: a.care_gap_id})
             WHERE coalesce(g.is_open, true) = true
+              AND (g.claim_id IS NULL OR g.claim_id = '')
             RETURN m.member_id          AS member_id,
                    a.appointment_id     AS appointment_id,
                    a.care_gap_id        AS care_gap_id,

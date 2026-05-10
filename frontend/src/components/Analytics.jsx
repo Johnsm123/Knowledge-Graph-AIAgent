@@ -58,10 +58,10 @@ function Analytics() {
   }
 
   // Prepare data for charts.
-  // Demo scope: limit the Care Gap Distribution chart to the three cancer
-  // screening measures only (BCS, CCS, COL). The rest of the HEDIS measures
-  // are intentionally hidden until the demo expands to other gap categories.
-  const DEMO_MEASURE_IDS = new Set(['BCS', 'CCS', 'COL']);
+  // Demo scope: BCS / CCS / COL cancer screenings + AAP (adults' access to
+  // preventive/ambulatory health services). Mirrors CARE_GAP_ENABLED_MEASURES
+  // on the backend.
+  const DEMO_MEASURE_IDS = new Set(['BCS', 'CCS', 'COL', 'AAP']);
   const gapDistributionData = (stats?.gaps_by_measure || [])
     .filter(measure => DEMO_MEASURE_IDS.has(measure.measure_id))
     .map(measure => {

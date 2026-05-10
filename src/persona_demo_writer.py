@@ -177,6 +177,79 @@ def _annotate_member_lifestyle(member_lifestyle: dict) -> dict:
     return out
 
 
+# ── Persona-comparison computation helpers ──────────────────────────────────
+# Mirrors persona_demo/seed_persona_demo_db.py so the bulk-upload writer
+# produces the exact same shape on the IdealPersona node + COMPARED_TO
+# relationship that the demo Cypher queries (lifestyle_comparison,
+# missing_links, gap_categories, total_missing_links) expect.
+
+RECOMMENDED_IMMUNIZATIONS = {"Influenza", "Tdap", "COVID-19"}
+HIGH_RISK_FAMILY_CONDITIONS = {
+    "Diabetes Type 2", "Hypertension", "Coronary Artery Disease",
+    "Breast Cancer", "Colorectal Cancer", "Stroke",
+}
+
+
+def _compute_lifestyle_gaps(lifestyle: dict) -> list:
+    if not lifestyle:
+        return ["No lifestyle data on file"]
+    gaps: list = []
+    bmi = lifestyle.get("bmi")
+    n = _to_float(bmi) if bmi is not None else None
+    if n is not None and (n < 18.5 or n > 24.9):
+        gaps.append(f"BMI {n} outside ideal 18.5–24.9")
+    smoking = (lifestyle.get("smoking_status") or "").strip()
+    if smoking and smoking.lower() not in {"never", "non-smoker", "none", "former", "quit", "former-quit"}:
+        gaps.append(f"Smoking status: {smoking} (ideal: Never)")
+    alcohol = (lifestyle.get("alcohol_use") or "").strip().lower()
+    if alcohol in {"heavy", "frequent", "daily"}:
+        gaps.append(f"Alcohol use: {lifestyle.get('alcohol_use')} (ideal: None/Occasional)")
+    exercise = (lifestyle.get("exercise_frequency") or "").strip().lower()
+    if exercise in {"never", "rarely", "none", "sedentary", "1-2 times/week", "2x/week"}:
+        gaps.append(f"Exercise: {lifestyle.get('exercise_frequency')} (ideal: 5+ times/week)")
+    sleep = lifestyle.get("sleep_hours_avg")
+    s = _to_float(sleep) if sleep is not None else None
+    if s is not None and (s < 7 or s > 9):
+        gaps.append(f"Sleep avg {s}h outside ideal 7–9h")
+    stress = (lifestyle.get("stress_level") or "").strip().lower()
+    if stress in {"high", "severe"}:
+        gaps.append(f"Stress level: {lifestyle.get('stress_level')} (ideal: Low)")
+    return gaps
+
+
+def _compute_family_risk_flags(family_history: list) -> list:
+    flags = []
+    for fm in (family_history or []):
+        for cond in (fm.get("conditions") or []):
+            if cond in HIGH_RISK_FAMILY_CONDITIONS:
+                flags.append(f"{fm.get('relation', 'relative')} → {cond}")
+    return flags
+
+
+def _compute_history_gaps(medical_history: dict) -> dict:
+    mh = medical_history or {}
+    immunized = {(e.get("name") or e.get("label") or "").strip()
+                 for e in (mh.get("immunizations") or [])}
+    missing_imm = sorted(RECOMMENDED_IMMUNIZATIONS - immunized)
+    unmanaged = []
+    for e in (mh.get("current_conditions") or []):
+        label = (e.get("name") or e.get("label") or "").strip()
+        status = (e.get("status") or "").strip().lower()
+        if label and status in {"uncontrolled", "active", "unmanaged", ""}:
+            unmanaged.append(label)
+    severe_allg = []
+    for e in (mh.get("allergies") or []):
+        sev = (e.get("severity") or "").strip().lower()
+        label = (e.get("substance") or e.get("name") or e.get("label") or "").strip()
+        if label and sev in {"severe", "anaphylaxis"}:
+            severe_allg.append(label)
+    return {
+        "missing_immunizations": missing_imm,
+        "unmanaged_conditions":  unmanaged,
+        "severe_allergies":      severe_allg,
+    }
+
+
 def _gap_to_dict(g: dict) -> dict:
     return {
         "measure_id":   g.get("measure_id") or g.get("id") or "",
@@ -328,17 +401,115 @@ def push_member_persona(member_profile: dict, comparison: dict) -> bool:
                 """,
                 {"mid": mid},
             ).consume()
+            # Drop every existing COMPARED_TO from this member so the freshly
+            # rewritten one is the only relationship returned by the demo
+            # queries (avoids "Expected a single record, found multiple"
+            # warnings and stale property names like ideal_bmi from older
+            # writer versions).
+            s.run(
+                """
+                MATCH (m:Member {member_id: $mid})-[r:COMPARED_TO]->()
+                DELETE r
+                """,
+                {"mid": mid},
+            ).consume()
 
+            # Compute the missing-link breakdown so the COMPARED_TO edge can
+            # carry every attribute the demo Cypher queries (lifestyle_comparison,
+            # missing_links, gap_categories, total_missing_links) read.
+            ls           = comparison.get("lifestyle") or {}
+            family_raw   = comparison.get("_family_history_raw") or []
+            mh_raw       = comparison.get("_medical_history_raw") or {}
+            lifestyle_gaps = _compute_lifestyle_gaps(ls)
+            family_flags   = _compute_family_risk_flags(family_raw)
+            history_gaps   = _compute_history_gaps(mh_raw)
+            missing_imm    = history_gaps["missing_immunizations"]
+            unmanaged      = history_gaps["unmanaged_conditions"]
+            severe_allg    = history_gaps["severe_allergies"]
+            pending_ids    = [g["measure_id"] for g in pending if g.get("measure_id")]
+            total_links    = (
+                len(pending_ids) + len(lifestyle_gaps) + len(missing_imm)
+                + len(unmanaged) + len(family_flags)
+            )
+            gap_categories = [
+                cat for cat, items in [
+                    ("screenings",       pending_ids),
+                    ("lifestyle",        lifestyle_gaps),
+                    ("immunizations",    missing_imm),
+                    ("unmanaged_chronic", unmanaged),
+                    ("family_risk",      family_flags),
+                ] if items
+            ]
+
+            # Roll the member's actual ancestral + medical history into flat
+            # arrays on the Member node so a single Cypher MATCH returns the
+            # whole side-by-side comparison without traversing FamilyMember /
+            # MedicalHistoryEntry sub-graphs.
+            family_summary = [
+                f"{(fm.get('relation') or 'relative').strip()}: "
+                + (", ".join(fm.get("conditions") or []) or "no conditions")
+                for fm in (family_raw or [])
+            ]
+            current_conditions_list = [
+                (e.get("name") or e.get("label") or "").strip()
+                for e in (mh_raw.get("current_conditions") or [])
+                if (e.get("name") or e.get("label"))
+            ]
+            past_conditions_list = [
+                (e.get("name") or e.get("label") or "").strip()
+                for e in (mh_raw.get("past_conditions") or [])
+                if (e.get("name") or e.get("label"))
+            ]
+            medications_list = [
+                (e.get("name") or e.get("label") or "").strip()
+                for e in (mh_raw.get("medications") or [])
+                if (e.get("name") or e.get("label"))
+            ]
+            allergies_list = [
+                (e.get("substance") or e.get("name") or e.get("label") or "").strip()
+                for e in (mh_raw.get("allergies") or [])
+                if (e.get("substance") or e.get("name") or e.get("label"))
+            ]
+            immunizations_list = sorted({
+                (e.get("name") or e.get("label") or "").strip()
+                for e in (mh_raw.get("immunizations") or [])
+                if (e.get("name") or e.get("label"))
+            })
+            surgeries_list = [
+                (e.get("name") or e.get("label") or "").strip()
+                for e in (mh_raw.get("surgeries") or [])
+                if (e.get("name") or e.get("label"))
+            ]
+
+            # Member node — full lifestyle + ancestral + medical attributes.
+            # The demo's side-by-side query reads every property here directly.
             s.run(
                 """
                 MERGE (m:Member {member_id: $mid})
-                SET m.name              = $name,
-                    m.age_str           = $age,
-                    m.gender            = $gender,
-                    m.chronic_conditions = $chronic,
-                    m.bulk_uploaded_at  = $now,
-                    m.pending_count     = $pending_count,
-                    m.completed_count   = $completed_count
+                SET m.name                = $name,
+                    m.age_str             = $age,
+                    m.gender              = $gender,
+                    m.chronic_conditions  = $chronic,
+                    m.bulk_uploaded_at    = $now,
+                    m.pending_count       = $pending_count,
+                    m.completed_count     = $completed_count,
+                    m.bmi                  = $bmi,
+                    m.smoking_status       = $smoking,
+                    m.alcohol_use          = $alcohol,
+                    m.exercise_frequency   = $exercise,
+                    m.diet_type            = $diet,
+                    m.sleep_hours_avg      = $sleep,
+                    m.stress_level         = $stress,
+                    m.family_risk_flags     = $family_flags,
+                    m.family_history        = $family_summary,
+                    m.unmanaged_conditions  = $unmanaged,
+                    m.severe_allergies      = $severe_allg,
+                    m.immunizations_on_file = $immunizations,
+                    m.current_conditions    = $current_conditions,
+                    m.past_conditions       = $past_conditions,
+                    m.medications           = $medications,
+                    m.allergies             = $allergies,
+                    m.surgeries             = $surgeries
                 """,
                 {
                     "mid": mid,
@@ -349,33 +520,106 @@ def push_member_persona(member_profile: dict, comparison: dict) -> bool:
                     "now": now,
                     "pending_count":   len(pending),
                     "completed_count": len(completed),
+                    "bmi":      ls.get("bmi", ""),
+                    "smoking":  ls.get("smoking_status", ""),
+                    "alcohol":  ls.get("alcohol_use", ""),
+                    "exercise": ls.get("exercise_frequency", ""),
+                    "diet":     ls.get("diet_type", ""),
+                    "sleep":    ls.get("sleep_hours_avg", ""),
+                    "stress":   ls.get("stress_level", ""),
+                    "family_flags":   family_flags,
+                    "family_summary": family_summary,
+                    "unmanaged":      unmanaged,
+                    "severe_allg":    severe_allg,
+                    "immunizations":      immunizations_list,
+                    "current_conditions": current_conditions_list,
+                    "past_conditions":    past_conditions_list,
+                    "medications":        medications_list,
+                    "allergies":          allergies_list,
+                    "surgeries":          surgeries_list,
                 },
             ).consume()
+
+            # IdealPersona — full "perfect twin" attributes covering lifestyle,
+            # ancestral history (clean lineage), and medical history (every
+            # immunization on file, every condition managed/resolved). The
+            # property names match what persona_demo_queries.cypher reads so
+            # a single side-by-side Cypher MATCH renders the whole story.
+            ideal_immunizations = sorted(
+                set(immunizations_list) | RECOMMENDED_IMMUNIZATIONS
+            )
+            # Mirror the member's family relations but with no high-risk
+            # inherited conditions — i.e. an ideal lineage of the same shape.
+            ideal_family_history = [
+                f"{(fm.get('relation') or 'relative').strip()}: "
+                "no high-risk inherited conditions"
+                for fm in (family_raw or [])
+            ] or ["No high-risk family history on file"]
+            # Past conditions persona = same set, all resolved.
+            ideal_past_conditions = (
+                [f"{c} (resolved)" for c in past_conditions_list]
+                or ["No past conditions"]
+            )
+            # Current conditions persona = same set, all controlled / managed.
+            ideal_current_conditions = (
+                [f"{c} (controlled / managed)" for c in current_conditions_list]
+                or ["No active conditions"]
+            )
+            # Medications persona = same medications, taken on schedule, no
+            # unmanaged side effects.
+            ideal_medications = (
+                [f"{m} (adherent / on schedule)" for m in medications_list]
+                or ["No medications required"]
+            )
+            # Allergies persona = same allergies but managed without incident.
+            ideal_allergies = (
+                [f"{a} (managed without incident)" for a in allergies_list]
+                or ["No known allergies"]
+            )
+
             s.run(
                 """
                 MERGE (p:IdealPersona {persona_id: $pid})
-                SET p.name              = $pid,
-                    p.age_str           = $age,
-                    p.gender            = $gender,
-                    p.model             = 'closest-fit-ideal-twin',
-                    p.compliance_score  = 100.0,
-                    p.applicable_count  = $applicable_count,
-                    p.completed_count   = $applicable_count,
-                    p.pending_count     = 0,
-                    p.summary           = $summary,
-                    p.ideal_bmi         = $bmi,
-                    p.ideal_smoking     = $smoking,
-                    p.ideal_alcohol     = $alcohol,
-                    p.ideal_exercise    = $exercise,
-                    p.ideal_diet        = $diet,
-                    p.ideal_sleep_hours = $sleep,
-                    p.ideal_stress      = $stress
+                SET p.name                       = $pid,
+                    p.age_str                    = $age,
+                    p.gender                     = $gender,
+                    p.model                      = 'closest-fit-ideal-twin',
+                    p.compliance_score           = 100.0,
+                    p.applicable_count           = $applicable_count,
+                    p.completed_count            = $applicable_count,
+                    p.pending_count              = 0,
+                    p.summary                    = $summary,
+                    p.ideal_bmi_range            = $bmi,
+                    p.ideal_smoking_status       = $smoking,
+                    p.ideal_alcohol_use          = $alcohol,
+                    p.ideal_exercise_frequency   = $exercise,
+                    p.ideal_diet_type            = $diet,
+                    p.ideal_sleep_hours          = $sleep,
+                    p.ideal_stress_level         = $stress,
+                    p.recommended_immunizations  = $reco_imm,
+                    p.ideal_immunizations        = $ideal_imm_full,
+                    p.ideal_family_history       = $ideal_family,
+                    p.family_risk_followup       = $family_followup,
+                    p.chronic_management_status  = 'All chronic conditions controlled / managed',
+                    p.ideal_current_conditions   = $ideal_current,
+                    p.ideal_past_conditions      = $ideal_past,
+                    p.ideal_medications          = $ideal_meds,
+                    p.ideal_allergies            = $ideal_allergies,
+                    p.severe_allergies           = []
                 WITH p
                 MATCH (m:Member {member_id: $mid})
                 MERGE (m)-[r:COMPARED_TO]->(p)
-                SET r.gap_count    = $pending_count,
-                    r.gap_measures = $pending_measure_ids,
-                    r.compared_at  = $now
+                SET r.gap_count             = $pending_count,
+                    r.gap_measures          = $pending_measure_ids,
+                    r.lifestyle_gaps        = $lifestyle_gaps,
+                    r.lifestyle_gap_count   = $lifestyle_gap_count,
+                    r.missing_immunizations = $missing_imm,
+                    r.unmanaged_conditions  = $unmanaged,
+                    r.family_risk_flags     = $family_flags,
+                    r.severe_allergies      = $severe_allg,
+                    r.total_missing_links   = $total_links,
+                    r.gap_categories        = $gap_categories,
+                    r.compared_at           = $now
                 """,
                 {
                     "pid": persona_id,
@@ -391,9 +635,28 @@ def push_member_persona(member_profile: dict, comparison: dict) -> bool:
                     "diet":     IDEAL_LIFESTYLE["diet_type"],
                     "sleep":    IDEAL_LIFESTYLE["sleep_hours_avg"],
                     "stress":   IDEAL_LIFESTYLE["stress_level"],
+                    "reco_imm":   sorted(RECOMMENDED_IMMUNIZATIONS),
+                    "family_followup": (
+                        "All hereditary high-risk conditions reviewed with PCP and screening cadence adjusted"
+                        if family_flags else "No family-history follow-up required"
+                    ),
                     "pending_count": len(pending),
-                    "pending_measure_ids": [g["measure_id"] for g in pending],
+                    "pending_measure_ids": pending_ids,
+                    "lifestyle_gaps":      lifestyle_gaps,
+                    "lifestyle_gap_count": len(lifestyle_gaps),
+                    "missing_imm":  missing_imm,
+                    "unmanaged":    unmanaged,
+                    "family_flags": family_flags,
+                    "severe_allg":  severe_allg,
+                    "total_links":  total_links,
+                    "gap_categories": gap_categories,
                     "now": now,
+                    "ideal_imm_full": ideal_immunizations,
+                    "ideal_family":   ideal_family_history,
+                    "ideal_current":  ideal_current_conditions,
+                    "ideal_past":     ideal_past_conditions,
+                    "ideal_meds":     ideal_medications,
+                    "ideal_allergies": ideal_allergies,
                 },
             ).consume()
 
