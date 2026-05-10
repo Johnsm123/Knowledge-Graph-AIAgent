@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 820" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="2" dy="3"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.22"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <linearGradient id="gUser" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="gApp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1f6feb"/><stop offset="100%" stop-color="#0d3a8a"/>
+    </linearGradient>
+    <linearGradient id="gAi" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#6b21a8"/>
+    </linearGradient>
+    <linearGradient id="gAz" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0078D4"/><stop offset="100%" stop-color="#003e6b"/>
+    </linearGradient>
+    <linearGradient id="gAws" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF9900"/><stop offset="100%" stop-color="#b36b00"/>
+    </linearGradient>
+    <linearGradient id="gDb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#065f46"/>
+    </linearGradient>
+    <linearGradient id="gP" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ec4899"/><stop offset="100%" stop-color="#9d174d"/>
+    </linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/><stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#be185d"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="820" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="700" y="50" text-anchor="middle" font-size="28" font-weight="700" fill="#0f172a">
+    Care Gap Management — Persona-Driven Architecture
+  </text>
+  <text x="700" y="80" text-anchor="middle" font-size="14" fill="#475569">
+    Built using the Persona Method · Members are traversed against personas to identify care gaps
+  </text>
+
+  <!-- USER -->
+  <g filter="url(#shadow)">
+    <rect x="60" y="340" width="200" height="120" rx="14" fill="#fff" stroke="#0284c7" stroke-width="1.8"/>
+  </g>
+  <rect x="60" y="340" width="200" height="34" rx="14" fill="url(#gUser)"/>
+  <rect x="60" y="362" width="200" height="12" fill="url(#gUser)"/>
+  <text x="160" y="362" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">USER</text>
+  <text x="160" y="406" text-anchor="middle" font-size="15" font-weight="700" fill="#075985">Web Dashboard</text>
+  <text x="160" y="430" text-anchor="middle" font-size="12" fill="#475569">Care Manager</text>
+  <text x="160" y="448" text-anchor="middle" font-size="12" fill="#475569">browser interface</text>
+
+  <!-- APPLICATION -->
+  <g filter="url(#shadow)">
+    <rect x="370" y="170" width="360" height="460" rx="14" fill="#fff" stroke="#1d4ed8" stroke-width="1.8"/>
+  </g>
+  <rect x="370" y="170" width="360" height="34" rx="14" fill="url(#gApp)"/>
+  <rect x="370" y="192" width="360" height="12" fill="url(#gApp)"/>
+  <text x="550" y="192" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">APPLICATION</text>
+
+  <rect x="395" y="226" width="310" height="74" rx="10" fill="#dbeafe" stroke="#1d4ed8"/>
+  <text x="550" y="252" text-anchor="middle" font-size="15" font-weight="700" fill="#1e3a8a">Backend API</text>
+  <text x="550" y="274" text-anchor="middle" font-size="12" fill="#1e40af">REST + Real-time</text>
+  <text x="550" y="290" text-anchor="middle" font-size="11" fill="#475569">handles all requests</text>
+
+  <rect x="395" y="312" width="310" height="60" rx="10" fill="#eff6ff" stroke="#3b82f6"/>
+  <text x="550" y="334" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a8a">Outreach Scheduler</text>
+  <text x="550" y="354" text-anchor="middle" font-size="11" fill="#475569">automated reminders &amp; emails</text>
+
+  <rect x="395" y="384" width="310" height="60" rx="10" fill="#eff6ff" stroke="#3b82f6"/>
+  <text x="550" y="406" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a8a">Reports</text>
+  <text x="550" y="426" text-anchor="middle" font-size="11" fill="#475569">care gap PDFs</text>
+
+  <!-- AI Agents nested -->
+  <rect x="395" y="456" width="310" height="160" rx="10" fill="#faf5ff" stroke="#a855f7" stroke-width="1.8"/>
+  <rect x="395" y="456" width="310" height="28" rx="10" fill="url(#gAi)"/>
+  <rect x="395" y="474" width="310" height="10" fill="url(#gAi)"/>
+  <text x="550" y="475" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">AI AGENTS</text>
+
+  <rect x="412" y="494" width="86" height="110" rx="8" fill="#f3e8ff" stroke="#9333ea"/>
+  <text x="455" y="528" text-anchor="middle" font-size="11" font-weight="700" fill="#581c87">Eligibility</text>
+  <text x="455" y="546" text-anchor="middle" font-size="10" fill="#7e22ce">Agent</text>
+  <text x="455" y="572" text-anchor="middle" font-size="9" fill="#6b21a8">match</text>
+  <text x="455" y="586" text-anchor="middle" font-size="9" fill="#6b21a8">member ↔</text>
+  <text x="455" y="599" text-anchor="middle" font-size="9" fill="#6b21a8">persona</text>
+
+  <rect x="507" y="494" width="86" height="110" rx="8" fill="#f3e8ff" stroke="#9333ea"/>
+  <text x="550" y="528" text-anchor="middle" font-size="11" font-weight="700" fill="#581c87">Care Gap</text>
+  <text x="550" y="546" text-anchor="middle" font-size="10" fill="#7e22ce">Agent</text>
+  <text x="550" y="572" text-anchor="middle" font-size="9" fill="#6b21a8">traverse</text>
+  <text x="550" y="586" text-anchor="middle" font-size="9" fill="#6b21a8">&amp; find</text>
+  <text x="550" y="599" text-anchor="middle" font-size="9" fill="#6b21a8">gaps</text>
+
+  <rect x="602" y="494" width="86" height="110" rx="8" fill="#f3e8ff" stroke="#9333ea"/>
+  <text x="645" y="528" text-anchor="middle" font-size="11" font-weight="700" fill="#581c87">Recommend</text>
+  <text x="645" y="546" text-anchor="middle" font-size="10" fill="#7e22ce">Agent</text>
+  <text x="645" y="572" text-anchor="middle" font-size="9" fill="#6b21a8">guidance</text>
+  <text x="645" y="586" text-anchor="middle" font-size="9" fill="#6b21a8">&amp; outreach</text>
+  <text x="645" y="599" text-anchor="middle" font-size="9" fill="#6b21a8">plan</text>
+
+  <!-- EXTERNAL SERVICES -->
+  <g filter="url(#shadow)">
+    <rect x="830" y="200" width="510" height="320" rx="14" fill="#fff" stroke="#cbd5e1" stroke-width="1.8"/>
+  </g>
+  <rect x="830" y="200" width="510" height="34" rx="14" fill="#334155"/>
+  <rect x="830" y="222" width="510" height="12" fill="#334155"/>
+  <text x="1085" y="222" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">CLOUD SERVICES</text>
+
+  <rect x="855" y="256" width="460" height="100" rx="10" fill="#e0e7ff" stroke="#4338ca"/>
+  <rect x="855" y="256" width="6" height="100" fill="url(#gAz)"/>
+  <text x="1085" y="286" text-anchor="middle" font-size="16" font-weight="700" fill="#1e3a8a">Azure OpenAI</text>
+  <text x="1085" y="310" text-anchor="middle" font-size="13" fill="#3730a3">GPT-5 — agent reasoning</text>
+  <text x="1085" y="332" text-anchor="middle" font-size="12" fill="#475569">powers all AI agent decisions</text>
+
+  <rect x="855" y="370" width="460" height="100" rx="10" fill="#dbeafe" stroke="#1d4ed8"/>
+  <rect x="855" y="370" width="6" height="100" fill="url(#gAz)"/>
+  <text x="1085" y="400" text-anchor="middle" font-size="16" font-weight="700" fill="#1e3a8a">Azure Email Service</text>
+  <text x="1085" y="424" text-anchor="middle" font-size="13" fill="#1e40af">member outreach emails</text>
+  <text x="1085" y="446" text-anchor="middle" font-size="12" fill="#475569">automated reminders &amp; notifications</text>
+
+  <!-- PERSONA METHOD callout (right column bottom) -->
+  <rect x="855" y="484" width="460" height="42" rx="10" fill="#fce7f3" stroke="#db2777" stroke-width="1.5"/>
+  <rect x="855" y="484" width="6" height="42" fill="url(#gP)"/>
+  <text x="1085" y="510" text-anchor="middle" font-size="13" font-weight="700" fill="#9d174d">Built using the Persona Method</text>
+
+  <!-- PERSONA DB -->
+  <g filter="url(#shadow)">
+    <rect x="370" y="660" width="970" height="120" rx="14" fill="#fff" stroke="#10b981" stroke-width="1.8"/>
+  </g>
+  <rect x="370" y="660" width="970" height="34" rx="14" fill="url(#gDb)"/>
+  <rect x="370" y="682" width="970" height="12" fill="url(#gDb)"/>
+  <text x="855" y="682" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">PERSONA DB (Knowledge Graph)</text>
+
+  <text x="855" y="724" text-anchor="middle" font-size="14" font-weight="600" fill="#065f46">
+    Stores Members, Personas, Care Gaps, Claims, Outreach &amp; Workflow data
+  </text>
+  <text x="855" y="750" text-anchor="middle" font-size="13" fill="#0f766e" font-style="italic">
+    Members are traversed against matching personas → care gaps are identified
+  </text>
+  <text x="855" y="770" text-anchor="middle" font-size="11" fill="#475569">
+    Single graph database — one source of truth
+  </text>
+
+  <!-- ───────── ARROWS ───────── -->
+  <!-- User → Application -->
+  <path d="M260 400 H 370" stroke="#475569" stroke-width="2.4" fill="none" marker-end="url(#arr)"/>
+  <text x="315" y="392" text-anchor="middle" font-size="11" fill="#475569">requests</text>
+  <text x="315" y="418" text-anchor="middle" font-size="11" fill="#475569">responses</text>
+  <path d="M370 410 H 260" stroke="#475569" stroke-width="2" fill="none" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+
+  <!-- Application → Cloud Services -->
+  <path d="M730 306 H 855" stroke="#475569" stroke-width="2.2" fill="none" marker-end="url(#arr)"/>
+  <text x="792" y="298" text-anchor="middle" font-size="10" fill="#475569">AI calls</text>
+
+  <path d="M730 420 H 855" stroke="#475569" stroke-width="2.2" fill="none" marker-end="url(#arr)"/>
+  <text x="792" y="412" text-anchor="middle" font-size="10" fill="#475569">send email</text>
+
+  <!-- Application → Persona DB -->
+  <path d="M550 630 V 660" stroke="#047857" stroke-width="2.6" fill="none" marker-end="url(#arr)"/>
+  <text x="500" y="650" font-size="11" font-weight="700" fill="#047857">read /</text>
+  <text x="500" y="664" font-size="11" font-weight="700" fill="#047857">write</text>
+
+  <!-- Persona traversal callout arrow -->
+  <path d="M1085 528 V 660" stroke="#be185d" stroke-width="2.4" stroke-dasharray="6 4" fill="none" marker-end="url(#arrP)"/>
+  <text x="1100" y="600" font-size="11" fill="#9d174d" font-weight="700">applied to</text>
+
+  <!-- Persona DB → Application (return path) -->
+  <path d="M730 660 C 730 645, 700 645, 700 630" stroke="#047857" stroke-width="2" stroke-dasharray="4 3" fill="none" marker-end="url(#arr)"/>
+
+  <!-- Legend -->
+  <rect x="40" y="540" width="280" height="120" rx="10" fill="#fff" stroke="#cbd5e1"/>
+  <text x="180" y="562" text-anchor="middle" font-size="12" font-weight="700" fill="#334155">Legend</text>
+  <g font-size="11" fill="#334155">
+    <rect x="56" y="572" width="14" height="14" rx="3" fill="url(#gUser)"/>  <text x="76" y="584">User / Frontend</text>
+    <rect x="56" y="592" width="14" height="14" rx="3" fill="url(#gApp)"/>   <text x="76" y="604">Application backend</text>
+    <rect x="56" y="612" width="14" height="14" rx="3" fill="url(#gAi)"/>    <text x="76" y="624">AI Agents</text>
+    <rect x="180" y="572" width="14" height="14" rx="3" fill="url(#gAz)"/>   <text x="200" y="584">Azure services</text>
+    <rect x="180" y="592" width="14" height="14" rx="3" fill="url(#gDb)"/>   <text x="200" y="604">Persona DB</text>
+    <rect x="180" y="612" width="14" height="14" rx="3" fill="url(#gP)"/>    <text x="200" y="624">Persona Method</text>
+  </g>
+</svg>
