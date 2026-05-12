@@ -138,6 +138,18 @@ def sync_member_persona(member_id: str, name: str, dob: str, gender: str,
     return persona_id
 
 
+def set_persona_reasoning(member_id: str, reasoning: str) -> None:
+    """Write an LLM-generated 'why this persona matches the member' paragraph
+    onto the Persona node so the lifecycle-graph tooltip can display it."""
+    if not reasoning:
+        return
+    ref = _ref()
+    ref.execute_write("""
+        MATCH (m:Member {member_id: $mid})-[:HAS_PERSONA]->(p:Persona)
+        SET p.reasoning = $reasoning
+    """, {"mid": member_id, "reasoning": reasoning})
+
+
 def _age_band(age: int) -> str:
     if age < 18: return "0-17"
     if age < 30: return "18-29"
@@ -822,7 +834,7 @@ def get_member_lifecycle_graph(member_id: str):
                   .chronic_conditions, .insurance_type} AS member,
                prov {.provider_id, .name} AS provider,
                p {.persona_id, .description, .care_gap_status,
-                  .age_band_label, .gender_criteria_label} AS persona
+                  .age_band_label, .gender_criteria_label, .reasoning} AS persona
     """, {"mid": member_id})
 
     if not data or not data[0].get("member"):
@@ -848,7 +860,8 @@ def get_member_lifecycle_graph(member_id: str):
              "description": persona.get("description"),
              "care_gap_status": persona.get("care_gap_status"),
              "age_band": persona.get("age_band_label"),
-             "gender": persona.get("gender_criteria_label")})
+             "gender": persona.get("gender_criteria_label"),
+             "reasoning": persona.get("reasoning")})
         edges.append({"source": mem["member_id"],
                       "target": persona["persona_id"],
                       "type": "HAS_PERSONA"})

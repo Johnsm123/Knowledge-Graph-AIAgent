@@ -4,6 +4,7 @@ Run: python -m src.care_gap_api
 """
 import json
 import logging
+import os
 import time as _time_mod
 from flask import Flask, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
@@ -20,7 +21,13 @@ from flask_socketio import SocketIO, join_room
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
+
+# Socket.IO async mode:
+#   - "threading"  → works with the Flask/werkzeug dev server (`app.run`). Default for local dev.
+#   - "gevent"     → required when serving via `gunicorn -k gevent wsgi:app` in production.
+# Override via SOCKETIO_ASYNC_MODE env var in production deployments.
+_SIO_ASYNC = os.environ.get("SOCKETIO_ASYNC_MODE", "threading")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode=_SIO_ASYNC)
 agent_system = None
 logger = logging.getLogger(__name__)
 
@@ -2535,6 +2542,30 @@ def bulk_upload_members():
             except Exception as ps_err:
                 logger.warning(f"Persona sync failed for {member_id}: {ps_err}")
 
+            # ── Persona reasoning: LLM-generated 'why this persona matches' ──
+            # Same flow as care-gap reason analysis but for the Persona node;
+            # the tooltip on the Persona node in the lifecycle graph displays it.
+            try:
+                from src.persona_reason import generate_persona_reason
+                from src.persona_sync import set_persona_reasoning
+                from src.care_gap_neo4j import (
+                    get_member_family_history as _gfh_pr,
+                    get_member_medical_history as _gmh_pr,
+                    get_member_lifestyle      as _gls_pr,
+                )
+                _profile_pr = profile or {"member_id": member_id, "name": name}
+                _profile_pr["member_id"] = member_id
+                _persona_reasoning = generate_persona_reason(
+                    member=_profile_pr,
+                    open_gaps=open_gaps,
+                    family_history=_gfh_pr(member_id) or [],
+                    medical_history=_gmh_pr(member_id) or {},
+                    lifestyle=_gls_pr(member_id) or {},
+                )
+                set_persona_reasoning(member_id, _persona_reasoning)
+            except Exception as pr_err:
+                logger.warning(f"Persona reasoning failed for {member_id}: {pr_err}")
+
             # ── Persona-Demo DB: write Member + IdealPersona relationship ──
             # Happens during INITIAL bulk upload (not after outreach), so the
             # persona DB stays in sync with what's in main + reference DBs.
@@ -2881,6 +2912,7 @@ def bulk_preview_persona():
             get_member_lifestyle as _get_lifestyle,
         )
         from src.care_gap_reason import generate_reasons_for_member
+        from src.persona_match_reason import generate_persona_match_bullets
         for m in member_list:
             mid = m.get("member_id")
             if not mid:
@@ -2919,6 +2951,21 @@ def bulk_preview_persona():
                             p["reason"] = reason_map[rid]
                 except Exception as r_err:
                     logger.warning(f"[BULK-PREVIEW] reason generation failed for {mid}: {r_err}")
+
+                # Persona-match analysis bullets — shown on hover of the
+                # green IDEAL persona node in the preview graph.
+                try:
+                    cmp["persona_match_bullets"] = generate_persona_match_bullets(
+                        member=profile,
+                        pending=cmp.get("pending_screenings") or [],
+                        family_history=family,
+                        medical_history=medical,
+                        lifestyle=lifestyle,
+                    )
+                except Exception as pmr_err:
+                    logger.warning(f"[BULK-PREVIEW] persona-match bullets failed for {mid}: {pmr_err}")
+                    cmp["persona_match_bullets"] = []
+
                 push_member_persona(profile, cmp)
                 results.append({"status": "ok", "member_id": mid, "name": m.get("name", mid),
                                 "email": m.get("email", ""), "persona_comparison": cmp})
@@ -3748,6 +3795,57 @@ function cgHideTooltip(){
   _cgTipEl.style.opacity = '0';
   _cgTipEl.style.transform = 'translateY(4px)';
 }
+
+// ── Persona match tooltip — bullet-point analysis on hover of IDEAL node ────
+let _personaTipEl = null;
+function _ensurePersonaTip(){
+  if (_personaTipEl) return _personaTipEl;
+  const t = document.createElement('div');
+  t.id = 'persona-tooltip';
+  t.style.cssText = [
+    'position:fixed','z-index:99999','pointer-events:none',
+    'max-width:420px','background:#0f172a','color:#e2e8f0',
+    'font-size:12px','line-height:1.5','padding:12px 16px',
+    'border:1px solid #10B981','border-radius:10px',
+    'box-shadow:0 10px 30px rgba(16,185,129,0.25)',
+    'opacity:0','transform:translateY(4px)',
+    'transition:opacity 0.15s ease, transform 0.15s ease',
+  ].join(';');
+  document.body.appendChild(t);
+  _personaTipEl = t;
+  return t;
+}
+function personaShowTooltip(evt){
+  const el = evt.currentTarget;
+  let bullets = [];
+  try { bullets = JSON.parse(el?.dataset?.personaBullets || '[]'); }
+  catch(e){ bullets = []; }
+  const pid = el?.dataset?.personaId || 'P??';
+  if (!bullets.length) return;
+  const tip = _ensurePersonaTip();
+  const items = bullets.map(b =>
+    `<li style="margin:4px 0;">${String(b).replace(/</g,'&lt;')}</li>`
+  ).join('');
+  tip.innerHTML = (
+    `<div style="font-weight:700;color:#6ee7b7;margin-bottom:6px;font-size:11px;letter-spacing:0.3px;">PERSONA MATCH ANALYSIS · ${pid}</div>` +
+    `<div style="color:#94a3b8;font-size:10px;margin-bottom:8px;">Why the agents picked this persona for this member</div>` +
+    `<ul style="margin:0;padding-left:18px;">${items}</ul>`
+  );
+  const r = el.getBoundingClientRect();
+  const top  = Math.max(8, r.top - 8);
+  // Tooltip prefers to sit to the LEFT of the persona node (which lives on
+  // the right side of the graph) so it stays inside the viewport.
+  const left = Math.max(8, r.left - 440);
+  tip.style.top  = `${top}px`;
+  tip.style.left = `${left}px`;
+  tip.style.opacity = '1';
+  tip.style.transform = 'translateY(0)';
+}
+function personaHideTooltip(){
+  if (!_personaTipEl) return;
+  _personaTipEl.style.opacity = '0';
+  _personaTipEl.style.transform = 'translateY(4px)';
+}
 function pgClearGraph(mid){
   const n = document.getElementById(`pgc-nodes-${mid}`);
   const e = document.getElementById(`pgc-edges-${mid}`);
@@ -3912,13 +4010,22 @@ async function animateGraph(mid, cmp){
     <text text-anchor="middle" dy="60" fill="#bcd0ff" font-size="11" font-weight="600">Member · ${(cmp.member_name||'').slice(0,18)}</text>
   `);
   await sleep(450);
-  // Persona node
-  addNode('persona', PG_PX, PG_CY, `
+  // Persona node — also carries the bullet-point match analysis tooltip
+  const personaNodeEl = addNode('persona', PG_PX, PG_CY, `
     <circle r="36" fill="#10B981" stroke="#fff" stroke-width="3"/>
     <text text-anchor="middle" dy="-2" fill="#fff" font-size="11" font-weight="700">IDEAL</text>
     <text text-anchor="middle" dy="12" fill="#d1fae5" font-size="9">${cmp.persona_id||'P??'}</text>
     <text text-anchor="middle" dy="56" fill="#a7f3d0" font-size="11" font-weight="600">Persona · closest fit</text>
   `);
+  // Hover tooltip — bullet-point analysis explaining WHY this persona was matched.
+  if (personaNodeEl && Array.isArray(cmp.persona_match_bullets) && cmp.persona_match_bullets.length){
+    personaNodeEl.dataset.personaBullets = JSON.stringify(cmp.persona_match_bullets);
+    personaNodeEl.dataset.personaId = cmp.persona_id || 'P??';
+    personaNodeEl.addEventListener('mouseenter', personaShowTooltip);
+    personaNodeEl.addEventListener('mouseleave', personaHideTooltip);
+    // Hint cursor so users discover it's interactive.
+    personaNodeEl.style.cursor = 'help';
+  }
   await sleep(450);
   // COMPARED_TO edge
   addEdge('member', 'persona', {dx:0,dy:0}, {dx:0,dy:0},
@@ -4826,4 +4933,8 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"No-show scheduler failed to start: {e}")
 
-    app.run(debug=True, host="0.0.0.0", port=5001, use_reloader=False)
+    # Use socketio.run so the Socket.IO async mode (threading/gevent/eventlet)
+    # picks the matching server automatically. Eliminates the websocket-upgrade
+    # 500s that occur when async_mode and the underlying WSGI server disagree.
+    socketio.run(app, debug=True, host="0.0.0.0", port=5001, use_reloader=False,
+                 allow_unsafe_werkzeug=True)
