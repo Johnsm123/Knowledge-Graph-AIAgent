@@ -242,9 +242,11 @@
   padding: .2rem .55rem; border-radius: var(--radius-button);
   font-size: .72rem; font-weight: 600; white-space: nowrap; flex-shrink: 0;
 }
-.gap-badge--critical  { background: rgba(184,31,45,0.10); color: var(--cog-red); }
-.gap-badge--moderate  { background: rgba(233,199,29,0.15); color: #9a7e00; }
-.gap-badge--compliant { background: rgba(45,184,31,0.10); color: var(--cog-green); }
+/* Chained-class selectors so these variants beat any sibling stylesheet's
+   bare .gap-badge rule on specificity, not just load order. */
+.gap-badge.gap-badge--critical  { background: rgba(184,31,45,0.10); color: var(--cog-red); }
+.gap-badge.gap-badge--moderate  { background: rgba(233,199,29,0.15); color: #9a7e00; }
+.gap-badge.gap-badge--compliant { background: rgba(20,83,45,0.12); color: #14532D; border: 1px solid rgba(20,83,45,0.25); }
 
 /* ── Tile meta rows ── */
 .tile-meta { display: flex; flex-direction: column; gap: .2rem; }

@@ -241,7 +241,9 @@
   color: var(--text-primary);
 }
 
-.gap-badge {
+/* Scoped to .member-details so this red measure-id pill doesn't bleed
+   into the Dashboard's .gap-badge--critical/compliant variants. */
+.member-details .gap-badge {
   padding: 0.25rem 0.75rem;
   background: var(--cog-red);
   color: white;

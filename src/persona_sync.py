@@ -270,6 +270,25 @@ def sync_compliant_measure(member_id: str, measure_id: str, measure_name: str,
     # and never creates duplicate closed gaps for the same prior screening.
     care_gap_id = f"PRIOR-{member_id}-{measure_id}"
 
+    # Guard against duplicate timeline entries: if a CareGap already exists
+    # for this (member, measure) under any id (e.g. an AUTO-* gap created
+    # by sync_care_gap that subsequently advanced to gap_closed via the
+    # outreach → appointment workflow), don't create a second PRIOR-* stub
+    # alongside it. The existing one is the source of truth.
+    existing = ref.run_query("""
+        MATCH (m:Member {member_id: $mid})-[:HAS_CARE_GAP]->(g:CareGap)
+        WHERE g.measure_id = $msid
+        RETURN g.gap_id AS gap_id, g.stage AS stage
+        LIMIT 1
+    """, {"mid": member_id, "msid": measure_id})
+    if existing:
+        logger.info(
+            f"[PERSONA-SYNC] Skipping PRIOR sync for {member_id}/{measure_id} "
+            f"— existing gap {existing[0]['gap_id']} already at stage "
+            f"{existing[0]['stage']}"
+        )
+        return existing[0]["gap_id"]
+
     ref.execute_write("""
         MERGE (ms:Measure {measure_id: $msid})
         SET ms.name = $msname

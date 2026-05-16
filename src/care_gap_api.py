@@ -3618,9 +3618,9 @@ function showPreview(members){
   let html=`
     <div class="summary-bar">
       <div class="summary-item"><div class="num">${totalMembers}</div><div class="lbl">Total Members</div></div>
-      <div class="summary-item"><div class="num">${totalGaps}</div><div class="lbl">Care Gaps Found</div></div>
       <div class="summary-item"><div class="num">${withGaps}</div><div class="lbl">Members with Gaps</div></div>
       <div class="summary-item"><div class="num">${compliant}</div><div class="lbl">Compliant</div></div>
+      <div class="summary-item"><div class="num">${totalGaps}</div><div class="lbl">Care Gaps Found</div></div>
     </div>
     <div class="select-all-row">
       <input type="checkbox" id="selectAll" checked onchange="toggleSelectAll()">
